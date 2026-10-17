@@ -1,0 +1,2369 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>my tide-graph</title>
+<meta name="author" content="kotaro9">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2;
+  --surface: #fcfcfb;
+  --surface-2: #efeeea;
+  --border: #e2e1dc;
+  --grid: #e6e5e0;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --text-3: #7c7b76;
+  --pred: #2a78d6;
+  --pred-soft: rgba(42, 120, 214, .10);
+  --obs: #eb6834;
+  --river: #1baf7a;
+  --warn: #c62828;
+  --accent: #2a78d6;
+  --night: rgba(30, 45, 90, .08);
+  --mazume: rgba(237, 161, 0, .22);
+  --grid-strong: #b9b8b2;
+  --mazume-ink: #a86a00;
+  --moon: #6250d6;
+  --font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110;
+    --surface: #1a1a19;
+    --surface-2: #242422;
+    --border: #2e2e2b;
+    --grid: #2a2a28;
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --text-3: #8f8e86;
+    --pred: #3987e5;
+    --pred-soft: rgba(57, 135, 229, .14);
+    --obs: #d95926;
+    --river: #199e70;
+    --warn: #ff7b72;
+    --accent: #3987e5;
+    --night: rgba(0, 0, 0, .32);
+    --mazume: rgba(201, 133, 0, .30);
+    --grid-strong: #55554f;
+    --mazume-ink: #f0b84a;
+    --moon: #9085e9;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110;
+  --surface: #1a1a19;
+  --surface-2: #242422;
+  --border: #2e2e2b;
+  --grid: #2a2a28;
+  --text: #f0efec;
+  --text-2: #c3c2b7;
+  --text-3: #8f8e86;
+  --pred: #3987e5;
+  --pred-soft: rgba(57, 135, 229, .14);
+  --obs: #d95926;
+  --river: #199e70;
+  --warn: #ff7b72;
+  --accent: #3987e5;
+  --night: rgba(0, 0, 0, .32);
+  --mazume: rgba(201, 133, 0, .30);
+  --grid-strong: #55554f;
+  --mazume-ink: #f0b84a;
+  --moon: #9085e9;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); -webkit-text-size-adjust: 100%; }
+body { padding: 0 0 calc(24px + env(safe-area-inset-bottom)); }
+button { font: inherit; color: inherit; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* header */
+header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-top: env(safe-area-inset-top); }
+.bar { display: flex; align-items: center; gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+.st-btn { flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 4px 0; cursor: pointer; }
+.st-name { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.st-name::after { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--text-3); border-bottom: 2px solid var(--text-3); transform: rotate(45deg) translateY(-3px); }
+.st-sub { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon-btn { width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); display: grid; place-items: center; cursor: pointer; flex: none; }
+.icon-btn svg { width: 20px; height: 20px; stroke: var(--text-2); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn.spin svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* hero */
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 12px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 12px 14px; min-width: 0; }
+.card .lbl { font-size: 12px; color: var(--text-2); margin-bottom: 2px; }
+.card .val { font-size: 28px; font-weight: 700; line-height: 1.15; letter-spacing: -.01em; }
+.card .val small { font-size: 14px; font-weight: 500; color: var(--text-2); margin-left: 2px; }
+.card .sub { font-size: 12px; color: var(--text-2); margin-top: 4px; }
+.phase .big { font-size: 36px; font-weight: 800; line-height: 1.1; white-space: nowrap; margin: 2px 0 4px; }
+.phase .big .dir { font-size: 18px; font-weight: 700; margin-right: 2px; }
+.gauge { position: relative; height: 8px; border-radius: 4px; background: var(--surface-2); margin: 6px 0 4px; overflow: hidden; }
+.gauge i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; background: var(--pred); }
+.gauge-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); }
+.tag.warn { background: transparent; color: var(--warn); border: 1px solid var(--warn); font-weight: 700; }
+.warn-text { color: var(--warn); font-weight: 600; }
+.tag { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); margin-left: 4px; vertical-align: 2px; }
+
+/* weather / wind / sun */
+.wx-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.wx-row img { width: 44px; height: 44px; flex: none; }
+.wx-text { font-size: 15px; font-weight: 700; line-height: 1.3; margin-top: 2px; }
+.wx-temp { font-size: 28px; font-weight: 700; white-space: nowrap; line-height: 1.15; }
+.wx-temp small { font-size: 14px; font-weight: 500; color: var(--text-2); }
+.wx-tmr, .fc-wind { border-top: 1px solid var(--border); padding-top: 6px; margin-top: 6px !important; line-height: 1.5; }
+.wx-tmr b, .fc-wind b { font-weight: 600; color: var(--text); margin-right: 4px; }
+/* 潮位の4枚を1行に */
+.quad { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.quad .card { padding: 9px 8px; }
+.quad .lbl { font-size: 11px; white-space: nowrap; }
+.quad .val { font-size: 21px; letter-spacing: -.02em; white-space: nowrap; }
+.quad .val small { font-size: 11px; margin-left: 1px; }
+.quad .sub { font-size: 10.5px; line-height: 1.45; margin-top: 3px; }
+.quad .tag { margin: 2px 0 0; vertical-align: 0; font-size: 10px; padding: 0 4px; }
+.quad-note { grid-column: 1 / -1; font-size: 11px; color: var(--text-2); padding: 0 4px; line-height: 1.5; }
+.wind-row { display: flex; align-items: center; gap: 8px; }
+.wind-arrow { width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; }
+.wind-arrow svg { width: 22px; height: 22px; fill: var(--text); transition: transform .3s; }
+.wx-cards { grid-template-columns: 1fr; }
+.wx-src { grid-column: 1 / -1; font-size: 11px; color: var(--text-3); padding: 0 4px; }
+
+/* controls */
+.ctrl { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 8px; flex-wrap: wrap; }
+.daynav { display: flex; align-items: center; gap: 4px; }
+.daynav button { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+.daynav .date { font-weight: 700; font-size: 16px; padding: 0 6px; white-space: nowrap; }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 2px; }
+.seg button { border: 0; background: none; padding: 6px 9px; border-radius: 8px; font-size: 13px; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+/* 月齢・旧暦 */
+.moon-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); margin: -2px 0 8px; padding: 0 2px; }
+.moon-row b { color: var(--text); }
+.moon-row .moon { width: 20px; height: 20px; flex: none; }
+.moon-row .moon circle { fill: var(--surface-2); stroke: var(--border); }
+.moon-row .moon path { fill: #e9c46a; }
+
+.sun-times { display: flex; justify-content: space-between; gap: 4px; font-size: min(12px, 3vw); letter-spacing: -.01em; color: var(--text-2); margin: -4px 0 8px; padding: 0 2px; white-space: nowrap; overflow-x: auto; }
+.sun-times b { color: var(--text); font-weight: 600; }
+.sun-times .k { color: var(--text-3); }
+
+/* charts */
+.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 10px 6px 6px; position: relative; }
+.chart-title { display: flex; justify-content: space-between; align-items: baseline; padding: 0 8px 4px; font-size: 13px; font-weight: 600; }
+.chart-title span { font-weight: 400; font-size: 11px; color: var(--text-3); }
+canvas { display: block; width: 100%; touch-action: pan-y; }
+#main { height: 270px; }
+#dev { height: 110px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 8px 2px; font-size: 12px; color: var(--text-2); }
+.legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.legend .dash { border-top-style: dashed; }
+.river-note { padding: 2px 8px 2px; font-size: 11px; color: var(--text-3); line-height: 1.5; }
+.river-note a { color: var(--text-2); }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; display: none; z-index: 3; }
+.tip b { display: block; font-size: 12px; margin-bottom: 2px; }
+.tip .row { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+.tip .row i { width: 10px; height: 0; border-top: 2px solid; display: inline-block; }
+.tip .row span:first-child { color: var(--text-2); display: inline-flex; align-items: center; gap: 5px; }
+.gap { height: 8px; }
+
+/* tide table */
+.tt { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+.tt .card { padding: 10px; text-align: center; }
+.tt .k { font-size: 12px; color: var(--text-2); }
+.tt .t { font-size: 20px; font-weight: 700; }
+.tt .h { font-size: 12px; color: var(--text-2); }
+.tt .card.past { opacity: .5; }
+.tt .card.empty { color: var(--text-3); display: grid; place-items: center; }
+
+footer { font-size: 11px; color: var(--text-3); line-height: 1.7; margin-top: 8px; }
+footer a { color: var(--text-2); }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--text-2); margin: 4px 0 6px; }
+.brand svg { width: 22px; height: 22px; }
+.brand .by { font-weight: 400; font-size: 12px; color: var(--text-3); margin-left: 4px; }
+.brand .by a { color: var(--accent); text-decoration: none; }
+.river-sel { flex: 1; min-width: 0; max-width: 100%; font: inherit; font-size: 14px; padding: 7px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.foot-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 8px 0; color: var(--text-2); font-size: 12px; }
+
+.notice { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--text-2); margin: 8px 0; display: none; }
+.notice.show { display: block; }
+.loading { opacity: .45; transition: opacity .2s; }
+
+/* 水質 */
+.wq { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 13px; }
+.wq th, .wq td { text-align: left; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.wq thead th { font-size: 11px; font-weight: 400; color: var(--text-3); }
+.wq tbody th { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.wq td b { font-size: 18px; margin-right: 2px; }
+.wq td:last-child { color: var(--text-3); font-size: 11px; }
+
+/* 風の推移・予報 */
+.wtl-card { padding-bottom: 10px; }
+.wtl { position: relative; height: 150px; margin-top: 6px; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
+.wtl-map { position: absolute; inset: 0; overflow: hidden; }
+.wtl-map img { position: absolute; width: 256px; height: 256px; max-width: none; }
+.wtl-map::after { content: ""; position: absolute; inset: 0; background: var(--surface); opacity: .5; }
+.wtl-pin { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #e34948; box-shadow: 0 0 0 3px #fff, 0 1px 4px rgba(0,0,0,.4); z-index: 1; }
+.wtl-cols { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(8, 1fr); z-index: 2; }
+.wtl-col { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-left: 1px solid rgba(127,127,127,.25); min-width: 0; }
+.wtl-col:first-child { border-left: 0; }
+.wtl-col b { font-size: 16px; font-weight: 700; color: var(--text); text-shadow: 0 0 3px var(--surface), 0 0 3px var(--surface); }
+.wtl-col svg { width: 26px; height: 26px; fill: var(--accent); stroke: var(--surface); stroke-width: 1.2; }
+.wtl-col.fc svg { fill: var(--text-3); opacity: .75; }
+.wtl-col.fc b { color: var(--text-2); font-weight: 600; }
+.wtl-col span { font-size: 10px; color: var(--text-2); white-space: nowrap; text-shadow: 0 0 3px var(--surface); }
+.wtl-col i { font-style: normal; font-size: 9px; color: var(--text); background: var(--surface); border-radius: 4px; padding: 0 3px; }
+.wtl-now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #e34948; z-index: 3; }
+.wtl-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-3); padding: 2px 0 0; }
+.wtl-note { font-size: 11px; color: var(--text-3); margin-top: 4px; line-height: 1.5; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wtl-map img { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); } }
+:root[data-theme="dark"] .wtl-map img { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); }
+
+/* 釣果記録 */
+.cf-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.cf-chips .chip { display: inline-flex; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; max-width: 100%; }
+.cf-chips .pick { border: 0; background: none; font-size: 12px; color: var(--text); padding: 5px 4px 5px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+.cf-chips .del { border: 0; background: none; color: var(--text-3); font-size: 13px; padding: 4px 9px 4px 4px; cursor: pointer; }
+.catch-btn { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
+.catch-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.catch-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; margin-top: 4px; }
+#catchDlg { height: auto; max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.cf { display: flex; flex-direction: column; gap: 10px; padding: calc(12px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)); }
+.cf-head { display: flex; justify-content: space-between; align-items: center; font-size: 16px; }
+.cf-head button { border: 0; background: none; color: var(--accent); font-weight: 600; cursor: pointer; }
+.cf label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-2); flex: 1; min-width: 0; }
+.cf input, .cf textarea { font: inherit; font-size: 16px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); width: 100%; }
+.cf-row { display: flex; gap: 8px; }
+.cf-prev { font-size: 12px; color: var(--text-2); background: var(--surface-2); border-radius: 10px; padding: 9px 11px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+.cf-hint { font-size: 11px; color: var(--text-3); text-align: center; }
+
+.cf-sec { font-size: 13px; font-weight: 700; color: var(--text); margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--border); }
+.cf-sub { font-size: 11px; font-weight: 400; color: var(--text-3); }
+.cf select { font: inherit; font-size: 16px; padding: 9px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); width: 100%; }
+.cf-photo-btn { flex-direction: row !important; justify-content: center; align-items: center; padding: 11px; border: 1px dashed var(--border); border-radius: 12px; background: var(--surface); color: var(--accent) !important; font-size: 14px !important; font-weight: 600; cursor: pointer; }
+.cf-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.cf-thumbs:empty { display: none; }
+.cf-thumbs figure { margin: 0; }
+.cf-thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; display: block; background: var(--surface-2); }
+.cf-thumbs figcaption { font-size: 10px; color: var(--text-2); margin-top: 2px; }
+.cf-thumbs figure { position: relative; }
+.cf-thumbs .rm { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 14px; line-height: 24px; padding: 0; cursor: pointer; }
+.cf-thumbs .cam { position: absolute; left: 4px; top: 4px; font-size: 10px; background: rgba(0,0,0,.55); color: #fff; border-radius: 6px; padding: 1px 5px; }
+.cf-saveview img { width: 100%; border-radius: 10px; margin-top: 8px; display: block; -webkit-touch-callout: default; }
+.cf-check { flex-direction: row !important; align-items: center; gap: 8px !important; font-size: 12px; }
+.cf-check input { width: auto; }
+.cf-hint.left { text-align: left; }
+#catchDlg .catch-btn { margin-top: 2px; }
+/* picker */
+dialog { border: 0; padding: 0; width: 100%; max-width: 720px; height: 100%; max-height: 100%; margin: 0 auto; background: var(--bg); color: var(--text); }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+.pk-head { position: sticky; top: 0; background: var(--bg); padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border); }
+.pk-row { display: flex; gap: 8px; align-items: center; }
+.pk-lbl { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.pk-head .seg button { color: var(--text-2); font-weight: 400; padding: 6px 10px; }
+.pk-head .seg button[aria-pressed="true"] { color: var(--text); font-weight: 600; }
+.pk-head input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.pk-head button { border: 0; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 0 4px; }
+.pk-list { list-style: none; margin: 0; padding: 0 16px 24px; }
+.pk-list li { padding: 12px 2px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+.pk-list li .n { font-weight: 600; }
+.pk-list li .a { font-size: 12px; color: var(--text-2); }
+.pk-list li .d { font-size: 13px; color: var(--text-2); white-space: nowrap; align-self: center; }
+.pk-list li.cur .n { color: var(--accent); }
+</style>
+</head>
+<body data-st="<?= initialSt ?>" data-app="<?= appUrl ?>">
+<header>
+  <div class="wrap bar">
+    <button class="st-btn" id="stBtn" aria-label="観測地点を変更">
+      <div class="st-name" id="stName">読み込み中…</div>
+      <div class="st-sub" id="stSub">&nbsp;</div>
+    </button>
+    <button class="icon-btn" id="locBtn" aria-label="現在地から最寄り地点">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>
+    </button>
+    <button class="icon-btn" id="refBtn" aria-label="更新">
+      <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="wrap" id="app">
+  <div class="notice" id="notice"></div>
+
+  <section class="hero" id="hero">
+    <div class="card phase">
+      <div class="lbl">潮の動き</div>
+      <div class="big num" id="phaseBig">--</div>
+      <div class="gauge"><i id="gaugeBar" style="width:0"></i></div>
+      <div class="gauge-ends num"><span id="gaugeL">&nbsp;</span><span id="gaugeR">&nbsp;</span></div>
+      <div class="sub num" id="phaseSub">&nbsp;</div>
+    </div>
+    <div class="card wx-now">
+      <div class="lbl" id="wxLbl">天気</div>
+      <div class="wx-row">
+        <img id="wxIcon" alt="" hidden>
+        <div class="wx-temp num" id="wxTemp"></div>
+      </div>
+      <div class="wx-text" id="wxText">--</div>
+      <div class="sub num" id="wxSub">&nbsp;</div>
+      <div class="sub wx-tmr" id="wxTmr" hidden></div>
+    </div>
+    <div class="quad">
+      <div class="card">
+        <div class="lbl">観測潮位</div>
+        <div class="val num" id="curTide">--</div>
+        <div class="sub num" id="curTideSub">&nbsp;</div>
+      </div>
+      <div class="card">
+        <div class="lbl">潮位偏差</div>
+        <div class="val num" id="curDev">--</div>
+        <div class="sub" id="curDevSub">&nbsp;</div>
+      </div>
+      <div class="card">
+        <div class="lbl" id="next1Lbl">次の満潮</div>
+        <div class="val num" id="next1">--</div>
+        <div class="sub num" id="next1Sub">&nbsp;</div>
+      </div>
+      <div class="card">
+        <div class="lbl" id="next2Lbl">次の干潮</div>
+        <div class="val num" id="next2">--</div>
+        <div class="sub num" id="next2Sub">&nbsp;</div>
+      </div>
+      <div class="quad-note num" id="tideNote">&nbsp;</div>
+    </div>
+    <button class="catch-btn" id="catchBtn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg>
+      釣果をGoogleカレンダーに記録
+    </button>
+  </section>
+
+  <div class="ctrl">
+    <div class="daynav">
+      <button id="prevDay" aria-label="前日">&#8249;</button>
+      <div class="date num" id="dateLbl">--</div>
+      <button id="nextDay" aria-label="翌日">&#8250;</button>
+    </div>
+    <div class="seg" id="viewSeg" role="group" aria-label="表示範囲">
+      <button data-v="3d" aria-pressed="false">3日</button>
+      <button data-v="day" aria-pressed="true">1日</button>
+      <button data-v="h12" aria-pressed="false" title="前後12時間">±12h</button>
+      <button data-v="h6" aria-pressed="false" title="前後6時間">±6h</button>
+      <button data-v="h3" aria-pressed="false" title="前後3時間">±3h</button>
+      <button data-v="h1" aria-pressed="false" title="前後1時間">±1h</button>
+    </div>
+  </div>
+
+  <div class="moon-row num" id="moonRow"></div>
+  <div class="sun-times num" id="sunTimes"></div>
+
+  <div id="charts">
+    <div class="chart-card">
+      <div class="chart-title">潮位 <span id="unitLbl">cm</span></div>
+      <canvas id="main"></canvas>
+      <div class="legend">
+        <span><i style="border-color:var(--pred)"></i>推算潮位（天文潮）</span>
+        <span><i style="border-color:var(--obs)"></i>実測潮位</span>
+        <span><i class="dash" style="border-color:var(--obs)"></i>偏差補正予測</span>
+        <span id="riverLeg" hidden><i style="border-color:var(--river)"></i><span id="riverLegTxt">河川水位</span></span>
+        <span><i style="border:0;height:10px;width:14px;background:var(--night);border-radius:3px;vertical-align:-1px"></i>夜間</span>
+        <span><i style="border:0;height:10px;width:14px;background:var(--mazume);border-top:3px solid var(--mazume-ink);border-radius:2px;vertical-align:-1px"></i>朝・夕マヅメ（常用薄明〜日の出30分後／日の入り30分前〜常用薄明）</span>
+        <span><i style="border:0;width:9px;height:9px;border-radius:50%;background:var(--moon);vertical-align:-1px"></i>月の出・南中・月の入り</span>
+        <span><i class="dash" style="border-color:var(--text-3)"></i>上げ／下げ 1・3・5・7・9分</span>
+      </div>
+      <div class="river-note" id="riverNote" hidden></div>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div class="gap"></div>
+    <div class="chart-card">
+      <div class="chart-title">潮位偏差（実測 − 推算） <span>cm</span></div>
+      <canvas id="dev"></canvas>
+    </div>
+  </div>
+
+  <section class="tt" id="tt"></section>
+
+  <div class="foot-row">
+    <span>高さの基準</span>
+    <div class="seg" id="datumSeg" role="group" aria-label="高さの基準">
+      <button data-d="table" aria-pressed="true">潮位表基準面</button>
+      <button data-d="tp" aria-pressed="false" title="東京湾平均海面">TP</button>
+    </div>
+  </div>
+
+  <div class="foot-row">
+    <span>河川水位の重ね表示</span>
+    <div class="seg" id="riverSeg" role="group" aria-label="河川水位の重ね表示">
+      <button data-r="1" aria-pressed="true">表示</button>
+      <button data-r="0" aria-pressed="false">非表示</button>
+    </div>
+  </div>
+  <div class="foot-row" id="riverSelRow" hidden>
+    <span>河川の観測所</span>
+    <select id="riverSel" class="river-sel" aria-label="河川の水位観測所"></select>
+  </div>
+
+  <section class="hero wx-cards">
+    <div class="card" id="wqCard" hidden>
+      <div class="lbl" id="wqLbl">水質</div>
+      <div id="wqBody"></div>
+      <div class="wtl-note" id="wqNote"></div>
+    </div>
+    <div class="card wtl-card">
+      <div class="lbl" id="wtlLbl">風の推移・予報</div>
+      <div class="wtl">
+        <div class="wtl-map" id="wtlMap" aria-hidden="true"></div>
+        <div class="wtl-cols" id="wtlCols"></div>
+        <div class="wtl-now" id="wtlNow" hidden></div>
+      </div>
+      <div class="wtl-axis num"><span>0</span><span>3</span><span>6</span><span>9</span><span>12</span><span>15</span><span>18</span><span>21</span><span>24</span></div>
+      <div class="wtl-note" id="wtlNote"></div>
+    </div>
+    <div class="card">
+      <div class="lbl">風（地上の観測）</div>
+      <div class="wind-row">
+        <div class="wind-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" id="windArrow"><path d="M12 2l6 9h-4v11h-4V11H6z"/></svg></div>
+        <div class="val num" id="windSpd">--</div>
+      </div>
+      <div class="sub" id="windDir">&nbsp;</div>
+      <div class="sub num" id="windGust">&nbsp;</div>
+      <div class="sub fc-wind" id="fcWind" hidden></div>
+    </div>
+    <div class="wx-src" id="wxSrc">&nbsp;</div>
+  </section>
+
+  <footer>
+    <div class="brand">
+      <svg viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="bgI" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3987e5"/><stop offset="1" stop-color="#104281"/></linearGradient><clipPath id="rI"><rect width="512" height="512" rx="112"/></clipPath></defs><g clip-path="url(#rI)"><rect width="512" height="512" fill="url(#bgI)"/><path d="M-20 300H56C120 300 140 150 200 150S280 330 336 330 420 190 456 190H532" fill="none" stroke="#fff" stroke-width="36" stroke-linecap="round"/><circle cx="269.5" cy="240" r="40" fill="#eb6834" stroke="#fff" stroke-width="14"/></g></svg>
+      my tide-graph<span class="by">作成：<a href="https://x.com/kotaro9_lures" target="_blank" rel="noopener">kotaro9</a></span>
+    </div>
+    <div id="updLbl">&nbsp;</div>
+    <div id="extSrc">&nbsp;</div>
+    データ：気象庁「<a href="https://www.jma.go.jp/bosai/map.html#contents=tidelevel" target="_blank" rel="noopener">潮位観測情報</a>」（気象庁・国土交通省港湾局・海上保安庁・国土地理院 等の検潮所）、
+    気象庁「<a href="https://www.data.jma.go.jp/kaiyou/db/tide/suisan/" target="_blank" rel="noopener">潮位表</a>」。
+    天気・風：気象庁「<a href="https://www.jma.go.jp/bosai/forecast/" target="_blank" rel="noopener">天気予報</a>」「<a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" rel="noopener">アメダス</a>」、地域の判定に国土地理院「逆ジオコーダ」を利用。
+    河川水位：国土交通省「<a href="https://www.river.go.jp/" target="_blank" rel="noopener">川の防災情報</a>」（現在地から一番近い水位観測所。位置が取れない場合は潮位観測所の位置から。T.P.基準）。水質（水温・塩分濃度）：同「川の防災情報」の水質観測所（10km以内にある場合のみ表示）。
+    風の予報：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁 MSM/GSM モデル、CC BY 4.0）。地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>。
+    日の出・日の入り・薄明（常用薄明＝太陽高度−6°、天文薄明＝−18°）は計算値（誤差1〜2分程度）。「薄明」の2つの時刻は、朝は天文薄明・常用薄明、夕は常用薄明・天文薄明の順です。
+    実測値は速報値です。気象庁の公開は15〜20分程度遅れるため、直近分は海上保安庁「<a href="https://www1.kaiho.mlit.go.jp/KAN2/tide/realtime/realtime.html" target="_blank" rel="noopener">リアルタイム験潮データ</a>」（5分毎・暫定値）で補っています（同地点が無い場合は近くの地点の偏差を利用）。
+    「上げ◯分／下げ◯分」は直前の干潮（満潮）から次の満潮（干潮）までを10等分した経過の目安です。月齢・月輝面（正午）、月の出・南中・月の入り、旧暦は天文計算による値で、潮名は旧暦の日付から求めています。
+  </footer>
+</main>
+
+<dialog id="catchDlg">
+  <form class="cf" id="catchForm" method="dialog">
+    <div class="cf-head"><b>釣果を記録</b><button type="button" id="catchClose">閉じる</button></div>
+
+    <div class="cf-sec">写真（最大3枚）</div>
+    <div class="cf-row">
+      <label class="cf-photo-btn">
+        <input type="file" id="cfCamera" accept="image/*" capture="environment" hidden>
+        <span>カメラで撮影</span>
+      </label>
+      <label class="cf-photo-btn">
+        <input type="file" id="cfPhotos" accept="image/*" multiple hidden>
+        <span>写真フォルダから選ぶ</span>
+      </label>
+    </div>
+    <div class="cf-thumbs" id="cfThumbs"></div>
+    <button type="button" class="catch-btn" id="cfSaveCam" hidden>撮影した写真を写真フォルダに保存</button>
+    <div class="cf-saveview" id="cfSaveView" hidden>
+      <div class="cf-hint left">下の写真を<b>長押し</b>して、iPhone は「“写真”に追加」、Android は「画像をダウンロード」を選ぶと写真フォルダに保存できます。</div>
+      <div id="cfSaveImgs"></div>
+    </div>
+    <div class="cf-hint left" id="cfPhotoInfo">写真の撮影日時（なければファイルの日時）を釣果の日時に設定します。</div>
+    <label class="cf-check"><input type="checkbox" id="cfAlign" checked>写真の位置・日時に合わせて潮位観測所と日付を切り替える</label>
+
+    <div class="cf-sec">釣果</div>
+    <label>日時<input type="datetime-local" id="cfTime" required></label>
+    <label>魚種<input type="text" id="cfSp" placeholder="例：シーバス" list="cfSpList" autocomplete="off"></label>
+    <datalist id="cfSpList"><option value="シーバス"><option value="クロダイ"><option value="キビレ"><option value="ヒラメ"><option value="マゴチ"><option value="アジ"><option value="メバル"><option value="カサゴ"><option value="タチウオ"><option value="ブリ"><option value="サワラ"><option value="アオリイカ"><option value="ハゼ"></datalist>
+    <div class="cf-row">
+      <label>サイズ（cm）<input type="number" id="cfSize" inputmode="decimal" min="0" step="0.1"></label>
+      <label>重さ（g）<input type="number" id="cfWeight" inputmode="decimal" min="0" step="1"></label>
+      <label>匹数<input type="number" id="cfNum" inputmode="numeric" min="0" step="1" value="1"></label>
+    </div>
+
+    <div class="cf-sec">場所</div>
+    <label>都道府県・エリア・ポイント<input type="text" id="cfPlace" placeholder="空欄なら写真の位置・現在地・観測地点" autocomplete="off"></label>
+    <label>釣行スタイル<select id="cfStyle"><option value="">—</option><option>陸っぱり（堤防・岸壁）</option><option>サーフ</option><option>河川・河口</option><option>磯</option><option>干潟・ウェーディング</option><option>ボート・カヤック</option><option>船（乗合）</option></select></label>
+
+    <div class="cf-sec">釣り方・タックル <span class="cf-sub">（過去の入力から選べます）</span></div>
+    <div class="cf-row">
+      <label>釣り方<select id="cfMethod"><option value="">—</option><option>ルアー</option><option>エサ</option><option>フライ</option><option>その他</option></select></label>
+      <label>ヒットレンジ<select id="cfRange"><option value="">—</option><option>表層</option><option>中層</option><option>ボトム</option></select></label>
+    </div>
+    <label>ルアー・仕掛け（名前・カラー・重さ）<input type="text" id="cfLure" autocomplete="off"></label>
+    <label>ロッド<input type="text" id="cfRod" autocomplete="off"></label>
+    <label>リール<input type="text" id="cfReel" autocomplete="off"></label>
+    <div class="cf-row">
+      <label>ライン<input type="text" id="cfLine" placeholder="例：PE1号" autocomplete="off"></label>
+      <label>リーダー<input type="text" id="cfLeader" placeholder="例：フロロ20lb" autocomplete="off"></label>
+    </div>
+
+    <div class="cf-sec">コメント</div>
+    <label>メモ・状況<textarea id="cfMemo" rows="3"></textarea></label>
+    <label class="cf-check"><input type="checkbox" id="cfTags" checked>ハッシュタグを付ける（魚種・地点・潮名・上げ／下げ）</label>
+
+    <div class="cf-sec">自動で添える情報と投稿文</div>
+    <div class="cf-prev" id="cfPrev"></div>
+
+    <button type="button" class="catch-btn" id="cfShare">写真と文章を共有</button>
+    <button type="button" class="catch-btn" id="cfCopy">アングラーズ投稿用の文章をコピー</button>
+    <a class="catch-btn primary" id="cfGo" href="#" target="_blank" rel="noopener">Googleカレンダーで予定を作成</a>
+    <div class="cf-hint" id="cfMsg">Google カレンダーの予定作成画面が開きます。内容を確認して「保存」を押してください（写真はカレンダーには付きません）。</div>
+  </form>
+</dialog>
+
+<dialog id="picker">
+  <div class="pk-head">
+    <div class="pk-row">
+      <input id="pkQ" type="search" placeholder="地点名・住所で検索" autocomplete="off">
+      <button id="pkClose">閉じる</button>
+    </div>
+    <div class="pk-row">
+      <span class="pk-lbl">観測所</span>
+      <div class="seg" id="stFilterSeg" role="group" aria-label="観測所の範囲">
+        <button data-f="all" aria-pressed="true">すべて</button>
+        <button data-f="jcg" aria-pressed="false">海上保安庁サイトの観測所のみ</button>
+      </div>
+    </div>
+  </div>
+  <ul class="pk-list" id="pkList"></ul>
+</dialog>
+
+<script>
+(function () {
+  'use strict';
+  var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
+  var DEFAULT_ST = '124431'; // 東京
+  var REFRESH_MS = 5 * MIN;
+
+  var S = {
+    stations: [], st: null, data: null, pos: null,
+    date: null,          // 'YYYY-MM-DD' or null(今日)
+    view: ({ around: 'h12' })[load('view')] || load('view') || 'day',
+    datum: load('datum') || 'table',
+    stFilter: load('stfilter') || 'all',
+    showRiver: load('river') !== '0', river: null,
+    riverFcd: load('river_fcd') || '',   // 空なら自動（一番近い観測所）   // 'all' | 'jcg'（海上保安庁サイトの観測所のみ）
+    curve: null, ext: [], hover: null, loading: false, lastFetch: 0
+  };
+
+  /* ---------- server bridge ---------- */
+  // サーバーの関数を呼ぶ。サーバーが「このURLのデータが必要」と返したら、ブラウザで直接取ってきて渡して呼び直す。
+  // 気象庁などは他サイトからの取得を許可しているので、サーバーの URL Fetch（1日の上限あり）を使わずに済む。
+  // ブラウザで取れなかったものは { err: 1 } として渡し、サーバーが代わりに取る。
+  function run(name) {
+    var args = Array.prototype.slice.call(arguments, 1), pre = {}, rounds = 0;
+    var call = function () {
+      return rawRun('callWithPre', name, args, pre).then(function (r) {
+        if (!r || !r.need) return r ? r.result : r;
+        if (++rounds > 10) throw new Error('データの取得に失敗しました（' + name + '）');
+        return Promise.all(r.need.map(function (u) {
+          return fetch(u).then(function (res) {
+            if (res.status === 404) return null;
+            if (!res.ok) throw new Error(res.status);
+            return res.text();
+          }).then(function (t) { pre[u] = t; }, function () { pre[u] = { err: 1 }; });
+        })).then(call);
+      });
+    };
+    return call();
+  }
+  function rawRun(name) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    if (window.google && google.script && google.script.run) {
+      return new Promise(function (res, rej) {
+        var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej);
+        r[name].apply(r, args);
+      });
+    }
+    // ローカル開発用
+    return fetch('/api/' + name, { method: 'POST', body: JSON.stringify(args) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (j.error) throw new Error(j.error); return j.result; });
+  }
+
+  /* ---------- storage ---------- */
+  function load(k) { try { return localStorage.getItem('tide_' + k); } catch (e) { return null; } }
+  function save(k, v) { try { localStorage.setItem('tide_' + k, v); } catch (e) { /* ignore */ } }
+
+  /* ---------- time helpers (JST 固定) ---------- */
+  function jd(ms) { return new Date(ms + JST); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function hm(ms) { var d = jd(ms); return d.getUTCHours() + ':' + pad(d.getUTCMinutes()); }
+  function ymd(ms) { var d = jd(ms); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
+  function midnight(s) { var q = s.split('-'); return Date.UTC(+q[0], q[1] - 1, +q[2]) - JST; }
+  function mdw(ms) { var d = jd(ms); return (d.getUTCMonth() + 1) + '/' + d.getUTCDate() + '（' + '日月火水木金土'[d.getUTCDay()] + '）'; }
+  function dur(ms) {
+    var m = Math.max(0, Math.round(ms / MIN)), h = Math.floor(m / 60);
+    return (h ? h + '時間' : '') + (m % 60) + '分';
+  }
+  function durShort(ms) {
+    var m = Math.max(0, Math.round(ms / MIN)), h = Math.floor(m / 60);
+    return h ? h + 'h' + (m % 60) + 'm' : m + '分';
+  }
+  function $(id) { return document.getElementById(id); }
+
+  /* ---------- geo ---------- */
+  function distKm(la1, lo1, la2, lo2) {
+    var r = Math.PI / 180, x = (lo2 - lo1) * r * Math.cos((la1 + la2) / 2 * r), y = (la2 - la1) * r;
+    return Math.sqrt(x * x + y * y) * 6371;
+  }
+  function locate() {
+    return new Promise(function (res, rej) {
+      if (!navigator.geolocation) return rej(new Error('この端末は位置情報に対応していません'));
+      navigator.geolocation.getCurrentPosition(function (p) { res(p.coords); }, rej,
+        { enableHighAccuracy: false, timeout: 12000, maximumAge: 5 * MIN });
+    });
+  }
+  function stationOk(s) { return S.stFilter !== 'jcg' || !!s.jcg; }
+  function nearest(lat, lon) {
+    var best = null, bd = Infinity;
+    S.stations.forEach(function (s) {
+      if (s.miss || !stationOk(s)) return;
+      var d = distKm(lat, lon, s.lat, s.lon);
+      if (d < bd) { bd = d; best = s; }
+    });
+    return best;
+  }
+
+  /* ---------- interpolation ---------- */
+  // 単調3次エルミート（Fritsch–Carlson）。極値を節点に入れると極値が厳密に保たれる。
+  function monotone(xs, ys) {
+    var n = xs.length, d = [], m = [];
+    for (var i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
+    m[0] = d[0]; m[n - 1] = d[n - 2];
+    for (i = 1; i < n - 1; i++) {
+      if (d[i - 1] * d[i] <= 0) m[i] = 0;
+      else {
+        var w1 = 2 * (xs[i + 1] - xs[i]) + (xs[i] - xs[i - 1]), w2 = (xs[i + 1] - xs[i]) + 2 * (xs[i] - xs[i - 1]);
+        m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]);
+      }
+    }
+    return hermite(xs, ys, m);
+  }
+  // 自然3次スプライン
+  function spline(xs, ys) {
+    var n = xs.length, h = [], a = [], l = [1], mu = [0], z = [0], c = [], m = [];
+    for (var i = 0; i < n - 1; i++) h.push(xs[i + 1] - xs[i]);
+    for (i = 1; i < n - 1; i++) a[i] = 3 / h[i] * (ys[i + 1] - ys[i]) - 3 / h[i - 1] * (ys[i] - ys[i - 1]);
+    for (i = 1; i < n - 1; i++) {
+      l[i] = 2 * (xs[i + 1] - xs[i - 1]) - h[i - 1] * mu[i - 1];
+      mu[i] = h[i] / l[i];
+      z[i] = (a[i] - h[i - 1] * z[i - 1]) / l[i];
+    }
+    c[n - 1] = 0;
+    for (var j = n - 2; j >= 0; j--) c[j] = z[j] - mu[j] * c[j + 1];
+    for (i = 0; i < n - 1; i++) {
+      m[i] = (ys[i + 1] - ys[i]) / h[i] - h[i] * (c[i + 1] + 2 * c[i]) / 3;
+    }
+    m[n - 1] = m[n - 2] + 2 * c[n - 2] * h[n - 2] + 3 * ((c[n - 1] - c[n - 2]) / (3 * h[n - 2])) * h[n - 2] * h[n - 2];
+    return hermite(xs, ys, m);
+  }
+  function hermite(xs, ys, m) {
+    var n = xs.length;
+    return function (x) {
+      if (x <= xs[0] || x >= xs[n - 1] || n < 2) return null;
+      var lo = 0, hi = n - 1;
+      while (hi - lo > 1) { var k = (lo + hi) >> 1; if (xs[k] > x) hi = k; else lo = k; }
+      var h = xs[hi] - xs[lo], t = (x - xs[lo]) / h, t2 = t * t, t3 = t2 * t;
+      return (2 * t3 - 3 * t2 + 1) * ys[lo] + (t3 - 2 * t2 + t) * h * m[lo] +
+        (-2 * t3 + 3 * t2) * ys[hi] + (t3 - t2) * h * m[hi];
+    };
+  }
+
+  function buildModel(d) {
+    var hx = [], hy = [];
+    d.astro.v.forEach(function (v, i) { if (v != null) { hx.push(d.astro.start + i * HOUR); hy.push(v); } });
+    if (hx.length < 4) return { curve: function () { return null; }, ext: [], official: false };
+    var t0 = hx[0], t1 = hx[hx.length - 1];
+
+    if (d.ext && d.ext.length) {
+      var ext = d.ext.filter(function (e) { return e.t > t0 && e.t < t1; });
+      var pts = ext.map(function (e) { return [e.t, e.h]; });
+      for (var i = 0; i < hx.length; i++) {
+        var t = hx[i], y = hy[i], near = false, prev = null, next = null;
+        for (var k = 0; k < ext.length; k++) {
+          if (Math.abs(ext[k].t - t) < 25 * MIN) near = true;
+          if (ext[k].t <= t) prev = ext[k]; else if (!next) next = ext[k];
+        }
+        if (near) continue;
+        // 丸め誤差で極値を超えないようにする
+        if (prev && next) {
+          var lo = Math.min(prev.h, next.h), hi = Math.max(prev.h, next.h);
+          y = Math.min(hi, Math.max(lo, y));
+        }
+        pts.push([t, y]);
+      }
+      pts.sort(function (a, b) { return a[0] - b[0]; });
+      return {
+        curve: monotone(pts.map(function (p) { return p[0]; }), pts.map(function (p) { return p[1]; })),
+        ext: ext, official: true
+      };
+    }
+
+    // 潮位表が無い地点: スプラインから極値を求める
+    var f = spline(hx, hy), xs = [], ys = [];
+    for (var x = t0 + MIN; x < t1; x += MIN) { xs.push(x); ys.push(f(x)); }
+    var W = 90, out = [];
+    for (i = W; i < ys.length - W; i++) {
+      var isMax = true, isMin = true;
+      for (k = i - W; k <= i + W && (isMax || isMin); k++) {
+        if (k === i) continue;
+        if (ys[k] > ys[i] || (k < i && ys[k] === ys[i])) isMax = false;
+        if (ys[k] < ys[i] || (k < i && ys[k] === ys[i])) isMin = false;
+      }
+      if (isMax) out.push({ t: xs[i], h: ys[i], k: 'H' });
+      else if (isMin) out.push({ t: xs[i], h: ys[i], k: 'L' });
+    }
+    // 交互にならない／振幅が極小のものを整理
+    var clean = [];
+    out.forEach(function (e) {
+      var p = clean[clean.length - 1];
+      if (p && p.k === e.k) { if ((e.k === 'H') === (e.h > p.h)) clean[clean.length - 1] = e; return; }
+      if (p && Math.abs(p.h - e.h) < 2) { clean.pop(); return; }
+      clean.push(e);
+    });
+    return { curve: f, ext: clean, official: false };
+  }
+
+  /* ---------- tide state ---------- */
+  function obsAt(t) {
+    var o = S.data.obs, i = Math.round((t - o.start) / o.step);
+    if (i < 0 || i >= o.tide.length) return null;
+    return { tide: o.tide[i], dep: o.dep[i] };
+  }
+  function latestObs() {
+    var o = S.data.obs;
+    for (var i = o.tide.length - 1; i >= 0; i--) {
+      if (o.tide[i] != null) {
+        // 偏差は直近10分の平均
+        var s = 0, n = 0;
+        for (var k = i; k > i - 10 && k >= 0; k--) if (o.dep[k] != null) { s += o.dep[k]; n++; }
+        return { t: o.start + i * o.step, tide: o.tide[i], dep: n ? s / n : null };
+      }
+    }
+    return null;
+  }
+  // 海上保安庁の速報（5分毎）を実測の1分値の後ろにつなぐ。間は表示用に直線でつなぎ、偏差は推算曲線との差
+  function mergeRt(d) {
+    S.rtFrom = null;
+    var rt = d.rt, o = d.obs;
+    if (!rt || !rt.pts.length) return;
+    var first = o.tide.length, pi = first - 1, pv = pi >= 0 ? o.tide[pi] : null;
+    rt.pts.forEach(function (p) {
+      var i = Math.round((p[0] - o.start) / o.step);
+      while (o.tide.length <= i) { o.tide.push(null); o.dep.push(null); }
+      if (pv != null && i - pi <= 30) for (var k = pi + 1; k < i; k++) o.tide[k] = pv + (p[1] - pv) * (k - pi) / (i - pi);
+      o.tide[i] = p[1];
+      pi = i; pv = p[1];
+    });
+    for (var k = first; k < o.tide.length; k++) {
+      var a = S.curve(o.start + k * o.step);
+      o.dep[k] = o.tide[k] != null && a != null ? Math.round((o.tide[k] - a) * 10) / 10 : null;
+    }
+    S.rtFrom = o.start + first * o.step;
+  }
+  // 補正予測に使う偏差。近くの地点の速報があれば、実測の最新時刻からその時刻にかけて移行させる
+  function depAt(t) {
+    var lo = latestObs(), n = S.data.near, now = Date.now();
+    var nOk = n && now - n.t < 3 * HOUR;
+    if (!lo || lo.dep == null || now - lo.t >= 3 * HOUR) return nOk ? n.dep : null;
+    if (nOk && n.t > lo.t) return lo.dep + (n.dep - lo.dep) * Math.min(1, Math.max(0, (t - lo.t) / (n.t - lo.t)));
+    return lo.dep;
+  }
+
+  /* ---------- 河川水位 ---------- */
+  function riverOn() { return S.showRiver && S.river && S.river.tidal; }
+  // 毎時値（約2日分）の後ろに10分値（約8時間分）をつなぐ
+  function riverPts() {
+    var r = S.river;
+    if (!r) return [];
+    var first = r.min10.length ? r.min10[0][0] : Infinity;
+    return r.hour.filter(function (p) { return p[0] < first; }).concat(r.min10);
+  }
+  function riverAt(t) {
+    var r = S.river;
+    if (!r) return null;
+    var first = r.min10.length ? r.min10[0][0] : Infinity, best = null, bd = Infinity;
+    riverPts().forEach(function (p) { var d = Math.abs(p[0] - t); if (d < bd) { bd = d; best = p; } });
+    return best && bd <= (t >= first ? 5 * MIN : 30 * MIN) ? best[1] : null;
+  }
+  function renderRiver() {
+    var r = S.river, on = riverOn();
+    Array.prototype.forEach.call($('riverSeg').children, function (b) { b.setAttribute('aria-pressed', String((b.dataset.r === '1') === S.showRiver)); });
+    $('riverLeg').hidden = !on;
+    if (r) $('riverLegTxt').textContent = '河川水位（' + r.name + '）';
+    var note = $('riverNote');
+    renderRiverSel();
+    if (!S.showRiver) { note.hidden = true; return; }
+    if (!r) { note.hidden = !S.riverTried; note.textContent = '近くに河川の水位観測所が見つかりませんでした'; return; }
+    var last = r.min10.length ? r.min10[r.min10.length - 1] : null;
+    note.hidden = false;
+    if (r.noData) {
+      note.innerHTML = esc('河川水位：' + (r.river ? r.river + ' ' : '') + '「' + r.name + '」は現在欠測中のため表示できません（水位が観測できる範囲より低いときなどに欠測になります）') +
+        ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">川の防災情報</a>';
+      return;
+    }
+    note.innerHTML = r.tidal ?
+      esc('河川水位：' + (r.river ? r.river + ' ' : '') + '「' + r.name + '」（' + (S.riverGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(r.dist) + (S.riverFcd ? '・選択' : '') + '）' +
+        (last ? ' 最新 ' + hm(last[0]) + ' ' + fmtH(last[1]) + 'cm' : '')) + ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">川の防災情報</a>' :
+      esc((S.riverFcd ? '選択した河川観測所「' : '最寄りの河川観測所「') + r.name + '」（' + (S.riverGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(r.dist) + '）は標高が高く潮位と同じ目盛りに収まらないため、重ねていません' + (last ? '（最新 ' + hm(last[0]) + ' T.P.' + (last[1] / 100).toFixed(2) + 'm）' : '')) + ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">川の防災情報</a>';
+  }
+  // 河川観測所の選択肢（現在地の近くの、TP 換算値のある観測所）。
+  // 取得回数が多いので、水位表示がオンで選択欄に触れたときだけ読み込む
+  function riverListKeyNow() { var p = here(); return p ? p.lat.toFixed(2) + ',' + p.lon.toFixed(2) : ''; }
+  function loadRiverList() {
+    var p = here();
+    if (!p || !S.showRiver) return Promise.resolve();
+    var key = p.lat.toFixed(2) + ',' + p.lon.toFixed(2);
+    if (S.riverListKey === key || S.riverListLoading === key) { renderRiverSel(); return Promise.resolve(); }
+    S.riverListLoading = key; renderRiverSel();
+    return run('getRiverStations', p.lat, p.lon).then(function (list) {
+      // 問い合わせ中に位置が変わった（GPS が取れた等）ときは、古い位置の一覧で上書きしない
+      var q = here();
+      if (!q || q.lat.toFixed(2) + ',' + q.lon.toFixed(2) !== key) return;
+      S.riverList = list || []; S.riverListKey = key;
+      renderRiverSel();
+    }).catch(function () { renderRiverSel(); }).then(function () {
+      if (S.riverListLoading === key) { S.riverListLoading = null; renderRiverSel(); }
+    });
+  }
+  function renderRiverSel() {
+    var sel = $('riverSel'), row = $('riverSelRow');
+    row.hidden = !S.showRiver;
+    if (!S.showRiver) return;
+    var key = riverListKeyNow(), loaded = S.riverListKey === key;
+    var list = loaded ? (S.riverList || []).slice() : [];
+    // 選択中の観測所が一覧に無い（移動した等）ときも選択肢に残す
+    if (S.riverFcd && !list.some(function (x) { return x.fcd === S.riverFcd; }) && S.river && S.river.fcd === S.riverFcd) {
+      list.unshift({ fcd: S.river.fcd, name: S.river.name, river: S.river.river, dist: S.river.dist });
+    }
+    sel.innerHTML = '<option value="">自動（' + (here() && here().gps ? '現在地' : '潮位観測所') + 'から一番近い観測所・欠測中は除く）</option>' +
+      list.map(function (x) {
+        return '<option value="' + esc(x.fcd) + '">' + esc((x.river ? x.river + ' ' : '') + x.name) + '（' + fmtKm(x.dist) + '）</option>';
+      }).join('') +
+      (loaded ? '' : S.riverListLoading === key ? '<option value="__more" disabled>近くの観測所を読み込み中…</option>'
+        : '<option value="__more">近くの観測所を表示…</option>');
+    sel.value = S.riverFcd || '';
+  }
+  function loadRiver() {
+    // 現在地（GPS）から一番近い観測所。位置が取れないときは表示中の潮位観測所の位置
+    var p = here();
+    if (!p || !S.showRiver) { renderRiver(); return Promise.resolve(); }
+    var key = p.lat.toFixed(3) + ',' + p.lon.toFixed(3) + '|' + S.riverFcd;
+    renderRiverSel();
+    if (S.riverFor === key && Date.now() - S.riverFetch < REFRESH_MS - 5000) { renderRiver(); return Promise.resolve(); }
+    return run('getRiver', p.lat, p.lon, S.riverFcd || null).then(function (r) {
+      var q = here();
+      if (!q || q.lat.toFixed(3) + ',' + q.lon.toFixed(3) + '|' + S.riverFcd !== key) return;
+      S.river = r; S.riverFor = key; S.riverFetch = Date.now(); S.riverTried = true; S.riverGps = p.gps;
+      renderRiver(); drawCharts();
+    }).catch(function () { S.riverTried = true; renderRiver(); });
+  }
+
+  function phaseAt(t) {
+    var ext = S.ext, prev = null, next = null;
+    for (var i = 0; i < ext.length; i++) {
+      if (ext[i].t <= t) prev = ext[i]; else { next = ext[i]; break; }
+    }
+    if (!prev || !next || prev.k === next.k) return null;
+    var frac = (t - prev.t) / (next.t - prev.t);
+    return { prev: prev, next: next, frac: frac, bu: Math.round(frac * 10), up: next.k === 'H' };
+  }
+  function phaseText(p) {
+    if (!p) return '--';
+    if (p.bu === 0) return p.prev.k === 'H' ? '満潮' : '干潮';
+    if (p.bu === 10) return p.next.k === 'H' ? '満潮' : '干潮';
+    return '<span class="dir">' + (p.up ? '上げ' : '下げ') + '</span>' + p.bu + '分';
+  }
+  /* ---------- 月齢・旧暦（太陰太陽暦） ---------- */
+  // 新月の時刻（Meeus『Astronomical Algorithms』49章の主要項。誤差は数分）と太陽黄経から求める
+  var RAD = Math.PI / 180;
+  function jdToMs(jd) { return Math.round((jd - 2440587.5) * DAY); }
+  function msToJd(ms) { return ms / DAY + 2440587.5; }
+  // k 番目の新月（k=0 が 2000年1月6日）の時刻 ms
+  function newMoonMs(k) {
+    var T = k / 1236.85, T2 = T * T, T3 = T2 * T, T4 = T3 * T;
+    var jde = 2451550.09766 + 29.530588861 * k + 0.00015437 * T2 - 0.000000150 * T3 + 0.00000000073 * T4;
+    var E = 1 - 0.002516 * T - 0.0000074 * T2;
+    var M = (2.5534 + 29.10535670 * k - 0.0000014 * T2 - 0.00000011 * T3) * RAD;
+    var Mp = (201.5643 + 385.81693528 * k + 0.0107582 * T2 + 0.00001238 * T3 - 0.000000058 * T4) * RAD;
+    var F = (160.7108 + 390.67050284 * k - 0.0016118 * T2 - 0.00000227 * T3 + 0.000000011 * T4) * RAD;
+    var Om = (124.7746 - 1.56375588 * k + 0.0020672 * T2 + 0.00000215 * T3) * RAD;
+    jde += -0.40720 * Math.sin(Mp) + 0.17241 * E * Math.sin(M) + 0.01608 * Math.sin(2 * Mp) + 0.01039 * Math.sin(2 * F) +
+      0.00739 * E * Math.sin(Mp - M) - 0.00514 * E * Math.sin(Mp + M) + 0.00208 * E * E * Math.sin(2 * M) -
+      0.00111 * Math.sin(Mp - 2 * F) - 0.00057 * Math.sin(Mp + 2 * F) + 0.00056 * E * Math.sin(2 * Mp + M) -
+      0.00042 * Math.sin(3 * Mp) + 0.00042 * E * Math.sin(M + 2 * F) + 0.00038 * E * Math.sin(M - 2 * F) -
+      0.00024 * E * Math.sin(2 * Mp - M) - 0.00017 * Math.sin(Om) - 0.00007 * Math.sin(Mp + 2 * M);
+    return jdToMs(jde - 69 / 86400);   // 力学時 → 世界時（ΔT≒69秒）
+  }
+  // 時刻 ms 以前で最後の新月
+  function prevNewMoon(ms) {
+    var k = Math.floor((msToJd(ms) - 2451550.09766) / 29.530588861) + 1;
+    while (newMoonMs(k) > ms) k--;
+    return { k: k, t: newMoonMs(k) };
+  }
+  // 太陽の視黄経（度）
+  function sunLon(ms) {
+    var T = (msToJd(ms) - 2451545.0) / 36525;
+    var L0 = 280.46646 + 36000.76983 * T + 0.0003032 * T * T;
+    var M = (357.52911 + 35999.05029 * T - 0.0001537 * T * T) * RAD;
+    var C = (1.914602 - 0.004817 * T) * Math.sin(M) + 0.019993 * Math.sin(2 * M) + 0.000289 * Math.sin(3 * M);
+    var lon = L0 + C - 0.00569 - 0.00478 * Math.sin((125.04 - 1934.136 * T) * RAD);
+    return ((lon % 360) + 360) % 360;
+  }
+  function jstDayStart(ms) { return midnight(ymd(ms)); }
+  // k 番目の新月から始まる月の番号（1〜12）と閏月か。中気（太陽黄経が30度の倍数）を含む月がその番号の月
+  function lunarMonthOf(k) {
+    var d0 = jstDayStart(newMoonMs(k)), d1 = jstDayStart(newMoonMs(k + 1));
+    var l0 = sunLon(d0), l1 = sunLon(d1);
+    if (l1 < l0) l1 += 360;
+    var z = Math.ceil(l0 / 30 - 1e-9) * 30;   // 月の初日以降で最初の中気
+    if (z < l1) return { m: ((((z % 360) - 330) / 30 + 12) % 12) + 1, leap: false };
+    return { m: lunarMonthOf(k - 1).m, leap: true };   // 中気が無い月は前の月の閏月
+  }
+  // 日付（その日の 0 時 JST）の旧暦と、正午の月齢
+  function lunarInfo(dayStart) {
+    var noon = dayStart + 12 * HOUR;
+    var nm = prevNewMoon(dayStart + DAY - 1);            // その日のうちの新月も含める
+    var lm = lunarMonthOf(nm.k);
+    var pn = prevNewMoon(noon);
+    return {
+      month: lm.m, leap: lm.leap,
+      day: Math.round((dayStart - jstDayStart(nm.t)) / DAY) + 1,
+      age: (noon - pn.t) / DAY
+    };
+  }
+  function moonPhaseName(age) {
+    return age < 1.5 ? '新月' : age < 5.5 ? '三日月' : age < 9.5 ? '上弦' : age < 13.5 ? '十三夜' : age < 16.5 ? '満月' :
+      age < 20.5 ? '寝待月' : age < 24.5 ? '下弦' : age < 28 ? '有明月' : '新月';
+  }
+  function lunarText(L) { return '旧暦 ' + (L.leap ? '閏' : '') + L.month + '月' + L.day + '日'; }
+  // 月の形（明るい部分）を SVG で描く
+  function moonSvg(age) {
+    var ph = (age / 29.530588861) * 2 * Math.PI, r = 9, c = Math.cos(ph);
+    var waxing = age < 29.530588861 / 2, rx = Math.abs(c) * r;
+    // 明るい側の半円 + 明暗境界の楕円弧
+    var sweepOuter = waxing ? 1 : 0, sweepInner = (c > 0) === waxing ? 0 : 1;
+    var d = 'M10 1 A' + r + ' ' + r + ' 0 0 ' + sweepOuter + ' 10 19 A' + rx.toFixed(2) + ' ' + r + ' 0 0 ' + sweepInner + ' 10 1Z';
+    return '<svg class="moon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9"/><path d="' + d + '"/></svg>';
+  }
+  /* ---------- 月の位置・輝面・出入り（Meeus『Astronomical Algorithms』47章の主要項。時刻の誤差は数分） ---------- */
+  function moonEcl(ms) {
+    var T = (msToJd(ms) - 2451545.0) / 36525;
+    var Lp = 218.3164477 + 481267.88123421 * T, D = 297.8501921 + 445267.1114034 * T;
+    var M = 357.5291092 + 35999.0502909 * T, Mp = 134.9633964 + 477198.8675055 * T, F = 93.2720950 + 483202.0175233 * T;
+    var E = 1 - 0.002516 * T, r = function (x) { return Math.sin(x * RAD); };
+    // 黄経（度）の主要項
+    var l = 6.288774 * r(Mp) + 1.274027 * r(2 * D - Mp) + 0.658314 * r(2 * D) + 0.213618 * r(2 * Mp) - 0.185116 * E * r(M) -
+      0.114332 * r(2 * F) + 0.058793 * r(2 * D - 2 * Mp) + 0.057066 * E * r(2 * D - M - Mp) + 0.053322 * r(2 * D + Mp) +
+      0.045758 * E * r(2 * D - M) - 0.040923 * E * r(M - Mp) - 0.034720 * r(D) - 0.030383 * E * r(M + Mp) +
+      0.015327 * r(2 * D - 2 * F) - 0.012528 * r(Mp + 2 * F) + 0.010980 * r(Mp - 2 * F) + 0.010675 * r(4 * D - Mp) +
+      0.010034 * r(3 * Mp) + 0.008548 * r(4 * D - 2 * Mp) - 0.007888 * E * r(2 * D + M - Mp) - 0.006766 * E * r(2 * D + M);
+    // 黄緯（度）の主要項
+    var b = 5.128122 * r(F) + 0.280602 * r(Mp + F) + 0.277693 * r(Mp - F) + 0.173237 * r(2 * D - F) + 0.055413 * r(2 * D - Mp + F) +
+      0.046271 * r(2 * D - Mp - F) + 0.032573 * r(2 * D + F) + 0.017198 * r(2 * Mp + F) + 0.009266 * r(2 * D + Mp - F) +
+      0.008822 * r(2 * Mp - F);
+    // 距離（km）の主要項 → 視差
+    var c = function (x) { return Math.cos(x * RAD); };
+    var dist = 385000.56 - 20905.355 * c(Mp) - 3699.111 * c(2 * D - Mp) - 2955.968 * c(2 * D) - 569.925 * c(2 * Mp);
+    return { lon: ((Lp + l) % 360 + 360) % 360, lat: b, dist: dist, T: T };
+  }
+  // 赤経・赤緯（度）
+  function eclToEq(lon, lat, T) {
+    var eps = (23.4392911 - 0.0130042 * T) * RAD, L = lon * RAD, B = lat * RAD;
+    var ra = Math.atan2(Math.sin(L) * Math.cos(eps) - Math.tan(B) * Math.sin(eps), Math.cos(L));
+    var dec = Math.asin(Math.sin(B) * Math.cos(eps) + Math.cos(B) * Math.sin(eps) * Math.sin(L));
+    return { ra: ra / RAD, dec: dec / RAD };
+  }
+  // 月の高度（度、地心）と時角
+  function moonAlt(ms, lat, lon) {
+    var m = moonEcl(ms), q = eclToEq(m.lon, m.lat, m.T);
+    var gmst = 280.46061837 + 360.98564736629 * (msToJd(ms) - 2451545.0);
+    var H = ((gmst + lon - q.ra) % 360 + 540) % 360 - 180;   // −180〜180
+    var alt = Math.asin(Math.sin(lat * RAD) * Math.sin(q.dec * RAD) + Math.cos(lat * RAD) * Math.cos(q.dec * RAD) * Math.cos(H * RAD)) / RAD;
+    return { alt: alt, H: H, par: Math.asin(6378.14 / m.dist) / RAD };
+  }
+  // 輝面比（0〜1）
+  function moonIllum(ms) {
+    var m = moonEcl(ms), sl = sunLon(ms);
+    var psi = Math.acos(Math.cos(m.lat * RAD) * Math.cos((m.lon - sl) * RAD)) / RAD;   // 離角
+    var i = 180 - psi;                                                                   // 位相角（近似）
+    return (1 + Math.cos(i * RAD)) / 2;
+  }
+  // その日（JST 0〜24時）の月の出・南中・月の入り。10分刻みで探してから二分法で詰める
+  function moonTimes(dayStart, lat, lon) {
+    var out = { rise: null, transit: null, set: null }, step = 10 * MIN;
+    // 出没の基準高度：視差 × 0.7275 − 大気差 34′
+    var f = function (t) { var a = moonAlt(t, lat, lon); return a.alt - (0.7275 * a.par - 0.5667); };
+    var refine = function (a, b, g) {
+      for (var k = 0; k < 20; k++) { var m = (a + b) / 2; if ((g(a) > 0) === (g(m) > 0)) a = m; else b = m; }
+      return Math.round((a + b) / 2 / MIN) * MIN;
+    };
+    var hAt = function (t) { return moonAlt(t, lat, lon).H; };
+    var prevT = dayStart, prevV = f(prevT), prevH = hAt(prevT);
+    for (var t = dayStart + step; t <= dayStart + DAY; t += step) {
+      var v = f(t), h = hAt(t);
+      if (prevV <= 0 && v > 0 && !out.rise) out.rise = refine(prevT, t, f);
+      if (prevV > 0 && v <= 0 && !out.set) out.set = refine(prevT, t, f);
+      // 南中：時角が負から正に変わるところ（±180 の折り返しは除く）
+      if (prevH < 0 && h >= 0 && h - prevH < 90 && !out.transit) out.transit = refine(prevT, t, hAt);
+      prevT = t; prevV = v; prevH = h;
+    }
+    return out;
+  }
+  // 月の出・南中・月の入り（日付・位置ごとに覚えておく）
+  var moonCache = {};
+  function moonTimesCached(dayStart, lat, lon) {
+    var k = dayStart + ',' + lat.toFixed(2) + ',' + lon.toFixed(2);
+    return moonCache[k] || (moonCache[k] = moonTimes(dayStart, lat, lon));
+  }
+
+  // 潮名（旧暦の日付から。一般的な対応表）
+  function tideName(dayStart) {
+    var L = lunarInfo(dayStart);
+    var map = { 1: '大潮', 2: '大潮', 3: '大潮', 4: '中潮', 5: '中潮', 6: '中潮', 7: '小潮', 8: '小潮', 9: '小潮', 10: '長潮', 11: '若潮',
+      12: '中潮', 13: '中潮', 14: '大潮', 15: '大潮', 16: '大潮', 17: '大潮', 18: '中潮', 19: '中潮', 20: '中潮', 21: '中潮',
+      22: '小潮', 23: '小潮', 24: '小潮', 25: '長潮', 26: '若潮', 27: '中潮', 28: '中潮', 29: '大潮', 30: '大潮' };
+    return { name: map[L.day] || '', age: L.age, lunar: L };
+  }
+
+  // 日の出・日の入り（日の出方程式。誤差は1分程度）。alt は太陽の高度（度）：
+  // 既定 −0.833°＝日の出入り、−6°＝常用薄明、−18°＝天文薄明
+  function sunTimes(dayStart, lat, lon, alt) {
+    if (alt == null) alt = -0.833;
+    var rad = Math.PI / 180;
+    var jdate = (dayStart + 12 * HOUR) / DAY + 2440587.5;
+    var n = Math.ceil(jdate - 2451545.0 + 0.0008);
+    var js = n - lon / 360;
+    var M = (357.5291 + 0.98560028 * js) % 360;
+    var C = 1.9148 * Math.sin(M * rad) + 0.02 * Math.sin(2 * M * rad) + 0.0003 * Math.sin(3 * M * rad);
+    var lam = (M + C + 180 + 102.9372) % 360;
+    var jt = 2451545.0 + js + 0.0053 * Math.sin(M * rad) - 0.0069 * Math.sin(2 * lam * rad);
+    var dec = Math.asin(Math.sin(lam * rad) * Math.sin(23.4397 * rad));
+    var cw = (Math.sin(alt * rad) - Math.sin(lat * rad) * Math.sin(dec)) / (Math.cos(lat * rad) * Math.cos(dec));
+    if (cw < -1 || cw > 1) return null;
+    var w = Math.acos(cw) / rad;
+    var toMs = function (j) { return Math.round((j - 2440587.5) * DAY); };
+    return { rise: toMs(jt - w / 360), set: toMs(jt + w / 360) };
+  }
+  function here() {
+    if (S.pos) return { lat: S.pos.latitude, lon: S.pos.longitude, gps: true };
+    return S.st ? { lat: S.st.lat, lon: S.st.lon, gps: false } : null;
+  }
+
+  function useTable() { return S.datum === 'table' && S.data && S.data.offset != null; }
+  function disp(h) { return h == null ? null : h + (useTable() ? S.data.offset : 0); }
+  function fmtH(h) { return h == null ? '--' : String(Math.round(disp(h))); }
+  function fmtDev(v) { if (v == null) return '--'; var r = Math.round(v); return (r > 0 ? '+' : r < 0 ? '−' : '±') + Math.abs(r); }
+
+  /* ---------- UI: header / hero ---------- */
+  function renderHeader() {
+    var s = S.st;
+    if (!s) return;
+    $('stName').textContent = s.n;
+    var parts = [s.o];
+    if (S.pos) parts.push('現在地から ' + fmtKm(distKm(S.pos.latitude, S.pos.longitude, s.lat, s.lon)));
+    parts.push(s.a);
+    $('stSub').textContent = parts.filter(Boolean).join(' · ');
+  }
+  function fmtKm(d) { return d < 10 ? d.toFixed(1) + ' km' : Math.round(d) + ' km'; }
+
+  function renderHero() {
+    var d = S.data, now = Date.now();
+    var p = phaseAt(now);
+    $('phaseBig').innerHTML = phaseText(p);
+    if (p) {
+      $('gaugeBar').style.width = (p.frac * 100).toFixed(1) + '%';
+      $('gaugeL').textContent = (p.prev.k === 'H' ? '満潮 ' : '干潮 ') + hm(p.prev.t);
+      $('gaugeR').textContent = (p.next.k === 'H' ? '満潮 ' : '干潮 ') + hm(p.next.t);
+      $('phaseSub').textContent = (p.prev.k === 'H' ? '満潮' : '干潮') + 'から ' + dur(now - p.prev.t);
+    } else {
+      $('gaugeBar').style.width = '0';
+      $('gaugeL').textContent = ''; $('gaugeR').textContent = ''; $('phaseSub').textContent = '';
+    }
+
+    var lo = latestObs(), unit = '<small>cm</small>';
+    var datumName = useTable() ? '潮位表基準面' : 'TP';
+    var note = [];
+    if (lo && now - lo.t < 12 * HOUR) {
+      var stale = now - lo.t > 40 * MIN;
+      $('curTide').innerHTML = fmtH(lo.tide) + unit;
+      // 推算は観測と同じ時刻の値で比べる。現在時刻の値は「推算＋直近の偏差」で推定
+      var a = S.curve(lo.t), an = S.curve(now), dn = depAt(now), nr = S.data.near;
+      var isRt = S.rtFrom != null && lo.t >= S.rtFrom;
+      $('curTideSub').innerHTML = esc(hm(lo.t) + ' 観測') + '<br>' + esc(dur(now - lo.t) + '前') +
+        '<br>' + (stale ? '<span class="tag warn">⚠ 更新停止</span>' : '<span class="tag">' + (useTable() ? '基準面' : 'TP') + '</span>');
+      var alt = S.data.near && S.data.near.fallback ? '近くの「' + S.data.near.src + '」など、' : '';
+      var staleMsg = stale ? '⚠ この地点の観測データは ' + hm(lo.t) + ' から更新されていません（配信元の停止または欠測）。' +
+        alt + '他の観測地点に変更してください（画面上部の地点名をタップすると選べます）。' : '';
+      note.push(hm(lo.t) + ' 観測' + (isRt ? '（海上保安庁 速報）' : '（気象庁）') + '・同時刻の推算 ' + fmtH(a) + 'cm');
+      if (an != null && dn != null) note.push('現在 ' + hm(now) + ' の推定 ' + fmtH(an + dn) + 'cm' +
+        (nr && nr.t > lo.t ? '（' + nr.src + (nr.fallback ? '（' + fmtKm(nr.dist) + '）' : '') + ' ' + hm(nr.t) + (nr.fallback ? ' の偏差 ' : ' の速報偏差 ') + fmtDev(nr.dep) + ' を使用）' : ''));
+      $('curDev').innerHTML = fmtDev(lo.dep) + unit;
+      var dv = Math.round(lo.dep || 0);
+      $('curDevSub').innerHTML = lo.dep == null ? '' : esc('推算より') + '<br>' +
+        esc(Math.abs(dv) < 5 ? 'ほぼ同じ' : dv > 0 ? (Math.abs(dv) >= 20 ? 'かなり高め' : '高め') : (Math.abs(dv) >= 20 ? 'かなり低め' : '低め'));
+    } else {
+      $('curTide').innerHTML = '--' + unit;
+      $('curTideSub').innerHTML = esc(S.st && S.st.miss ? '欠測中' : '実測なし') +
+        '<br><span class="tag">' + (useTable() ? '基準面' : 'TP') + '</span>';
+      $('curDev').innerHTML = '--' + unit;
+      $('curDevSub').textContent = '';
+    }
+    note.push('高さ：' + datumName);
+    // 更新停止の注意は赤字で先頭に出す
+    $('tideNote').innerHTML = (typeof staleMsg === 'string' && staleMsg ? '<span class="warn-text">' + esc(staleMsg) + '</span><br>' : '') + esc(note.join(' / '));
+
+    var nx = S.ext.filter(function (e) { return e.t > now; }).slice(0, 2);
+    [0, 1].forEach(function (i) {
+      var e = nx[i], id = 'next' + (i + 1);
+      if (!e) { $(id + 'Lbl').textContent = '次の満干潮'; $(id).textContent = '--'; $(id + 'Sub').textContent = ''; return; }
+      $(id + 'Lbl').textContent = '次の' + (e.k === 'H' ? '満潮' : '干潮');
+      $(id).textContent = hm(e.t);
+      var dep = depAt(now);
+      $(id + 'Sub').innerHTML = esc('あと' + durShort(e.t - now)) + '<br>' + esc(fmtH(e.h) + 'cm') +
+        (dep != null && Math.abs(dep) >= 5 ? '<br>' + esc('補正 ' + fmtH(e.h + dep)) : '');
+    });
+  }
+
+  var DIRS = ['静穏', '北北東', '北東', '東北東', '東', '東南東', '南東', '南南東', '南', '南南西', '南西', '西南西', '西', '西北西', '北西', '北北西', '北'];
+  function windWord(v) {
+    return v >= 30 ? '猛烈な風' : v >= 20 ? '非常に強い風' : v >= 15 ? '強い風' : v >= 10 ? 'やや強い風' : '';
+  }
+  function fmt1(v) { return v == null ? '--' : (Math.round(v * 10) / 10).toFixed(1); }
+
+  function renderWeather() {
+    var w = S.wx, now = Date.now(), p = here();
+    $('wxLbl').textContent = p && p.gps ? '現在地の天気' : '観測地点付近の天気';
+    var a = w && w.amedas, f = w && w.forecast;
+
+    // 予報
+    if (f && f.days.length) {
+      var d0 = f.days[0];
+      var night = (function () { var s = p && sunTimes(midnight(ymd(now)), p.lat, p.lon); return s && (now > s.set || now < s.rise); })();
+      var icon = night && d0.iconNight ? d0.iconNight : d0.icon;
+      if (icon) { $('wxIcon').src = 'https://www.jma.go.jp/bosai/forecast/img/' + icon + '.svg'; $('wxIcon').hidden = false; }
+      else $('wxIcon').hidden = true;
+      $('wxIcon').alt = d0.text;
+      $('wxText').textContent = d0.short || d0.text || '--';
+      var pops = f.pops.filter(function (x) { return x[1] != null && x[0] + 6 * HOUR > now && x[0] < midnight(ymd(now)) + DAY; })
+        .map(function (x) { return x[1]; });
+      $('wxSub').textContent = pops.length ? '降水確率 ' + pops.join('→') + '%' : '';
+      var d1 = f.days[1];
+      $('wxTmr').innerHTML = d1 ? '<b>明日</b>' + esc(d1.short || d1.text) : '';
+      $('wxTmr').hidden = !d1;
+      var fw = '';
+      if (d0.wind) fw += '<div><b>予報</b>' + esc(d0.wind) + '</div>';
+      if (d0.wave) fw += '<div><b>波</b>' + esc(d0.wave) + '</div>';
+      $('fcWind').innerHTML = fw;
+      $('fcWind').hidden = !fw;
+    } else {
+      $('wxIcon').hidden = true;
+      $('wxText').textContent = w ? '予報を取得できませんでした' : '--';
+      $('wxSub').textContent = '';
+      $('wxTmr').hidden = true;
+      $('fcWind').hidden = true;
+    }
+
+    // アメダス
+    if (a) {
+      $('wxTemp').innerHTML = a.temp != null ? fmt1(a.temp) + '<small>℃</small>' : '';
+      $('windSpd').innerHTML = fmt1(a.wind) + '<small>m/s</small>';
+      var calm = !a.dir;
+      $('windArrow').style.transform = calm ? 'scale(.5)' : 'rotate(' + ((a.dir * 22.5 + 180) % 360) + 'deg)';
+      var word = windWord(a.wind);
+      $('windDir').innerHTML = (calm ? '静穏' : DIRS[a.dir] + 'の風') + (word ? '<span class="tag">' + word + '</span>' : '');
+      $('windGust').textContent = a.gust != null ? '最大瞬間 ' + fmt1(a.gust) + ' m/s' + (a.gustDir ? '（' + DIRS[a.gustDir] + '）' : '') + (a.gustTime ? ' ' + hm(a.gustTime) : '') : '';
+    } else {
+      $('wxTemp').innerHTML = '';
+      $('windSpd').textContent = '--';
+      $('windDir').textContent = w ? '観測データなし' : '';
+      $('windGust').textContent = '';
+    }
+
+    var src = [];
+    if (a) src.push('アメダス「' + a.name + '」' + (p && p.gps ? '（現在地から' + fmtKm(a.dist) + '）' : '（' + fmtKm(a.dist) + '）') + ' ' + hm(a.time) + ' 観測' +
+      (a.precip1h ? ' · 1時間降水量 ' + a.precip1h + 'mm' : '') + (a.humidity != null ? ' · 湿度 ' + a.humidity + '%' : ''));
+    if (f) src.push('天気予報：' + f.area + '（' + hm(f.report) + ' 気象庁発表）');
+    $('wxSrc').textContent = src.join(' / ');
+  }
+
+  function loadWeather(force) {
+    var p = here();
+    if (!p || !S.st) return Promise.resolve();
+    var key = p.lat.toFixed(3) + ',' + p.lon.toFixed(3);
+    if (!force && S.wx && S.wxKey === key && Date.now() - S.wxFetch < REFRESH_MS - 5000) { renderWeather(); return Promise.resolve(); }
+    return run('getWeather', p.lat, p.lon, S.st.p20 || null).then(function (w) {
+      S.wx = w; S.wxKey = key; S.wxFetch = Date.now();
+      renderWeather();
+    }).catch(function () { S.wx = { amedas: null, forecast: null }; renderWeather(); });
+  }
+
+  function renderControls() {
+    var base = S.data ? S.data.base : midnight(ymd(Date.now()));
+    var tn = tideName(base);
+    $('dateLbl').innerHTML = mdw(base) + (tn.name ? '<span class="tag">' + tn.name + '</span>' : '');
+    renderSunTimes(base);
+    $('moonRow').innerHTML = moonSvg(tn.age) + '<span>月齢 <b>' + tn.age.toFixed(1) + '</b>（' + moonPhaseName(tn.age) + '）</span><span>輝面 <b>' + Math.round(moonIllum(base + 12 * HOUR) * 100) + '</b>%</span><span>' + lunarText(tn.lunar) + '</span>';
+    var isToday = !S.date || S.date === ymd(Date.now());
+    Array.prototype.forEach.call($('viewSeg').children, function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.v === effView()));
+      if (AROUND[b.dataset.v]) b.disabled = !isToday, b.style.opacity = isToday ? '' : '.4';
+    });
+    var hasTable = S.data && S.data.offset != null;
+    Array.prototype.forEach.call($('datumSeg').children, function (b) {
+      var on = b.dataset.d === (hasTable ? S.datum : 'tp');
+      b.setAttribute('aria-pressed', String(on));
+      if (b.dataset.d === 'table') b.disabled = !hasTable, b.style.opacity = hasTable ? '' : '.4';
+    });
+    $('unitLbl').textContent = 'cm（' + (useTable() ? '潮位表基準面' : 'TP') + '）';
+  }
+  // 現在時刻を中心にした表示範囲（片側の時間）
+  var AROUND = { h12: 12 * HOUR, h6: 6 * HOUR, h3: 3 * HOUR, h1: HOUR };
+  function effView() {
+    var isToday = !S.date || S.date === ymd(Date.now());
+    return AROUND[S.view] && !isToday ? 'day' : S.view;
+  }
+
+  function renderTable() {
+    var base = S.data.base, now = Date.now();
+    var day = S.ext.filter(function (e) { return e.t >= base && e.t < base + DAY; });
+    var H = day.filter(function (e) { return e.k === 'H'; }), L = day.filter(function (e) { return e.k === 'L'; });
+    var html = '';
+    [['満潮', H], ['干潮', L]].forEach(function (g) {
+      for (var i = 0; i < 2; i++) {
+        var e = g[1][i];
+        if (!e) { html += '<div class="card empty"><div class="k">' + g[0] + '</div><div class="t">—</div></div>'; continue; }
+        html += '<div class="card' + (e.t < now ? ' past' : '') + '"><div class="k">' + g[0] + '</div><div class="t num">' + hm(e.t) +
+          '</div><div class="h num">' + fmtH(e.h) + ' cm</div></div>';
+      }
+    });
+    $('tt').innerHTML = html;
+    $('extSrc').textContent = S.data.ext ? '満潮・干潮：気象庁 潮位表（' + S.st.sc + '）' :
+      '満潮・干潮：この地点は潮位表が無いため、毎時の推算潮位から算出した目安です';
+  }
+
+  /* ---------- charts ---------- */
+  var PADL = 38, PADR = 10;
+  function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  function range() {
+    var base = S.data.base, v = effView(), now = Date.now();
+    if (AROUND[v]) return [now - AROUND[v], now + AROUND[v]];
+    if (v === '3d') return [base - DAY, base + 2 * DAY];
+    return [base, base + DAY];
+  }
+  function setupCanvas(cv) {
+    var dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    }
+    var g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    return { g: g, w: w, h: h };
+  }
+  function niceStep(span, target) {
+    var raw = span / target, p = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / p;
+    return (r < 1.5 ? 1 : r < 3 ? 2 : r < 7 ? 5 : 10) * p;
+  }
+  function xTicks(t0, t1) {
+    var span = t1 - t0, out = [];
+    var step = span <= 3 * HOUR ? 15 * MIN : span <= 7 * HOUR ? 30 * MIN : span <= 13 * HOUR ? HOUR : span <= 26 * HOUR ? 3 * HOUR : 6 * HOUR;
+    var first = Math.ceil((t0 + JST) / step) * step - JST;
+    for (var t = first; t <= t1; t += step) out.push(t);
+    return out;
+  }
+
+  function drawMain() {
+    var cv = $('main'), c = setupCanvas(cv), g = c.g, W = c.w, H = c.h;
+    if (!S.data) return;
+    var r = range(), t0 = r[0], t1 = r[1], now = Date.now();
+    var top = 22, bottom = H - 22;
+    var lo = latestObs();
+
+    // 系列のサンプリング
+    var step = Math.max(MIN, Math.round((t1 - t0) / (W - PADL - PADR) / MIN) * MIN);
+    var pred = [], obs = [], fc = [];
+    for (var t = t0; t <= t1; t += step) {
+      var a = S.curve(t);
+      pred.push([t, a]);
+      var o = obsAt(t);
+      obs.push([t, o && o.tide]);
+      var dp = lo && t >= lo.t && t <= lo.t + 12 * HOUR && a != null ? depAt(t) : null;
+      if (dp != null) fc.push([t, a + dp]);
+    }
+    var rv = riverOn() ? riverPts().filter(function (p) { return p[0] >= t0 && p[0] <= t1; }) : [];
+    var ymin = Infinity, ymax = -Infinity;
+    [pred, obs, fc, rv].forEach(function (s) { s.forEach(function (p) { if (p[1] != null) { ymin = Math.min(ymin, disp(p[1])); ymax = Math.max(ymax, disp(p[1])); } }); });
+    if (!isFinite(ymin)) { ymin = 0; ymax = 100; }
+    var padY = Math.max(8, (ymax - ymin) * 0.12);
+    ymin -= padY; ymax += padY;
+    var ys = niceStep(ymax - ymin, 4);
+    ymin = Math.floor(ymin / ys) * ys; ymax = Math.ceil(ymax / ys) * ys;
+
+    var X = function (t) { return PADL + (t - t0) / (t1 - t0) * (W - PADL - PADR); };
+    var Y = function (v) { return bottom - (v - ymin) / (ymax - ymin) * (bottom - top); };
+    S.mainMap = { X: X, t0: t0, t1: t1, W: W };
+
+    var cGrid = css('--grid'), cText2 = css('--text-2'), cText3 = css('--text-3'), cPred = css('--pred'),
+      cObs = css('--obs'), cSurf = css('--surface'), cText = css('--text'), cSoft = css('--pred-soft');
+    g.font = '11px ' + css('--font');
+
+    // y grid
+    g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (var v = ymin; v <= ymax + 1e-6; v += ys) {
+      g.strokeStyle = cGrid; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(PADL, Math.round(Y(v)) + .5); g.lineTo(W - PADR, Math.round(Y(v)) + .5); g.stroke();
+      g.fillStyle = cText3; g.fillText(String(Math.round(v)), PADL - 6, Y(v));
+    }
+    // 夜間・朝夕マヅメ
+    drawNight(g, t0, t1, X, top, bottom, true);
+    // 上げ／下げ○分の線
+    drawBuLines(g, t0, t1, X, top, bottom);
+    // x grid
+    drawXAxis(g, t0, t1, X, top, bottom, cGrid, cText3, cText2);
+
+    // 推算: 面 + 線
+    g.beginPath();
+    var started = false;
+    pred.forEach(function (p) { if (p[1] == null) return; var x = X(p[0]), y = Y(disp(p[1])); if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y); });
+    if (started) {
+      var last = pred.filter(function (p) { return p[1] != null; });
+      g.lineTo(X(last[last.length - 1][0]), bottom); g.lineTo(X(last[0][0]), bottom); g.closePath();
+      g.fillStyle = cSoft; g.fill();
+    }
+    line(g, pred, X, Y, cPred, 2);
+
+    // 現在時刻
+    if (now > t0 && now < t1) {
+      g.strokeStyle = cText2; g.lineWidth = 1; g.setLineDash([3, 3]);
+      g.beginPath(); g.moveTo(Math.round(X(now)) + .5, top - 6); g.lineTo(Math.round(X(now)) + .5, bottom); g.stroke();
+      g.setLineDash([]);
+      g.fillStyle = cText2; g.textAlign = 'center'; g.textBaseline = 'bottom';
+      g.fillText('現在', X(now), top - 8);
+    }
+
+    // 補正予測 / 実測
+    g.setLineDash([5, 4]); line(g, fc, X, Y, cObs, 1.5); g.setLineDash([]);
+    // 実測は1分値でそのまま描画（範囲内）
+    var o = S.data.obs, op = [];
+    var i0 = Math.max(0, Math.floor((t0 - o.start) / o.step)), i1 = Math.min(o.tide.length - 1, Math.ceil((t1 - o.start) / o.step));
+    var stride = Math.max(1, Math.floor(step / o.step));
+    for (var i = i0; i <= i1; i += stride) op.push([o.start + i * o.step, o.tide[i]]);
+    if (rv.length) line(g, rv, X, Y, css('--river'), 2);
+    line(g, op, X, Y, cObs, 2);
+    if (lo && lo.t >= t0 && lo.t <= t1) dot(g, X(lo.t), Y(disp(lo.tide)), cObs, cSurf, 4);
+
+    // 日の出・日の入り（夜間の網かけの境目に時刻を書く）
+    drawSunLabels(g, t0, t1, X, bottom, cText2, cSurf);
+    drawMoonLabels(g, t0, t1, X, bottom, cText2, cSurf);
+
+    // 満干潮マーカー
+    g.textAlign = 'center';
+    S.ext.forEach(function (e) {
+      if (e.t < t0 || e.t > t1) return;
+      var x = X(e.t), y = Y(disp(e.h));
+      dot(g, x, y, cPred, cSurf, 4);
+      g.fillStyle = cText;
+      g.font = '600 11px ' + css('--font');
+      g.textBaseline = e.k === 'H' ? 'bottom' : 'top';
+      var ty = e.k === 'H' ? y - 7 : y + 7;
+      if (effView() !== '3d') {
+        g.fillText(hm(e.t), x, ty);
+        g.font = '10px ' + css('--font'); g.fillStyle = cText2;
+        g.fillText(fmtH(e.h), x, e.k === 'H' ? ty - 12 : ty + 12);
+      } else {
+        g.fillText(hm(e.t), x, ty);
+      }
+      g.font = '11px ' + css('--font');
+    });
+
+    // ホバー
+    if (S.hover != null && S.hover >= t0 && S.hover <= t1) {
+      var hx = X(S.hover);
+      g.strokeStyle = cText2; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(Math.round(hx) + .5, top); g.lineTo(Math.round(hx) + .5, bottom); g.stroke();
+      var ha = S.curve(S.hover), ho = obsAt(S.hover);
+      if (ha != null) dot(g, hx, Y(disp(ha)), cPred, cSurf, 4);
+      if (ho && ho.tide != null) dot(g, hx, Y(disp(ho.tide)), cObs, cSurf, 4);
+    }
+    updateTip();
+  }
+
+  // 薄明・日の出入りの時刻（朝：天文薄明 → 常用薄明 → 日の出、夕：日の入 → 常用薄明 → 天文薄明）
+  function renderSunTimes(dayStart) {
+    var p = here();
+    if (!p) { $('sunTimes').innerHTML = ''; return; }
+    var a = sunTimes(dayStart, p.lat, p.lon, -18), c = sunTimes(dayStart, p.lat, p.lon, -6), s = sunTimes(dayStart, p.lat, p.lon);
+    var f = function (x, k) { return x ? hm(x[k]) : '—'; };
+    // 1行に収める：薄明は「天文・常用」（朝）／「常用・天文」（夕）の時刻を時間順に並べる
+    $('sunTimes').innerHTML =
+      '<span title="朝の天文薄明・常用薄明">薄明 <b>' + f(a, 'rise') + '</b>・<b>' + f(c, 'rise') + '</b></span>' +
+      '<span>日の出 <b>' + f(s, 'rise') + '</b></span>' +
+      '<span>日の入 <b>' + f(s, 'set') + '</b></span>' +
+      '<span title="夕の常用薄明・天文薄明">薄明 <b>' + f(c, 'set') + '</b>・<b>' + f(a, 'set') + '</b></span>';
+  }
+  // 朝マヅメ＝常用薄明の始まり〜日の出30分後、夕マヅメ＝日の入り30分前〜常用薄明の終わり
+  var MAZUME_PAD = 30 * MIN;
+  function mazumes(t0, t1) {
+    var p = here(), out = [];
+    if (!p) return out;
+    for (var d = midnight(ymd(t0)) - DAY; d <= t1 + DAY; d += DAY) {
+      var sr = sunTimes(d, p.lat, p.lon), cv = sunTimes(d, p.lat, p.lon, -6);
+      if (!sr || !cv) continue;
+      out.push({ a: cv.rise, b: sr.rise + MAZUME_PAD, name: '朝マヅメ' }, { a: sr.set - MAZUME_PAD, b: cv.set, name: '夕マヅメ' });
+    }
+    return out;
+  }
+  // 夜（常用薄明の終わり〜始まり）を網かけし、朝・夕マヅメを色の帯で目立たせる
+  function drawNight(g, t0, t1, X, top, bottom, label) {
+    var p = here();
+    if (!p) return;
+    g.fillStyle = css('--night');
+    var prevEnd = null;
+    for (var d = midnight(ymd(t0)) - DAY; d <= t1 + DAY; d += DAY) {
+      var cv = sunTimes(d, p.lat, p.lon, -6);
+      if (!cv) { prevEnd = null; continue; }
+      if (prevEnd != null) {
+        var a = Math.max(t0, prevEnd), b = Math.min(t1, cv.rise);
+        if (b > a) g.fillRect(X(a), top, X(b) - X(a), bottom - top);
+      }
+      prevEnd = cv.set;
+    }
+    var col = css('--mazume'), ink = css('--mazume-ink');
+    mazumes(t0, t1).forEach(function (m) {
+      var a = Math.max(t0, m.a), b = Math.min(t1, m.b);
+      if (b <= a) return;
+      g.fillStyle = col;
+      g.fillRect(X(a), top, X(b) - X(a), bottom - top);
+      g.fillStyle = ink;
+      g.fillRect(X(a), top, X(b) - X(a), 3);   // 上端の帯
+      if (label) {
+        // 帯が細くても読めるよう、名前は縁取りして帯の中央に書く（3日表示は「朝」「夕」だけ）
+        g.save();
+        g.font = '700 10px ' + css('--font');
+        g.textAlign = 'center'; g.textBaseline = 'top'; g.lineJoin = 'round';
+        var cx = (X(a) + X(b)) / 2, txt = t1 - t0 > 26 * HOUR ? m.name.charAt(0) : m.name;
+        g.strokeStyle = css('--surface'); g.lineWidth = 3; g.strokeText(txt, cx, top + 6);
+        g.fillStyle = ink; g.fillText(txt, cx, top + 6);
+        g.restore();
+      }
+    });
+  }
+  // 上げ／下げ 1・3・5・7・9分の線（干潮〜満潮、満潮〜干潮を10等分した位置）
+  function drawBuLines(g, t0, t1, X, top, bottom) {
+    var ext = S.ext, col = css('--grid-strong'), ink = css('--text-3'), last = -1e9;
+    g.save();
+    g.strokeStyle = col; g.lineWidth = 1; g.setLineDash([2, 3]);
+    g.font = '9px ' + css('--font'); g.textAlign = 'center'; g.textBaseline = 'bottom';
+    for (var i = 0; i + 1 < ext.length; i++) {
+      var p = ext[i], n = ext[i + 1];
+      if (p.k === n.k || n.t < t0 || p.t > t1) continue;
+      var up = n.k === 'H';
+      [1, 3, 5, 7, 9].forEach(function (k) {
+        var t = p.t + (n.t - p.t) * k / 10;
+        if (t < t0 || t > t1) return;
+        var x = Math.round(X(t)) + .5;
+        g.beginPath(); g.moveTo(x, top); g.lineTo(x, bottom); g.stroke();
+        if (x - last >= 16) { g.fillStyle = ink; g.fillText((up ? '上' : '下') + k, x, bottom - 15); last = x; }
+      });
+    }
+    g.restore();
+  }
+
+  function drawSunLabels(g, t0, t1, X, bottom, color, halo) {
+    var p = here();
+    if (!p) return;
+    var short = t1 - t0 > 26 * HOUR;
+    g.font = '600 10px ' + css('--font');
+    g.textBaseline = 'bottom';
+    g.lineJoin = 'round';
+    for (var d = midnight(ymd(t0)); d <= t1; d += DAY) {
+      var s = sunTimes(d, p.lat, p.lon);
+      if (!s) continue;
+      [[s.rise, short ? '' : '日の出 ', 'left', 3], [s.set, short ? '' : '日の入 ', 'right', -3]].forEach(function (e) {
+        if (e[0] < t0 || e[0] > t1) return;
+        var x = X(e[0]) + e[3], txt = e[1] + hm(e[0]);
+        g.textAlign = e[2];
+        // 3日表示では日の出と日の入りの時刻が重なるので、日の入りを1行上にずらす
+        var y = bottom - 3 - (short && e[2] === 'right' ? 13 : 0);
+        g.strokeStyle = halo; g.lineWidth = 3; g.strokeText(txt, x, y);
+        g.fillStyle = color; g.fillText(txt, x, y);
+      });
+    }
+    g.font = '11px ' + css('--font');
+  }
+
+  // 月の出・南中・月の入り（グラフ下部の3段目。印は月の色）
+  function drawMoonLabels(g, t0, t1, X, bottom, color, halo) {
+    var p = here();
+    if (!p) return;
+    var short = t1 - t0 > 26 * HOUR, mcol = css('--moon'), y0 = bottom - 27, lastEnd = [-1e9, -1e9], items = [];
+    for (var d = midnight(ymd(t0)); d <= t1; d += DAY) {
+      var m = moonTimesCached(d, p.lat, p.lon);
+      [['月出', m.rise], ['南中', m.transit], ['月入', m.set]].forEach(function (e) { if (e[1] != null && e[1] >= t0 && e[1] <= t1) items.push(e); });
+    }
+    items.sort(function (a, b) { return a[1] - b[1]; });
+    g.save();
+    g.font = '600 10px ' + css('--font'); g.textBaseline = 'middle'; g.textAlign = 'left'; g.lineJoin = 'round';
+    items.forEach(function (e) {
+      var x = X(e[1]), txt = (short ? '' : e[0] + ' ') + hm(e[1]), w = g.measureText(txt).width;
+      // 月の印（南中は塗りつぶし、出入りは輪）と縦の目盛り
+      g.strokeStyle = mcol; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(x, bottom); g.lineTo(x, bottom - 6); g.stroke();
+      // 文字が前の文字と重なるときは1段上に置く（それでも重なるときは省く）
+      var tx = Math.min(x + 6, X(t1) - w - 2), row = tx >= lastEnd[0] + 4 ? 0 : tx >= lastEnd[1] + 4 ? 1 : -1;
+      var y = y0 - (row === 1 ? 12 : 0);
+      g.beginPath(); g.arc(x, y, 3.5, 0, Math.PI * 2);
+      if (e[0] === '南中') { g.fillStyle = mcol; g.fill(); } else g.stroke();
+      if (row < 0) return;
+      g.strokeStyle = halo; g.lineWidth = 3; g.strokeText(txt, tx, y);
+      g.fillStyle = color; g.fillText(txt, tx, y);
+      lastEnd[row] = tx + w;
+    });
+    g.restore();
+  }
+
+  function drawXAxis(g, t0, t1, X, top, bottom, cGrid, cText3, cText2) {
+    g.textAlign = 'center'; g.textBaseline = 'top';
+    xTicks(t0, t1).forEach(function (t) {
+      var x = Math.round(X(t)) + .5, d = jd(t), isMid = d.getUTCHours() === 0 && d.getUTCMinutes() === 0;
+      g.strokeStyle = cGrid; g.lineWidth = isMid ? 1.5 : 1;
+      g.beginPath(); g.moveTo(x, top); g.lineTo(x, bottom); g.stroke();
+      // 30分刻みの目盛り（±3h）は正時だけ文字を付ける
+      if (bottom > 60 && !(d.getUTCMinutes() && t1 - t0 > 3 * HOUR)) {
+        g.fillStyle = isMid ? cText2 : cText3;
+        var W = g.canvas.clientWidth;
+        g.textAlign = x > W - PADR - 14 ? 'right' : x < PADL + 14 ? 'left' : 'center';
+        if (g.textAlign === 'right') x = W - 2;
+        g.fillText(isMid ? (d.getUTCMonth() + 1) + '/' + d.getUTCDate() :
+          d.getUTCMinutes() ? hm(t) : String(d.getUTCHours()), x, bottom + 5);
+      }
+    });
+  }
+  function line(g, pts, X, Y, color, w) {
+    g.strokeStyle = color; g.lineWidth = w; g.lineJoin = 'round'; g.lineCap = 'round';
+    g.beginPath();
+    var pen = false;
+    pts.forEach(function (p) {
+      if (p[1] == null) { pen = false; return; }
+      var x = X(p[0]), y = Y(disp(p[1]));
+      if (!pen) { g.moveTo(x, y); pen = true; } else g.lineTo(x, y);
+    });
+    g.stroke();
+  }
+  function dot(g, x, y, color, ring, r) {
+    g.beginPath(); g.arc(x, y, r + 2, 0, Math.PI * 2); g.fillStyle = ring; g.fill();
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fillStyle = color; g.fill();
+  }
+
+  function drawDev() {
+    var cv = $('dev'), c = setupCanvas(cv), g = c.g, W = c.w, H = c.h;
+    if (!S.data) return;
+    var r = range(), t0 = r[0], t1 = r[1], o = S.data.obs;
+    var top = 10, bottom = H - 22;
+    var pts = [], mx = 10;
+    var i0 = Math.max(0, Math.floor((t0 - o.start) / o.step)), i1 = Math.min(o.dep.length - 1, Math.ceil((t1 - o.start) / o.step));
+    for (var i = i0; i <= i1; i++) { var v = o.dep[i]; pts.push([o.start + i * o.step, v]); if (v != null) mx = Math.max(mx, Math.abs(v)); }
+    var ys = niceStep(mx * 2, 3); mx = Math.ceil(mx / ys) * ys;
+    var X = function (t) { return PADL + (t - t0) / (t1 - t0) * (W - PADL - PADR); };
+    var Y = function (v) { return top + (mx - v) / (2 * mx) * (bottom - top); };
+    var cGrid = css('--grid'), cText2 = css('--text-2'), cText3 = css('--text-3');
+    g.font = '11px ' + css('--font');
+    g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (var v = -mx; v <= mx + 1e-6; v += ys) {
+      g.strokeStyle = v === 0 ? cText3 : cGrid; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(PADL, Math.round(Y(v)) + .5); g.lineTo(W - PADR, Math.round(Y(v)) + .5); g.stroke();
+      g.fillStyle = cText3; g.fillText((v > 0 ? '+' : '') + Math.round(v), PADL - 6, Y(v));
+    }
+    drawNight(g, t0, t1, X, top, bottom);
+    drawXAxis(g, t0, t1, X, top, bottom, cGrid, cText3, cText2);
+    g.strokeStyle = css('--obs'); g.lineWidth = 2; g.lineJoin = 'round';
+    g.beginPath();
+    var pen = false;
+    pts.forEach(function (p) {
+      if (p[1] == null) { pen = false; return; }
+      if (!pen) { g.moveTo(X(p[0]), Y(p[1])); pen = true; } else g.lineTo(X(p[0]), Y(p[1]));
+    });
+    g.stroke();
+    var now = Date.now();
+    if (now > t0 && now < t1) {
+      g.strokeStyle = cText2; g.setLineDash([3, 3]);
+      g.beginPath(); g.moveTo(Math.round(X(now)) + .5, top); g.lineTo(Math.round(X(now)) + .5, bottom); g.stroke();
+      g.setLineDash([]);
+    }
+    if (S.hover != null && S.hover >= t0 && S.hover <= t1) {
+      g.strokeStyle = cText2; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(Math.round(X(S.hover)) + .5, top); g.lineTo(Math.round(X(S.hover)) + .5, bottom); g.stroke();
+    }
+  }
+
+  function updateTip() {
+    var tip = $('tip');
+    if (S.hover == null || !S.mainMap) { tip.style.display = 'none'; return; }
+    var t = S.hover, a = S.curve(t), o = obsAt(t), lo = latestObs();
+    var rows = '<b class="num">' + mdw(t) + ' ' + hm(t) + '</b>';
+    rows += row('var(--pred)', '推算', fmtH(a) + ' cm');
+    if (o && o.tide != null) {
+      rows += row('var(--obs)', S.rtFrom != null && t >= S.rtFrom ? '実測（海保速報）' : '実測', fmtH(o.tide) + ' cm');
+      if (o.dep != null) rows += row(null, '偏差', fmtDev(o.dep) + ' cm');
+    } else if (lo && t > lo.t && t <= lo.t + 12 * HOUR && a != null && depAt(t) != null) {
+      rows += row('var(--obs)', '補正予測', fmtH(a + depAt(t)) + ' cm');
+    }
+    var rh = riverOn() ? riverAt(t) : null;
+    if (rh != null) rows += row('var(--river)', '河川', fmtH(rh) + ' cm');
+    var p = phaseAt(t);
+    if (p) rows += row(null, '潮', phaseText(p).replace(/<[^>]+>/g, ''));
+    tip.innerHTML = rows;
+    tip.style.display = 'block';
+    var card = $('main').parentNode, x = S.mainMap.X(t) + 6, w = tip.offsetWidth;
+    if (x + w > card.clientWidth - 4) x = S.mainMap.X(t) - w - 6;
+    tip.style.left = Math.max(4, x) + 'px';
+    tip.style.top = '34px';
+  }
+  function row(color, k, v) {
+    return '<div class="row"><span>' + (color ? '<i style="border-color:' + color + '"></i>' : '<i style="border-color:transparent"></i>') + k + '</span><span class="num">' + v + '</span></div>';
+  }
+
+  function bindHover(cv) {
+    function move(ev) {
+      if (!S.mainMap) return;
+      var rc = cv.getBoundingClientRect(), x = ev.clientX - rc.left, m = S.mainMap;
+      var t = m.t0 + (x - PADL) / (m.W - PADL - PADR) * (m.t1 - m.t0);
+      S.hover = Math.round(Math.min(m.t1, Math.max(m.t0, t)) / MIN) * MIN;
+      drawCharts();
+    }
+    cv.addEventListener('pointerdown', move);
+    cv.addEventListener('pointermove', function (ev) { if (ev.pointerType === 'mouse' || ev.buttons) move(ev); });
+    cv.addEventListener('pointerleave', function (ev) { if (ev.pointerType === 'mouse') { S.hover = null; drawCharts(); } });
+  }
+  document.addEventListener('pointerdown', function (ev) {
+    if (S.hover != null && ev.target.tagName !== 'CANVAS') { S.hover = null; drawCharts(); }
+  });
+
+  function drawCharts() { drawMain(); drawDev(); }
+  function renderAll() {
+    if (!S.data) return;
+    renderHeader(); renderControls(); renderHero(); renderTable(); renderRiver(); drawCharts();
+    $('updLbl').textContent = '最終取得 ' + hm(S.lastFetch) + (latestObs() ? ' · 最新観測 ' + mdw(latestObs().t) + ' ' + hm(latestObs().t) : '');
+  }
+
+  /* ---------- data loading ---------- */
+  function notice(msg) { var n = $('notice'); n.textContent = msg || ''; n.className = 'notice' + (msg ? ' show' : ''); }
+
+  function selectStation(s, keepDate) {
+    S.st = s;
+    save('st', s.c);
+    if (!keepDate) S.date = null;
+    renderHeader();
+    return refresh();
+  }
+
+  function refresh(silent) {
+    if (!S.st) return Promise.resolve();
+    S.loading = true;
+    $('refBtn').classList.add('spin');
+    if (!silent) $('app').classList.add('loading');
+    var code = S.st.c;
+    loadWeather(!silent && !S.date);
+    loadRiver();
+    loadWind(!silent && !S.date);
+    loadWQ();
+    return run('getTideData', code, S.date).then(function (d) {
+      if (!S.st || S.st.c !== code) return;
+      S.data = d;
+      var m = buildModel(d);
+      S.curve = m.curve; S.ext = m.ext;
+      mergeRt(d);
+      S.lastFetch = Date.now();
+      notice(S.st.miss ? 'この地点は現在欠測中の可能性があります。' : '');
+      renderAll();
+    }).catch(function (e) {
+      notice('データを取得できませんでした：' + (e && e.message || e));
+    }).then(function () {
+      S.loading = false;
+      $('refBtn').classList.remove('spin');
+      $('app').classList.remove('loading');
+    });
+  }
+
+  function useLocation(explicit) {
+    $('locBtn').classList.add('spin');
+    return locate().then(function (c) {
+      S.pos = c;
+      var s = nearest(c.latitude, c.longitude);
+      if (s) return selectStation(s);
+    }).catch(function (e) {
+      if (explicit) notice('位置情報を取得できませんでした（' + (e && e.message || e) + '）。右上の地点名から選択してください。');
+      throw e;
+    }).then(function (v) { $('locBtn').classList.remove('spin'); return v; },
+      function (e) { $('locBtn').classList.remove('spin'); throw e; });
+  }
+
+  /* ---------- picker ---------- */
+  function openPicker() {
+    $('pkQ').value = '';
+    renderPicker();
+    var dlg = $('picker');
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+  function closePicker() { var dlg = $('picker'); if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
+  function renderPicker() {
+    var q = $('pkQ').value.trim();
+    Array.prototype.forEach.call($('stFilterSeg').children, function (b) { b.setAttribute('aria-pressed', String(b.dataset.f === S.stFilter)); });
+    var list = S.stations.filter(function (s) { return stationOk(s) && (!q || s.n.indexOf(q) >= 0 || s.a.indexOf(q) >= 0); });
+    if (S.pos) {
+      list = list.map(function (s) { return [s, distKm(S.pos.latitude, S.pos.longitude, s.lat, s.lon)]; })
+        .sort(function (a, b) { return a[1] - b[1]; });
+    } else list = list.map(function (s) { return [s, null]; });
+    $('pkList').innerHTML = list.map(function (x) {
+      var s = x[0];
+      return '<li data-c="' + s.c + '"' + (S.st && S.st.c === s.c ? ' class="cur"' : '') + '><div><div class="n">' + esc(s.n) +
+        (s.miss ? ' <span class="tag">欠測</span>' : '') + (s.jcg ? ' <span class="tag">海保速報</span>' : '') + (s.sc ? '' : ' <span class="tag">潮位表なし</span>') +
+        '</div><div class="a">' + esc(s.o + ' · ' + s.a) + '</div></div><div class="d num">' + (x[1] != null ? fmtKm(x[1]) : '') + '</div></li>';
+    }).join('');
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* ---------- 水質（近くに水質観測所があるときだけ水温・塩分濃度） ---------- */
+  function loadWQ(force) {
+    var p = here();
+    if (!p) return Promise.resolve();
+    var key = p.lat.toFixed(3) + ',' + p.lon.toFixed(3);
+    if (!force && S.wqKey === key && Date.now() - S.wqFetch < 30 * MIN) { renderWQ(); return Promise.resolve(); }
+    return run('getWaterQuality', p.lat, p.lon).then(function (q) {
+      S.wq = q; S.wqKey = key; S.wqFetch = Date.now(); S.wqGps = p.gps;
+      renderWQ();
+    }).catch(function () { renderWQ(); });
+  }
+  function wqText(q) {
+    if (!q || !q.layers.length) return '';
+    return q.layers.map(function (l) {
+      return (l.layer ? l.layer + ' ' : '') + [l.temp ? '水温 ' + fmt1(l.temp.v) + '℃' : '', l.salt ? '塩分 ' + l.salt.v + 'mg/L' : '']
+        .filter(Boolean).join('・');
+    }).join(' / ') + '（' + (q.river ? q.river + ' ' : '') + q.name + '）';
+  }
+  function renderWQ() {
+    var q = S.wq, card = $('wqCard');
+    card.hidden = !q;
+    if (!q) return;
+    $('wqLbl').textContent = '水質（' + (q.river ? q.river + '「' + q.name + '」' : q.name) + '・' + (S.wqGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(q.dist) + '）';
+    if (!q.layers.length) { $('wqBody').innerHTML = '<div class="sub">現在は欠測中です</div>'; }
+    else {
+      $('wqBody').innerHTML = '<table class="wq num"><thead><tr><th></th><th>水温</th><th>塩分濃度</th><th>観測</th></tr></thead><tbody>' +
+        q.layers.map(function (l) {
+          var t = l.temp ? l.temp.t : l.salt ? l.salt.t : null;
+          return '<tr><th>' + esc(l.layer || '—') + '</th><td><b>' + (l.temp ? fmt1(l.temp.v) + '</b>℃' : '—</b>') + '</td><td><b>' +
+            (l.salt ? l.salt.v + '</b>mg/L' : '—</b>') + '</td><td>' + (t ? hm(t) : '') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+    }
+    $('wqNote').innerHTML = esc(q.place ? q.place + '。' : '') + '1時間ごとの観測値（欠測の項目は「—」）。 <a href="' + esc(q.url) + '" target="_blank" rel="noopener">川の防災情報</a>';
+  }
+
+  /* ---------- 風の推移・予報（地図の上に3時間ごとの風向・風速） ---------- */
+  var MAP_Z = 12;
+  function dirName(deg) { if (deg == null) return ''; var i = Math.round(deg / 22.5) % 16; return DIRS[i || 16]; }
+  function loadWind(force) {
+    var p = here();
+    if (!p) return Promise.resolve();
+    var key = p.lat.toFixed(3) + ',' + p.lon.toFixed(3) + '|' + (S.date || '');
+    if (!force && S.windKey === key && Date.now() - S.windFetch < REFRESH_MS - 5000) { renderWind(); return Promise.resolve(); }
+    return run('getWind', p.lat, p.lon, S.date).then(function (w) {
+      S.wind = w; S.windKey = key; S.windFetch = Date.now();
+      renderWind();
+    }).catch(function () { S.wind = null; renderWind(); });
+  }
+  // 地理院タイル（淡色地図）を現在地を中心に並べる
+  function renderWindMap() {
+    var box = $('wtlMap'), p = here();
+    if (!p) { box.innerHTML = ''; return; }
+    var W = box.clientWidth, H = box.clientHeight, n = Math.pow(2, MAP_Z) * 256;
+    var cx = (p.lon + 180) / 360 * n;
+    var s = Math.sin(p.lat * Math.PI / 180);
+    var cy = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
+    var left = cx - W / 2, top = cy - H / 2, html = '';
+    for (var tx = Math.floor(left / 256); tx <= Math.floor((left + W) / 256); tx++) {
+      for (var ty = Math.floor(top / 256); ty <= Math.floor((top + H) / 256); ty++) {
+        html += '<img alt="" src="https://cyberjapandata.gsi.go.jp/xyz/pale/' + MAP_Z + '/' + tx + '/' + ty + '.png" style="left:' +
+          Math.round(tx * 256 - left) + 'px;top:' + Math.round(ty * 256 - top) + 'px">';
+      }
+    }
+    box.innerHTML = html + '<span class="wtl-pin" title="' + (p.gps ? '現在地' : '潮位観測所') + '"></span>';
+    box.dataset.key = p.lat.toFixed(4) + ',' + p.lon.toFixed(4) + ',' + W + 'x' + H;
+  }
+  function renderWind() {
+    var w = S.wind, cols = $('wtlCols'), p = here();
+    var mk = p ? p.lat.toFixed(4) + ',' + p.lon.toFixed(4) + ',' + $('wtlMap').clientWidth + 'x' + $('wtlMap').clientHeight : '';
+    if ($('wtlMap').dataset.key !== mk) renderWindMap();
+    $('wtlLbl').textContent = '風の推移・予報' + (p ? '（' + (p.gps ? '現在地' : '潮位観測所付近') + '）' : '');
+    if (!w) { cols.innerHTML = ''; $('wtlNote').textContent = ''; $('wtlNow').hidden = true; return; }
+    var now = Date.now(), base = w.base, html = '';
+    var lastObs = w.obs.length ? w.obs[w.obs.length - 1][0] : -Infinity;
+    for (var h = 0; h < 24; h += 3) {
+      var t = base + h * HOUR, v = null, kind = '';
+      if (t <= lastObs) {
+        var o = w.obs.filter(function (x) { return x[0] === t; })[0];
+        if (o) { v = { sp: o[1], deg: o[2] ? o[2] * 22.5 : null, calm: o[2] === 0 }; kind = 'obs'; }
+      }
+      if (!v) {
+        var f = w.fc.filter(function (x) { return x[0] === t; })[0];
+        if (f) { v = { sp: f[1], deg: f[2], calm: f[1] < 0.3 }; kind = 'fc'; }
+      }
+      if (!v) { html += '<div class="wtl-col"></div>'; continue; }
+      var rot = v.deg == null ? 0 : (v.deg + 180) % 360, strong = windWord(v.sp);
+      html += '<div class="wtl-col ' + kind + '" title="' + hm(t) + ' ' + (kind === 'obs' ? '実況' : '予報') + '">' +
+        '<b class="num">' + fmt1(v.sp) + '</b>' +
+        '<svg viewBox="0 0 24 24" style="transform:' + (v.calm ? 'scale(.5)' : 'rotate(' + rot + 'deg)') + '"><path d="M12 2l6 9h-4v11h-4V11H6z"/></svg>' +
+        '<span>' + (v.calm ? '静穏' : dirName(v.deg)) + '</span>' + (strong ? '<i>' + strong.replace('な風', '').replace('風', '') + '</i>' : '') + '</div>';
+    }
+    cols.innerHTML = html;
+    // 現在時刻の線
+    var nowEl = $('wtlNow');
+    if (now >= base && now < base + DAY) { nowEl.hidden = false; nowEl.style.left = ((now - base) / DAY * 100) + '%'; }
+    else nowEl.hidden = true;
+    var notes = [];
+    if (w.station) notes.push('実況：アメダス「' + w.station.name + '」（' + fmtKm(w.station.dist) + '）');
+    if (w.fc.length) notes.push('予報：Open-Meteo（気象庁 MSM/GSM モデル）');
+    notes.push('地図：地理院タイル');
+    $('wtlNote').textContent = notes.join(' / ') + '。濃い矢印が実況、薄い矢印が予報。矢印は風の吹いていく向き。';
+  }
+
+  /* ---------- 釣果の記録（Google カレンダー・アングラーズ等への投稿） ---------- */
+  // カレンダーは予定作成画面（calendar.google.com の作成用URL）を開くだけなので、アプリ側の権限は不要
+  var CF_KEEP = ['cfSp', 'cfLure', 'cfRod', 'cfReel', 'cfLine', 'cfLeader', 'cfMethod', 'cfRange', 'cfStyle'];
+  var cfPhotos = [];   // { file, url, t, src, lat, lon }
+  var cfGps = null;    // 写真の位置
+
+  function toLocalInput(ms) {
+    var d = jd(ms);
+    return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()) + 'T' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+  }
+  function fromLocalInput(v) {
+    var q = String(v).match(/(\d+)-(\d+)-(\d+)T(\d+):(\d+)/);
+    return q ? Date.UTC(+q[1], q[2] - 1, +q[3], +q[4], +q[5]) - JST : null;
+  }
+  function calStamp(ms) {
+    var d = jd(ms);
+    return d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + 'T' + pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + '00';
+  }
+  function ymdhm(ms) { var d = jd(ms); return d.getUTCFullYear() + '/' + (d.getUTCMonth() + 1) + '/' + d.getUTCDate() + ' ' + hm(ms); }
+
+  /* --- 写真の EXIF（JPEG）から撮影日時と位置を読む。先頭 256KB だけ見る --- */
+  function readExif(file) {
+    if (!file.slice || !window.DataView) return Promise.resolve({});
+    return new Promise(function (res) {
+      var fr = new FileReader();
+      fr.onload = function () { try { res(parseJpeg(new DataView(fr.result))); } catch (e) { res({}); } };
+      fr.onerror = function () { res({}); };
+      fr.readAsArrayBuffer(file.slice(0, 262144));
+    });
+  }
+  function parseJpeg(v) {
+    var out = {};
+    if (v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return out;
+    var p = 2;
+    while (p + 10 < v.byteLength) {
+      var mk = v.getUint16(p), len = v.getUint16(p + 2);
+      if ((mk & 0xFF00) !== 0xFF00) break;
+      if (mk === 0xFFE1 && v.getUint32(p + 4) === 0x45786966) { parseTiff(v, p + 10, out); break; }
+      p += 2 + len;
+    }
+    return out;
+  }
+  function parseTiff(v, t0, out) {
+    var le = v.getUint16(t0) === 0x4949;
+    var u16 = function (o) { return v.getUint16(t0 + o, le); };
+    var u32 = function (o) { return v.getUint32(t0 + o, le); };
+    var str = function (o, n) {
+      var s = '';
+      for (var i = 0; i < n && t0 + o + i < v.byteLength; i++) { var c = v.getUint8(t0 + o + i); if (!c) break; s += String.fromCharCode(c); }
+      return s;
+    };
+    var rat = function (o) { return u32(o) / (u32(o + 4) || 1); };
+    var ifd = function (off, cb) {
+      if (!off || t0 + off + 2 > v.byteLength) return;
+      var n = u16(off);
+      for (var i = 0; i < n; i++) {
+        var e = off + 2 + i * 12;
+        if (t0 + e + 12 > v.byteLength) return;
+        cb(u16(e), u32(e + 4), e + 8);
+      }
+    };
+    var exifOff = 0, gpsOff = 0;
+    ifd(u32(4), function (tag, cnt, vo) {
+      if (tag === 0x8769) exifOff = u32(vo);
+      if (tag === 0x8825) gpsOff = u32(vo);
+      if (tag === 0x0132) out.dt0 = str(u32(vo), 19);              // DateTime
+    });
+    ifd(exifOff, function (tag, cnt, vo) {
+      if (tag === 0x9003) out.dt = str(u32(vo), 19);               // DateTimeOriginal
+      if (tag === 0x9011) out.tz = str(cnt > 4 ? u32(vo) : vo, 6); // OffsetTimeOriginal
+    });
+    var g = {};
+    ifd(gpsOff, function (tag, cnt, vo) {
+      if (tag === 1 || tag === 3) g[tag] = String.fromCharCode(v.getUint8(t0 + vo));
+      if (tag === 2 || tag === 4) { var o = u32(vo); g[tag] = rat(o) + rat(o + 8) / 60 + rat(o + 16) / 3600; }
+    });
+    if (g[2] && g[4]) { out.lat = g[2] * (g[1] === 'S' ? -1 : 1); out.lon = g[4] * (g[3] === 'W' ? -1 : 1); }
+  }
+  // "YYYY:MM:DD HH:MM:SS"（時差の記録が無ければ日本時間とみなす）
+  function exifTime(s, tz) {
+    var q = s && s.match(/(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/);
+    if (!q) return null;
+    var off = JST, z = tz && tz.match(/([+-])(\d\d):(\d\d)/);
+    if (z) off = (z[1] === '-' ? -1 : 1) * (+z[2] * 60 + +z[3]) * MIN;
+    return Date.UTC(+q[1], q[2] - 1, +q[3], +q[4], +q[5], +q[6]) - off;
+  }
+
+  // 写真を読み込む。fromCamera のときは今ある写真の後ろに足す（合計3枚まで）。選び直しは置き換え
+  function onPhotos(files, fromCamera) {
+    var list = Array.prototype.slice.call(files || [], 0, 3);
+    if (!list.length) return Promise.resolve();
+    var over = !fromCamera && files.length > 3;
+    return Promise.all(list.map(function (f0, idx) {
+      return readExif(f0).then(function (x) {
+        var f = f0;
+        var t = exifTime(x.dt, x.tz), src = '撮影日時';
+        if (t == null && x.dt0) t = exifTime(x.dt0, x.tz);
+        if (t == null && f.lastModified) { t = f.lastModified; src = 'ファイルの日時'; }
+        // アプリ内で撮った写真は「image.jpg」のような名前になるので、撮影日時入りの名前を付ける（保存後に写真フォルダで探しやすくする）
+        if (fromCamera) {
+          var d = jd(t || Date.now()), ext = (/\.(\w+)$/.exec(f0.name) || [0, 'jpg'])[1];
+          var nm = 'mytidegraph_' + d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + '_' +
+            pad(d.getUTCHours()) + pad(d.getUTCMinutes()) + pad(d.getUTCSeconds()) + '_' + (cfPhotos.length + idx + 1) + '.' + ext;
+          try { f = new File([f0], nm, { type: f0.type || 'image/jpeg', lastModified: f0.lastModified || Date.now() }); } catch (e) { f = f0; }
+        }
+        var p = { file: f, url: URL.createObjectURL(f), t: t, src: src, lat: x.lat, lon: x.lon, cam: !!fromCamera, saved: false };
+        // アプリ内で撮った写真は位置が付かないことが多いので、撮影直後なら現在地を使う
+        if (fromCamera && p.lat == null && S.pos && Math.abs(Date.now() - (t || 0)) < 10 * MIN) { p.lat = S.pos.latitude; p.lon = S.pos.longitude; }
+        return p;
+      });
+    })).then(function (ps) {
+      var next = fromCamera ? cfPhotos.concat(ps) : ps;
+      var keep = next.slice(-3);
+      cfPhotos.concat(ps).forEach(function (p) { if (keep.indexOf(p) < 0) URL.revokeObjectURL(p.url); });
+      cfPhotos = keep;
+      return photosChanged(over ? '先頭の3枚を使います' : '');
+    });
+  }
+  function removePhoto(i) {
+    var p = cfPhotos.splice(i, 1)[0];
+    if (p) URL.revokeObjectURL(p.url);
+    photosChanged('');
+  }
+  // 写真の撮影日時・位置から釣果の日時と場所を決め、必要なら観測所・日付を合わせる
+  function photosChanged(pre) {
+    renderThumbs();
+    var first = cfPhotos.filter(function (p) { return p.t; }).sort(function (a, b) { return a.t - b.t; })[0];
+    var gp = cfPhotos.filter(function (p) { return p.lat != null; })[0];
+    cfGps = gp ? { lat: gp.lat, lon: gp.lon } : null;
+    var info = pre ? [pre] : [];
+    if (first) {
+      $('cfTime').value = toLocalInput(Math.floor(first.t / MIN) * MIN);
+      info.push('釣果の日時を ' + ymdhm(first.t) + '（' + first.src + '）に設定しました');
+    } else if (cfPhotos.length) info.push('写真から日時を読み取れませんでした');
+    if (cfPhotos.length) info.push(cfGps ? '写真の位置：' + cfGps.lat.toFixed(4) + ', ' + cfGps.lon.toFixed(4) : '写真に位置情報はありません');
+    $('cfPhotoInfo').textContent = info.length ? info.join('。') + '。' : '写真の撮影日時（なければファイルの日時）を釣果の日時に設定します。';
+    var al = $('cfAlign').checked && cfPhotos.length ? alignTo(first ? first.t : null, cfGps) : Promise.resolve();
+    return al.then(renderCatch);
+  }
+  // 写真の位置で最寄りの潮位観測所に、写真の日付でグラフの日付に切り替える（潮の情報をその時点で出すため）
+  function alignTo(t, gps) {
+    var st = gps ? nearest(gps.lat, gps.lon) : null;
+    var inRange = t && S.data && t >= S.data.astro.start + HOUR && t < S.data.astro.start + (S.data.astro.v.length - 2) * HOUR;
+    var dateStr = t ? (ymd(t) === ymd(Date.now()) ? null : ymd(t)) : S.date;
+    var note = [];
+    var done = function () { if (note.length) $('cfPhotoInfo').textContent += note.join('。') + '。'; };
+    if (st && S.st && st.c !== S.st.c) {
+      S.date = dateStr;
+      note.push('潮位観測所を写真の位置に近い「' + st.n + '」に切り替えました');
+      return selectStation(st, true).then(done);
+    }
+    if (t && (!inRange || dateStr !== S.date)) {
+      S.date = dateStr;
+      note.push('グラフを ' + mdw(t) + ' に切り替えました');
+      return refresh().then(done);
+    }
+    return Promise.resolve();
+  }
+  function renderThumbs() {
+    $('cfThumbs').innerHTML = cfPhotos.map(function (p, i) {
+      return '<figure><img src="' + p.url + '" alt="写真' + (i + 1) + '">' + (p.cam ? '<span class="cam">' + (p.saved ? '保存済み' : '撮影') + '</span>' : '') +
+        '<button type="button" class="rm" data-i="' + i + '" aria-label="写真' + (i + 1) + 'を外す">×</button>' +
+        '<figcaption class="num">' + (p.t ? esc(ymdhm(p.t)) : '日時不明') + (p.lat != null ? ' 📍' : '') + '</figcaption></figure>';
+    }).join('');
+    var unsaved = cfPhotos.filter(function (p) { return p.cam && !p.saved; });
+    $('cfSaveCam').hidden = !unsaved.length;
+    $('cfSaveCam').textContent = '撮影した写真（' + unsaved.length + '枚）を写真フォルダに保存';
+    if (!unsaved.length) $('cfSaveView').hidden = true;
+  }
+  // 撮影した写真をスマホの写真フォルダへ。Web からは直接書き込めないので共有シート（iPhone は「画像を保存」）を使い、
+  // 使えない環境では写真を大きく表示して長押し保存してもらう
+  function saveCamPhotos() {
+    var ps = cfPhotos.filter(function (p) { return p.cam && !p.saved; });
+    if (!ps.length) return;
+    var files = ps.map(function (p) { return p.file; });
+    var showView = function (why) {
+      $('cfSaveImgs').innerHTML = ps.map(function (p) { return '<img src="' + p.url + '" alt="撮影した写真">'; }).join('');
+      $('cfSaveView').hidden = false;
+      cfMsg(why + '下に表示した写真を長押しして保存してください。');
+    };
+    if (!(navigator.share && navigator.canShare && navigator.canShare({ files: files }))) { showView('この画面では共有機能が使えないため、'); return; }
+    navigator.share({ files: files }).then(function () {
+      ps.forEach(function (p) { p.saved = true; });
+      renderThumbs();
+      cfMsg('共有画面から保存しました（iPhone は「画像を保存」を選ぶと写真フォルダに入ります）。');
+    }, function (e) {
+      if (e && e.name === 'AbortError') return;
+      showView('共有できなかったため、');
+    });
+  }
+
+  /* --- 釣果時刻の状況（潮・天気・風など） --- */
+  function situation(t) {
+    var r = {}, now = Date.now(), d = S.data;
+    r.station = S.st ? S.st.n + '（' + S.st.o + '）' : '';
+    var inRange = d && t >= d.astro.start && t < d.astro.start + d.astro.v.length * HOUR;
+    if (inRange) {
+      var p = phaseAt(t), tn = tideName(midnight(ymd(t)));
+      r.tideName = tn.name;
+      r.moon = '月齢 ' + tn.age.toFixed(1) + '（' + moonPhaseName(tn.age) + '）・' + lunarText(tn.lunar);
+      if (p) {
+        r.phase = phaseText(p).replace(/<[^>]+>/g, '');
+        r.phaseFull = r.phase + '（' + (p.prev.k === 'H' ? '満潮 ' : '干潮 ') + hm(p.prev.t) + ' → ' + (p.next.k === 'H' ? '満潮 ' : '干潮 ') + hm(p.next.t) + '）';
+      }
+      var a = S.curve(t), o = obsAt(t), lo = latestObs();
+      var dep = o && o.dep != null ? o.dep : (lo && t > lo.t ? depAt(t) : null);
+      r.level = o && o.tide != null ? '実測 ' + fmtH(o.tide) + 'cm' : (a != null && dep != null ? '推定 ' + fmtH(a + dep) + 'cm' : '');
+      r.pred = a != null ? '推算 ' + fmtH(a) + 'cm' : '';
+      r.dev = dep != null ? '偏差 ' + fmtDev(dep) + 'cm' : '';
+      r.datum = useTable() ? '潮位表基準面' : 'TP';
+      var day0 = midnight(ymd(t));
+      var dayExt = S.ext.filter(function (e) { return e.t >= day0 && e.t < day0 + DAY; });
+      var fmtE = function (k) {
+        return dayExt.filter(function (e) { return e.k === k; }).map(function (e) { return hm(e.t) + '（' + fmtH(e.h) + '）'; }).join(' ');
+      };
+      r.ext = '満潮 ' + (fmtE('H') || '—') + ' / 干潮 ' + (fmtE('L') || '—');
+    }
+    var mpos = cfGps ? { lat: cfGps.lat, lon: cfGps.lon } : here();
+    if (mpos) { var mt = moonTimesCached(midnight(ymd(t)), mpos.lat, mpos.lon); r.moonTimes = '月の出 ' + (mt.rise ? hm(mt.rise) : '—') + ' / 南中 ' + (mt.transit ? hm(mt.transit) : '—') + ' / 月の入り ' + (mt.set ? hm(mt.set) : '—'); }
+    if (!r.moon) { var tn2 = tideName(midnight(ymd(t))); r.moon = '月齢 ' + tn2.age.toFixed(1) + '（' + moonPhaseName(tn2.age) + '）・' + lunarText(tn2.lunar); }
+    var pos = cfGps ? { lat: cfGps.lat, lon: cfGps.lon } : here();
+    var sun = pos && sunTimes(midnight(ymd(t)), pos.lat, pos.lon);
+    var civ = pos && sunTimes(midnight(ymd(t)), pos.lat, pos.lon, -6);
+    if (sun) r.sun = (civ ? '常用薄明 ' + hm(civ.rise) + ' / ' : '') + '日の出 ' + hm(sun.rise) + ' / 日の入 ' + hm(sun.set) + (civ ? ' / 常用薄明 ' + hm(civ.set) : '');
+    // 天気・風は観測・予報が「いま」のものなので、記録する日時が現在に近いときだけ付ける
+    if (Math.abs(t - now) < 2 * HOUR && S.wx) {
+      var f = S.wx.forecast, am = S.wx.amedas;
+      if (f && f.days[0]) r.weather = (f.days[0].short || f.days[0].text) + (am && am.temp != null ? ' ' + fmt1(am.temp) + '℃' : '');
+      if (am && am.wind != null) r.wind = (am.dir ? DIRS[am.dir] + 'の風' : '静穏') + ' ' + fmt1(am.wind) + 'm/s' + (am.gust != null ? '（最大瞬間 ' + fmt1(am.gust) + '）' : '');
+      if (am && am.precip24h != null) r.rain = '24時間降水量 ' + am.precip24h + 'mm';
+      if (am) r.amedas = 'アメダス' + am.name + ' ' + hm(am.time);
+      if (f && f.days[0] && f.days[0].wave) r.wave = f.days[0].wave;
+    }
+    var rh = riverOn() ? riverAt(t) : null;
+    if (rh != null) r.river = S.river.name + ' ' + fmtH(rh) + 'cm';
+    if (Math.abs(t - now) < 2 * HOUR && S.wq) r.wq = wqText(S.wq);
+    return r;
+  }
+
+  // Google フォトの撮影日検索（例：2026年10月17日）
+  function googlePhotosUrl(ms) {
+    var d = jd(ms);
+    return 'https://photos.google.com/search/' + encodeURIComponent(d.getUTCFullYear() + '年' + (d.getUTCMonth() + 1) + '月' + d.getUTCDate() + '日');
+  }
+  function buildCatch() {
+    var v = function (id) { return $(id).value.trim(); };
+    var t = fromLocalInput($('cfTime').value) || Date.now();
+    var sp = v('cfSp'), size = v('cfSize'), wt = v('cfWeight'), num = v('cfNum'), place = v('cfPlace'), style = v('cfStyle');
+    var method = v('cfMethod'), range = v('cfRange'), lure = v('cfLure'), memo = v('cfMemo');
+    var tackle = [['ロッド', v('cfRod')], ['リール', v('cfReel')], ['ライン', v('cfLine')], ['リーダー', v('cfLeader')]]
+      .filter(function (x) { return x[1]; }).map(function (x) { return x[0] + ' ' + x[1]; }).join(' / ');
+    var where = place || (S.st ? S.st.n + '付近' : '');
+    var s = situation(t);
+    var catchLine = [sp || '（魚種未入力）', size ? size + 'cm' : '', wt ? Number(wt).toLocaleString('ja-JP') + 'g' : '',
+      num && +num !== 1 ? num + '匹' : ''].filter(Boolean).join(' ');
+    var title = '釣果 ' + catchLine + (where ? ' @' + where : '');
+
+    // アングラーズ等に貼る投稿文
+    var post = [catchLine, ymdhm(t) + (where ? ' ' + where : '')];
+    var how = [style ? '釣行スタイル：' + style : '', method ? '釣り方：' + method + (range ? '（' + range + '）' : '') : (range ? 'レンジ：' + range : '')].filter(Boolean).join(' / ');
+    if (how) post.push(how);
+    if (lure) post.push('ルアー・仕掛け：' + lure);
+    if (tackle) post.push('タックル：' + tackle);
+    var cond = [s.weather, s.wind, s.rain].filter(Boolean).join(' / ');
+    if (cond) post.push('状況：' + cond);
+    var tide = [s.tideName, s.phaseFull].filter(Boolean).join(' ');
+    if (tide) post.push('潮：' + tide);
+    var lv = [s.level, s.dev].filter(Boolean).join('（') + (s.level && s.dev ? '）' : '');
+    if (s.moon) post.push('月：' + s.moon + '・輝面 ' + Math.round(moonIllum(t) * 100) + '%');
+    if (lv) post.push('潮位：' + lv + '・' + s.datum + '（' + (S.st ? S.st.n : '') + '）');
+    if (s.river) post.push('河川水位：' + s.river);
+    if (s.wq) post.push('水質：' + s.wq);
+    if (memo) post.push('', memo);
+    if ($('cfTags').checked) {
+      var tag = function (x) { return x ? '#' + String(x).replace(/[\s#（）()・,、。]/g, '') : ''; };
+      var tags = [tag(sp), tag(S.st && S.st.n), tag(s.tideName), tag(s.phase), tag(method === 'ルアー' ? 'ルアー釣り' : ''), '#mytidegraph'].filter(Boolean);
+      post.push('', tags.filter(function (x, i) { return tags.indexOf(x) === i; }).join(' '));
+    }
+    post = post.join('\n');
+
+    // カレンダー用の詳細（投稿文＋記録用の情報）
+    var rec = [s.station ? '潮位観測所：' + s.station : '', s.ext, s.pred ? '推算潮位：' + s.pred.replace('推算 ', '') : '', s.sun, s.moonTimes, s.wave ? '波：' + s.wave : '', s.amedas,
+      ''].filter(Boolean);
+    // 写真はカレンダーに付けられないので、スマホの写真フォルダで探せるようファイル名と撮影日時を書く
+    if (cfPhotos.length) {
+      rec.unshift('写真（スマホの写真フォルダ）：\n' + cfPhotos.map(function (p, i) {
+        return '  ' + (i + 1) + '. ' + p.file.name + (p.t ? '（' + ymdhm(p.t) + ' ' + (p.cam ? 'アプリで撮影' : p.src) + '）' : '');
+      }).join('\n') +
+        // スマホの Google フォトでバックアップしていれば、撮影日の検索で同じ写真を開ける
+        '\nGoogle フォトでこの日の写真を見る：\n' + googlePhotosUrl(cfPhotos.filter(function (p) { return p.t; }).map(function (p) { return p.t; })[0] || t));
+    }
+    var app = document.body.dataset.app;
+    var details = post + '\n\n― 記録（my tide-graph）―\n' + rec.join('\n') + (app && S.st ? '\n' + app + '?st=' + S.st.c : '');
+    var loc = place || (cfGps ? cfGps.lat.toFixed(5) + ',' + cfGps.lon.toFixed(5) :
+      (S.pos ? S.pos.latitude.toFixed(5) + ',' + S.pos.longitude.toFixed(5) : (S.st ? S.st.lat + ',' + S.st.lon : '')));
+    var url = 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
+      '&text=' + encodeURIComponent(title) +
+      '&dates=' + calStamp(t) + '/' + calStamp(t + 30 * MIN) +
+      '&ctz=Asia%2FTokyo' +
+      '&details=' + encodeURIComponent(details) +
+      (loc ? '&location=' + encodeURIComponent(loc) : '');
+    return { title: title, post: post, details: details, url: url };
+  }
+  function renderCatch() {
+    var c = buildCatch();
+    $('cfPrev').textContent = c.post;
+    $('cfGo').href = c.url;
+  }
+  /* --- 入力履歴（過去に入力した値を選択肢として出す） --- */
+  var CF_HIST = ['cfSp', 'cfPlace', 'cfLure', 'cfRod', 'cfReel', 'cfLine', 'cfLeader'];
+  var HIST_MAX = 20, CHIPS_MAX = 6;
+  function histGet(id) { try { return JSON.parse(load('hist_' + id) || '[]'); } catch (e) { return []; } }
+  function histSet(id, a) { save('hist_' + id, JSON.stringify(a.slice(0, HIST_MAX))); }
+  function histAdd(id, v) {
+    v = String(v || '').trim();
+    if (!v) return;
+    histSet(id, [v].concat(histGet(id).filter(function (x) { return x !== v; })));
+  }
+  function histRemove(id, v) { histSet(id, histGet(id).filter(function (x) { return x !== v; })); }
+  // 各入力欄の下に最近の値のボタン、入力中の候補（datalist）を用意する
+  function renderHist() {
+    CF_HIST.forEach(function (id) {
+      var inp = $(id), list = histGet(id);
+      // 以前の版で保存していた「前回の入力」を最初の選択肢にする
+      if (!list.length && load('cf_' + id)) { histAdd(id, load('cf_' + id)); list = histGet(id); }
+      var dl = $(id + 'Hist');
+      if (!dl) {
+        dl = document.createElement('datalist');
+        dl.id = id + 'Hist';
+        inp.parentNode.appendChild(dl);
+        // 魚種は既定の候補（cfSpList）に履歴を足す
+        if (id !== 'cfSp') inp.setAttribute('list', dl.id);
+      }
+      var base = id === 'cfSp' ? Array.prototype.map.call($('cfSpList').options, function (o) { return o.value; }) : [];
+      dl.innerHTML = list.concat(base.filter(function (x) { return list.indexOf(x) < 0; }))
+        .map(function (x) { return '<option value="' + esc(x) + '">'; }).join('');
+      if (id === 'cfSp') { inp.setAttribute('list', dl.id); }
+      var chips = $(id + 'Chips');
+      if (!chips) {
+        chips = document.createElement('div');
+        chips.id = id + 'Chips';
+        chips.className = 'cf-chips';
+        chips.dataset.for = id;
+        inp.parentNode.appendChild(chips);   // ラベルの中（入力欄の下）に置く
+      }
+      chips.innerHTML = list.slice(0, CHIPS_MAX).map(function (x) {
+        return '<span class="chip"><button type="button" class="pick" data-v="' + esc(x) + '">' + esc(x) + '</button>' +
+          '<button type="button" class="del" data-v="' + esc(x) + '" aria-label="' + esc(x) + ' を履歴から消す">×</button></span>';
+      }).join('');
+      chips.hidden = !list.length;
+    });
+  }
+  function onChip(ev) {
+    var b = ev.target.closest('button');
+    if (!b) return;
+    var chips = b.closest('.cf-chips'), id = chips && chips.dataset.for;
+    if (!id) return;
+    if (b.classList.contains('del')) { histRemove(id, b.dataset.v); renderHist(); return; }
+    $(id).value = b.dataset.v;
+    renderCatch();
+  }
+  function keepFields() {
+    CF_KEEP.forEach(function (id) { save('cf_' + id, $(id).value.trim()); });
+    CF_HIST.forEach(function (id) { histAdd(id, $(id).value); });
+    renderHist();
+  }
+  function cfMsg(s) { $('cfMsg').textContent = s; }
+  function copyText(s) {
+    var legacy = function () {
+      var ta = document.createElement('textarea');
+      ta.value = s; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      $('catchForm').appendChild(ta); ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { /* 無視 */ }
+      ta.remove();
+      return ok ? Promise.resolve() : Promise.reject(new Error('copy'));
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(s).catch(legacy);
+    return legacy();
+  }
+  function openCatch() {
+    $('cfTime').value = toLocalInput(Math.floor(Date.now() / MIN) * MIN);
+    CF_KEEP.forEach(function (id) { $(id).value = load('cf_' + id) || ''; });
+    ['cfSize', 'cfWeight', 'cfPlace', 'cfMemo'].forEach(function (id) { $(id).value = ''; });
+    $('cfNum').value = '1';
+    $('cfPhotos').value = '';
+    cfPhotos.forEach(function (p) { URL.revokeObjectURL(p.url); });
+    cfPhotos = []; cfGps = null;
+    renderThumbs();
+    renderHist();
+    $('cfPhotoInfo').textContent = '写真の撮影日時（なければファイルの日時）を釣果の日時に設定します。';
+    cfMsg('Google カレンダーの予定作成画面が開きます。内容を確認して「保存」を押してください（写真はカレンダーには付きません）。');
+    renderCatch();
+    var dlg = $('catchDlg');
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  }
+  function closeCatch() { var dlg = $('catchDlg'); if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
+
+  /* ---------- events ---------- */
+  $('catchBtn').onclick = openCatch;
+  $('catchClose').onclick = closeCatch;
+  $('catchForm').addEventListener('click', onChip);
+  $('catchForm').oninput = function (ev) { if (ev.target.id !== 'cfPhotos' && ev.target.id !== 'cfCamera') renderCatch(); };
+  $('catchForm').onchange = function (ev) {
+    var id = ev.target.id;
+    if (id === 'cfPhotos' || id === 'cfCamera') { onPhotos(ev.target.files, id === 'cfCamera'); ev.target.value = ''; }
+    else renderCatch();
+  };
+  $('cfThumbs').onclick = function (ev) { var b = ev.target.closest('.rm'); if (b) removePhoto(+b.dataset.i); };
+  $('cfSaveCam').onclick = saveCamPhotos;
+  $('cfGo').onclick = function () { renderCatch(); keepFields(); setTimeout(closeCatch, 300); };
+  $('cfCopy').onclick = function () {
+    renderCatch(); keepFields();
+    copyText(buildCatch().post).then(function () { cfMsg('投稿用の文章をコピーしました。アングラーズの投稿画面のコメント欄などに貼り付けてください。'); },
+      function () { cfMsg('コピーできませんでした。上の文章を長押しして選択・コピーしてください。'); });
+  };
+  $('cfShare').onclick = function () {
+    renderCatch(); keepFields();
+    var c = buildCatch(), files = cfPhotos.map(function (p) { return p.file; });
+    var data = { title: c.title, text: c.post };
+    if (files.length && navigator.canShare && navigator.canShare({ files: files })) data.files = files;
+    var fallback = function (why) {
+      copyText(c.post).then(function () { cfMsg(why + '文章をコピーしました。写真はアングラーズのアプリで選んで、文章を貼り付けてください。'); },
+        function () { cfMsg(why + '上の文章を長押しでコピーし、写真はアングラーズのアプリで選んでください。'); });
+    };
+    if (!navigator.share) { fallback('この画面では共有機能が使えないため、'); return; }
+    navigator.share(data).then(function () { cfMsg('共有しました。'); }, function (e) {
+      if (e && e.name === 'AbortError') return;
+      fallback('共有できなかったため、');
+    });
+  };
+  $('stBtn').onclick = openPicker;
+  $('pkClose').onclick = closePicker;
+  $('pkQ').oninput = renderPicker;
+  $('stFilterSeg').onclick = function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    S.stFilter = b.dataset.f; save('stfilter', S.stFilter);
+    renderPicker();
+    // 表示中の地点が対象外になったら、近くの対象地点に切り替える
+    if (S.st && !stationOk(S.st)) {
+      var p = here(), s = p && nearest(p.lat, p.lon);
+      if (s) selectStation(s);
+    }
+  };
+  $('pkList').onclick = function (ev) {
+    var li = ev.target.closest('li');
+    if (!li) return;
+    var s = S.stations.filter(function (x) { return x.c === li.dataset.c; })[0];
+    closePicker();
+    if (s) selectStation(s);
+  };
+  $('locBtn').onclick = function () { useLocation(true).catch(function () {}); };
+  $('refBtn').onclick = function () { refresh(); };
+  $('prevDay').onclick = function () { shiftDay(-1); };
+  $('nextDay').onclick = function () { shiftDay(1); };
+  function shiftDay(n) {
+    var base = S.data ? S.data.base : midnight(ymd(Date.now()));
+    var nd = ymd(base + n * DAY + HOUR);
+    S.date = nd === ymd(Date.now()) ? null : nd;
+    S.hover = null;
+    refresh();
+  }
+  $('viewSeg').onclick = function (ev) {
+    var b = ev.target.closest('button'); if (!b || b.disabled) return;
+    S.view = b.dataset.v; save('view', S.view); S.hover = null; renderControls(); drawCharts();
+  };
+  // 選択欄に触れたら選択肢を読み込み始める（選ぶまでに揃っていることが多い）
+  ['focus', 'pointerdown'].forEach(function (ev) { $('riverSel').addEventListener(ev, function () { loadRiverList(); }); });
+  $('riverSel').onchange = function () {
+    var sel = this;
+    if (sel.value === '__more') {
+      // 「近くの観測所を表示…」：読み込んだら選択肢を開き直す（開けない端末ではもう一度タップ）
+      sel.value = S.riverFcd || '';
+      loadRiverList().then(function () { try { sel.showPicker && sel.showPicker(); } catch (e) { /* 対応していない端末 */ } });
+      return;
+    }
+    S.riverFcd = this.value; save('river_fcd', S.riverFcd);
+    S.river = null; S.riverFor = null;
+    renderRiver(); drawCharts(); loadRiver();
+  };
+  $('riverSeg').onclick = function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    S.showRiver = b.dataset.r === '1'; save('river', S.showRiver ? '1' : '0');
+    renderRiver(); drawCharts(); loadRiver();
+  };
+  $('datumSeg').onclick = function (ev) {
+    var b = ev.target.closest('button'); if (!b || b.disabled) return;
+    S.datum = b.dataset.d; save('datum', S.datum); renderAll();
+  };
+  bindHover($('main'));
+  bindHover($('dev'));
+  var rt;
+  window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { drawCharts(); renderWind(); }, 100); });
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) mq.addEventListener('change', drawCharts);
+  }
+  // 自動更新（今日を表示中のみ）
+  setInterval(function () {
+    if (S.loading || document.hidden) return;
+    if (!S.date && Date.now() - S.lastFetch >= REFRESH_MS - 5000) refresh(true);
+    else if (S.data) { renderHero(); drawCharts(); renderWind(); }
+  }, 60e3);
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && !S.date && Date.now() - S.lastFetch > 2 * MIN) refresh(true);
+  });
+
+  /* ---------- boot ---------- */
+  run('getStations').then(function (list) {
+    S.stations = list;
+    var byCode = function (c) { return list.filter(function (s) { return s.c === c; })[0]; };
+    var init = byCode(document.body.dataset.st || '');
+    if (init) return selectStation(init);
+    var last = byCode(load('st') || '');
+    if (last && !stationOk(last)) last = null;
+    // まず前回の地点（無ければ東京）を表示し、位置情報が取れたら最寄りに切り替える
+    var first = selectStation(last || byCode(DEFAULT_ST) || list[0]);
+    useLocation(false).catch(function () {
+      if (!last) notice('位置情報を利用できないため東京を表示しています。右上の地点名から変更できます。');
+    });
+    return first;
+  }).catch(function (e) {
+    notice('地点一覧を取得できませんでした：' + (e && e.message || e));
+    $('stName').textContent = 'エラー';
+  });
+})();
+</script>
+</body>
+</html>

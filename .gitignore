@@ -1,0 +1,12 @@
+# clasp の設定（Apps Script のプロジェクト ID）は公開しない
+.clasp.json
+.clasprc.json
+# OS・エディタ
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+# Google ドライブのショートカット等
+*.gdoc
+*.gsheet
+*.gslides
