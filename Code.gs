@@ -18,7 +18,7 @@ var SUISAN_TXT = 'https://www.data.jma.go.jp/kaiyou/data/db/tide/suisan/txt/';
 var JST = 9 * 3600 * 1000;
 var HOUR = 3600 * 1000;
 var DAY = 24 * HOUR;
-var CACHE_VER = 'v3_';
+var CACHE_VER = 'v4_';
 var JCG = 'https://www1.kaiho.mlit.go.jp/TIDE/gauge/';
 var RIVER = 'https://www.river.go.jp/kawabou/file/';
 var OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
@@ -131,7 +131,7 @@ function getTideData(code, dateStr) {
   if (!station) throw new Error('地点が見つかりません: ' + code);
 
   var now = Date.now();
-  var base = dateStr ? jstMidnight_(dateStr) : jstMidnight_(ymd_(now));
+  var base = checkDate_(dateStr, now);
   var start = base - DAY;            // 前日 0:00
   var days = [start, base, base + DAY, base + 2 * DAY]; // 補間用に翌々日まで
 
@@ -208,7 +208,7 @@ function getTideData(code, dateStr) {
  */
 function getRiver(lat, lon, fcd) {
   lat = +lat; lon = +lon;
-  if (!isFinite(lat) || !isFinite(lon)) throw new Error('位置が不正です');
+  checkPos_(lat, lon);
   var near = riverNearby_(lat, lon);
   var st = null;
   if (fcd) {
@@ -273,7 +273,7 @@ function getRiver(lat, lon, fcd) {
  *  取得回数を抑えるため現在水位は載せず、位置（約1km）ごとに6時間キャッシュする */
 function getRiverStations(lat, lon) {
   lat = +lat; lon = +lon;
-  if (!isFinite(lat) || !isFinite(lon)) throw new Error('位置が不正です');
+  checkPos_(lat, lon);
   var near = riverNearby_(lat, lon), cand = near.stations.slice(0, 30);
   return cached_('rv_list2_' + lat.toFixed(2) + '_' + lon.toFixed(2), 6 * 3600, function () {
   prefetch_(cand.map(function (s) { return ['rv_m_' + s.fcd, RIVER + 'files/master/obs/stg/' + s.fcd + '.json', 6 * 3600]; }));
@@ -356,7 +356,7 @@ function riverVals_(ts) {
  */
 function getWaterQuality(lat, lon) {
   lat = +lat; lon = +lon;
-  if (!isFinite(lat) || !isFinite(lon)) throw new Error('位置が不正です');
+  checkPos_(lat, lon);
   var LIMIT_KM = 10;
   var towns = cached_('wq_towns', 24 * 3600, function () {
     var a = JSON.parse(fetchAll_([RIVER + 'files/map/twn/twnarea.json'])[0]).towns || [];
@@ -595,7 +595,8 @@ function catmullRom_(v, x) {
  */
 function getWeather(lat, lon, c20) {
   lat = +lat; lon = +lon;
-  if (!isFinite(lat) || !isFinite(lon)) throw new Error('位置が不正です');
+  if (c20 != null && c20 !== '' && !/^\d{7}$/.test(String(c20))) throw new Error('地域コードが不正です');
+  checkPos_(lat, lon);
   var out = { amedas: null, forecast: null };
   try { out.amedas = amedasNear_(lat, lon); } catch (e) { rethrowNeed_(e); out.amedasError = String(e.message || e); }
   try { out.forecast = forecastAt_(lat, lon, c20); } catch (e) { rethrowNeed_(e); out.forecastError = String(e.message || e); }
@@ -612,9 +613,9 @@ function getWeather(lat, lon, c20) {
  */
 function getWind(lat, lon, dateStr) {
   lat = +lat; lon = +lon;
-  if (!isFinite(lat) || !isFinite(lon)) throw new Error('位置が不正です');
+  checkPos_(lat, lon);
   var now = Date.now();
-  var base = dateStr ? jstMidnight_(dateStr) : jstMidnight_(ymd_(now));
+  var base = checkDate_(dateStr, now);
   var out = { base: base, obs: [], fc: [], station: null };
 
   // 実況（アメダス）
@@ -892,13 +893,18 @@ function datumOffset_(days, rows, astro) {
 /* 取得・キャッシュ                                                     */
 /* ------------------------------------------------------------------ */
 
-// ブラウザから直接取得できる（CORS を許可している）サイト。
+// ブラウザから直接取得できる（CORS を許可している）サイトのうち、更新の頻繁なデータ。
 // callWithPre 経由で呼ばれたときは、サーバーで取りに行かずブラウザに取ってきてもらい、
-// URL Fetch の1日の上限を節約する。取ってきた本文はキャッシュに入れて他の利用者とも共有する。
-var CLIENT_HOSTS = ['www.jma.go.jp', 'www.data.jma.go.jp', 'api.open-meteo.com',
-  'mreversegeocoder.gsi.go.jp', 'msearch.gsi.go.jp'];
+// URL Fetch の1日の上限を節約する。
+// ブラウザから渡された本文は偽物の可能性があるので、その利用者への応答にだけ使い、共有キャッシュには入れない。
+// 地点一覧・年間の推算などの長く使い回す基本データ（/const/ 以下や潮位表）はサーバーで取得して共有する。
 // ※ www.river.go.jp は CDN のキャッシュ応答に CORS ヘッダーが付かないことがあるため、サーバーで取得してキャッシュする
-var PRE = null;   // ブラウザから渡された { url: 本文 | null(404) | {err:1}(ブラウザで取れなかった) }
+var CLIENT_HOSTS = ['www.jma.go.jp', 'api.open-meteo.com', 'mreversegeocoder.gsi.go.jp'];
+var PRE = null;        // ブラウザから渡された { url: 本文 | null(404) | {err:1}(ブラウザで取れなかった) }
+var FROM_PRE = false;  // この処理でブラウザから渡された本文を使ったか（使ったら共有キャッシュに入れない）
+
+// サーバーからの外部取得の上限（無料アカウントの1日2万回を使い切らないよう余裕を残す）
+var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300 };
 
 /**
  * ブラウザから呼ぶ入口。必要なデータが揃っていなければ { need: [url…] } を返し、
@@ -907,42 +913,84 @@ var PRE = null;   // ブラウザから渡された { url: 本文 | null(404) | 
 function callWithPre(name, args, pre) {
   var api = { getStations: getStations, getTideData: getTideData, getWeather: getWeather, getRiver: getRiver,
     getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality };
-  if (!api[name]) throw new Error('不正な呼び出しです: ' + name);
-  PRE = pre || {};
+  if (!Object.prototype.hasOwnProperty.call(api, name)) throw new Error('不正な呼び出しです: ' + name);
+  if (args != null && !Array.isArray(args)) throw new Error('不正な呼び出しです');
+  PRE = {};
+  // 渡されるのは、こちらが求めたサイトの URL の本文だけ
+  if (pre && typeof pre === 'object') {
+    Object.keys(pre).forEach(function (u) {
+      var v = pre[u];
+      if (!clientUrl_(u)) return;
+      if (v === null || typeof v === 'string' || (v && typeof v === 'object' && v.err)) PRE[u] = typeof v === 'object' && v ? { err: 1 } : v;
+    });
+  }
   try {
     return { result: api[name].apply(null, args || []) };
   } catch (e) {
     if (e && e.needUrls) return { need: e.needUrls };
     throw e;
   } finally {
-    PRE = null;
+    PRE = null; FROM_PRE = false;
   }
 }
 
-function clientHost_(url) {
-  var m = /^https?:\/\/([^\/]+)/.exec(url);
-  return !!m && CLIENT_HOSTS.indexOf(m[1]) >= 0;
+/** ブラウザに取ってきてもらう URL か */
+function clientUrl_(url) {
+  var m = /^https:\/\/([^\/]+)(\/[^?#]*)?/.exec(String(url));
+  return !!m && CLIENT_HOSTS.indexOf(m[1]) >= 0 && !/\/const\//.test(m[2] || '');
 }
 function needError_(urls) { var e = new Error('ブラウザでの取得が必要です'); e.needUrls = urls; return e; }
 /** 「ブラウザに取ってきてほしい」は握りつぶさずに上へ伝える */
 function rethrowNeed_(e) { if (e && e.needUrls) throw e; }
 
+/** 位置（日本の周辺）のチェック */
+function checkPos_(lat, lon) {
+  if (!isFinite(lat) || !isFinite(lon) || lat < 20 || lat > 46 || lon < 122 || lon > 154) throw new Error('位置が不正です');
+}
+/** 日付（今日の前後400日以内）のチェック。0:00（JST）の時刻を返す */
+function checkDate_(dateStr, now) {
+  var base = dateStr ? jstMidnight_(dateStr) : jstMidnight_(ymd_(now));
+  if (Math.abs(base - now) > 400 * DAY) throw new Error('日付が範囲外です');
+  return base;
+}
+
+/**
+ * サーバーからの外部取得の回数を数え、上限を超えるなら止める。
+ * 時間ごとは CacheService、日ごとは ScriptProperties で数える（厳密ではないが目安として十分）。
+ */
+function spendFetch_(n, fallback) {   // fallback：そのうちブラウザで取れなかった分の代行の数
+  var cache = CacheService.getScriptCache(), now = Date.now();
+  var hk = CACHE_VER + 'uf_h_' + Math.floor(now / HOUR), fk = CACHE_VER + 'uf_f_' + Math.floor(now / HOUR);
+  var h = +(cache.get(hk) || 0), f = +(cache.get(fk) || 0);
+  var props = PropertiesService.getScriptProperties(), today = ymd_(now), d = 0;
+  try { var j = JSON.parse(props.getProperty('uf_day') || '{}'); d = j.d === today ? +j.n || 0 : 0; } catch (e) { d = 0; }
+  if (h + n > FETCH_LIMIT.hour || d + n > FETCH_LIMIT.day || (fallback && f + fallback > FETCH_LIMIT.fallbackHour)) {
+    throw new Error('アクセスが集中しているため、新しいデータを取得できません。しばらくしてからお試しください。');
+  }
+  cache.put(hk, String(h + n), 2 * 3600);
+  if (fallback) cache.put(fk, String(f + fallback), 2 * 3600);
+  try { props.setProperty('uf_day', JSON.stringify({ d: today, n: d + n })); } catch (e) { /* 書き込み上限など */ }
+}
+
 function fetchAll_(urls, allow404) {
-  var out = new Array(urls.length), server = [], need = [];
+  var out = new Array(urls.length), server = [], need = [], fallback = 0;
   urls.forEach(function (u, i) {
-    if (PRE) {
+    if (PRE && clientUrl_(u)) {
       if (Object.prototype.hasOwnProperty.call(PRE, u)) {
         var v = PRE[u];
-        if (v && typeof v === 'object') { server.push(i); return; }   // ブラウザで取れなかった → サーバーで取る
-        out[i] = v;                                                     // 本文、または null（404）
+        if (v && typeof v === 'object') { server.push(i); fallback++; return; }   // ブラウザで取れなかった → サーバーで取る
+        out[i] = v;                                                                // 本文、または null（404）
+        FROM_PRE = true;
         return;
       }
-      if (clientHost_(u)) { need.push(u); return; }
+      need.push(u);
+      return;
     }
     server.push(i);
   });
   if (need.length) throw needError_(need);
   if (server.length) {
+    spendFetch_(server.length, fallback);
     var res = UrlFetchApp.fetchAll(server.map(function (i) {
       return { url: urls[i], muteHttpExceptions: true, followRedirects: true };
     }));
@@ -966,6 +1014,7 @@ function prefetch_(items) {
   if (!miss.length) return;
   var txts = fetchAll_(miss.map(function (it) { return it[1]; }), true);
   miss.forEach(function (it, i) {
+    if (PRE && clientUrl_(it[1])) return;   // ブラウザ由来は共有しない
     try { cache.put(CACHE_VER + it[0], txts[i] == null ? '__404__' : txts[i], Math.min(it[2], 21600)); } catch (e) { /* 100KB 超など */ }
   });
 }
@@ -976,6 +1025,7 @@ function cachedText_(key, ttl, url, allow404) {
   var hit = cache.get(k);
   if (hit != null) return hit === '__404__' ? null : hit;
   var txt = fetchAll_([url], allow404)[0];
+  if (PRE && clientUrl_(url)) return txt;   // ブラウザ由来は共有しない
   try { cache.put(k, txt == null ? '__404__' : txt, Math.min(ttl, 21600)); } catch (e) { /* 100KB 超など */ }
   return txt;
 }
@@ -985,8 +1035,12 @@ function cached_(key, ttl, fn) {
   var k = CACHE_VER + key;
   var hit = cache.get(k);
   if (hit != null) return JSON.parse(hit);
-  var v = fn();
-  try { cache.put(k, JSON.stringify(v), Math.min(ttl, 21600)); } catch (e) { /* ignore */ }
+  var before = FROM_PRE;
+  FROM_PRE = false;
+  var v = fn(), used = FROM_PRE;
+  FROM_PRE = before || used;
+  // ブラウザから渡された本文をもとにした結果は共有しない
+  if (!used) { try { cache.put(k, JSON.stringify(v), Math.min(ttl, 21600)); } catch (e) { /* ignore */ } }
   return v;
 }
 
