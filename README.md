@@ -43,6 +43,24 @@
 - `Code.gs`：サーバー側（データ取得・解析・キャッシュ）
 - `index.html`：画面（グラフは Canvas に描画し、外部ライブラリは使いません）
 - `appsscript.json`：マニフェスト（タイムゾーン、Web アプリ設定）
+- `tools/build-pages.js`：GitHub Pages 用の `docs/` を `index.html` から作るスクリプト
+- `docs/`：GitHub Pages で公開する画面（生成物。直接編集しない）
+
+## 公開 URL
+
+- GitHub Pages（おすすめ）：<https://kotaro9-design.github.io/my-tidegraph/>
+  - 「Google Apps Script のユーザーによって作成されたもの」の表示が出ません。ホーム画面に追加すると専用アイコンと名前で起動します
+  - 画面は GitHub Pages、データの取得は Apps Script（`doPost`）が担当します
+- Apps Script：`https://script.google.com/macros/s/AKfycbxqSwgZb3ulIir7BVRTHzDGkPbNWjk0jAVC-WPlZcBkvSfHnCl1IpdAVT7d0gxxPZcW6A/exec`（従来どおり使えます）
+
+### 更新の流れ
+
+1. `index.html` / `Code.gs` を編集
+2. `clasp push` → `clasp update-deployment <デプロイID>`（Apps Script の画面とデータ取得を更新）
+3. `node tools/build-pages.js` で `docs/` を作り直す
+4. `git commit` → `git push`（数分で GitHub Pages に反映）
+
+GitHub Pages の設定：リポジトリの Settings → Pages → Source「Deploy from a branch」、Branch「main」「/docs」。
 
 ## デプロイ手順
 

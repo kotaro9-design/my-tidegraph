@@ -50,6 +50,24 @@ function doGet(e) {
   return out;
 }
 
+/**
+ * GitHub Pages など外部に置いた画面からの呼び出し口。
+ * 本文（text/plain）は { fn: 'callWithPre', args: [関数名, 引数, pre] } の JSON。
+ * text/plain の POST はプリフライト不要で、応答は Apps Script が CORS を許可して返す。
+ */
+function doPost(e) {
+  var out;
+  try {
+    var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    if (req.fn !== 'callWithPre') throw new Error('不正な呼び出しです');
+    var a = req.args || [];
+    out = { result: callWithPre(a[0], a[1], a[2]) };
+  } catch (err) {
+    out = { error: String(err && err.message || err) };
+  }
+  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
 /* ------------------------------------------------------------------ */
 /* 公開関数（google.script.run から呼ぶ）                              */
 /* ------------------------------------------------------------------ */

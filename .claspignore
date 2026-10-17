@@ -3,3 +3,6 @@ icon*.svg
 icon*.png
 .clasp.json
 **/.git/**
+docs/**
+tools/**
+.gitignore

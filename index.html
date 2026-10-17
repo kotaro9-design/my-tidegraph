@@ -585,6 +585,13 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         r[name].apply(r, args);
       });
     }
+    // GitHub Pages など外部に置いたとき：Apps Script の doPost を呼ぶ（text/plain でプリフライトを避ける）
+    var api = document.querySelector('meta[name="tide-api"]');
+    if (api && api.content) {
+      return fetch(api.content, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: name, args: args }) })
+        .then(function (r) { if (!r.ok) throw new Error('通信エラー ' + r.status); return r.json(); })
+        .then(function (j) { if (j.error) throw new Error(j.error); return j.result; });
+    }
     // ローカル開発用
     return fetch('/api/' + name, { method: 'POST', body: JSON.stringify(args) })
       .then(function (r) { return r.json(); })
@@ -2349,7 +2356,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   run('getStations').then(function (list) {
     S.stations = list;
     var byCode = function (c) { return list.filter(function (s) { return s.c === c; })[0]; };
-    var init = byCode(document.body.dataset.st || '');
+    var init = byCode(document.body.dataset.st || (/[?&]st=([^&]+)/.exec(location.search) || [])[1] || '');
     if (init) return selectStation(init);
     var last = byCode(load('st') || '');
     if (last && !stationOk(last)) last = null;
