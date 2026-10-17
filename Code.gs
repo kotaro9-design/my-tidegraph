@@ -126,9 +126,9 @@ function getStations() {
  * @param {string=} dateStr 'YYYY-MM-DD'（JST）。省略時は今日
  */
 function getTideData(code, dateStr) {
-  if (!/^\d{6}$/.test(code)) throw new Error('地点コードが不正です');
+  if (!/^\d{6}$/.test(code)) throw new Error('潮位観測所のコードが不正です');
   var station = getStations().filter(function (s) { return s.c === code; })[0];
-  if (!station) throw new Error('地点が見つかりません: ' + code);
+  if (!station) throw new Error('潮位観測所が見つかりません: ' + code);
 
   var now = Date.now();
   var base = checkDate_(dateStr, now);
@@ -213,7 +213,7 @@ function getRiver(lat, lon, fcd) {
   var st = null;
   if (fcd) {
     // 選択された観測所
-    if (!/^\d{13}$/.test(fcd)) throw new Error('観測所の指定が不正です');
+    if (!/^\d{13}$/.test(fcd)) throw new Error('河川の水位観測所の指定が不正です');
     st = near.stations.filter(function (s) { return s.fcd === fcd; })[0];
     if (!st) {
       var info0 = riverMaster_(fcd);

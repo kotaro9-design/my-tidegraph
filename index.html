@@ -286,11 +286,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 <body data-st="<?= initialSt ?>" data-app="<?= appUrl ?>">
 <header>
   <div class="wrap bar">
-    <button class="st-btn" id="stBtn" aria-label="観測地点を変更">
+    <button class="st-btn" id="stBtn" aria-label="潮位観測所を変更">
       <div class="st-name" id="stName">読み込み中…</div>
       <div class="st-sub" id="stSub">&nbsp;</div>
     </button>
-    <button class="icon-btn" id="locBtn" aria-label="現在地から最寄り地点">
+    <button class="icon-btn" id="locBtn" aria-label="現在地から最寄りの潮位観測所">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>
     </button>
     <button class="icon-btn" id="refBtn" aria-label="更新">
@@ -414,7 +414,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     </div>
   </div>
   <div class="foot-row" id="riverSelRow" hidden>
-    <span>河川の観測所</span>
+    <span>河川の水位観測所</span>
     <select id="riverSel" class="river-sel" aria-label="河川の水位観測所"></select>
   </div>
 
@@ -454,13 +454,13 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     </div>
     <div id="updLbl">&nbsp;</div>
     <div id="extSrc">&nbsp;</div>
-    データ：気象庁「<a href="https://www.jma.go.jp/bosai/map.html#contents=tidelevel" target="_blank" rel="noopener">潮位観測情報</a>」（気象庁・国土交通省港湾局・海上保安庁・国土地理院 等の検潮所）、
+    潮位：気象庁「<a href="https://www.jma.go.jp/bosai/map.html#contents=tidelevel" target="_blank" rel="noopener">潮位観測情報</a>」（気象庁・国土交通省港湾局・海上保安庁・国土地理院 等の潮位観測所＝検潮所）、
     気象庁「<a href="https://www.data.jma.go.jp/kaiyou/db/tide/suisan/" target="_blank" rel="noopener">潮位表</a>」。
-    天気・風：気象庁「<a href="https://www.jma.go.jp/bosai/forecast/" target="_blank" rel="noopener">天気予報</a>」「<a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" rel="noopener">アメダス</a>」、地域の判定に国土地理院「逆ジオコーダ」を利用。
-    河川水位：国土交通省「<a href="https://www.river.go.jp/" target="_blank" rel="noopener">川の防災情報</a>」（現在地から一番近い水位観測所。位置が取れない場合は潮位観測所の位置から。T.P.基準）。水質（水温・塩分濃度）：同「川の防災情報」の水質観測所（10km以内にある場合のみ表示）。
+    天気・風：気象庁「<a href="https://www.jma.go.jp/bosai/forecast/" target="_blank" rel="noopener">天気予報</a>」「<a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" rel="noopener">アメダス</a>」（気象の観測所）、地域の判定に国土地理院「逆ジオコーダ」を利用。
+    河川水位：国土交通省「<a href="https://www.river.go.jp/" target="_blank" rel="noopener">川の防災情報</a>」（現在地から一番近い河川の水位観測所。位置が取れない場合は表示中の潮位観測所の位置から。T.P.基準）。水質（水温・塩分濃度）：同「川の防災情報」の水質観測所（水位観測所とは別の観測所。10km以内にある場合のみ表示）。
     風の予報：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁 MSM/GSM モデル、CC BY 4.0）。地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>。
     日の出・日の入り・薄明（常用薄明＝太陽高度−6°、天文薄明＝−18°）は計算値（誤差1〜2分程度）。「薄明」の2つの時刻は、朝は天文薄明・常用薄明、夕は常用薄明・天文薄明の順です。
-    実測値は速報値です。気象庁の公開は15〜20分程度遅れるため、直近分は海上保安庁「<a href="https://www1.kaiho.mlit.go.jp/KAN2/tide/realtime/realtime.html" target="_blank" rel="noopener">リアルタイム験潮データ</a>」（5分毎・暫定値）で補っています（同地点が無い場合は近くの地点の偏差を利用）。
+    実測値は速報値です。気象庁の公開は15〜20分程度遅れるため、直近分は海上保安庁「<a href="https://www1.kaiho.mlit.go.jp/KAN2/tide/realtime/realtime.html" target="_blank" rel="noopener">リアルタイム験潮データ</a>」（5分毎・暫定値）で補っています（同じ潮位観測所が無い場合は近くの潮位観測所の偏差を利用）。
     「上げ◯分／下げ◯分」は直前の干潮（満潮）から次の満潮（干潮）までを10等分した経過の目安です。月齢・月輝面（正午）、月の出・南中・月の入り、旧暦は天文計算による値で、潮名は旧暦の日付から求めています。
   </footer>
 </main>
@@ -500,7 +500,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     </div>
 
     <div class="cf-sec">場所</div>
-    <label>都道府県・エリア・ポイント<input type="text" id="cfPlace" placeholder="空欄なら写真の位置・現在地・観測地点" autocomplete="off"></label>
+    <label>都道府県・エリア・ポイント<input type="text" id="cfPlace" placeholder="空欄なら写真の位置・現在地・潮位観測所の地名" autocomplete="off"></label>
     <label>釣行スタイル<select id="cfStyle"><option value="">—</option><option>陸っぱり（堤防・岸壁）</option><option>サーフ</option><option>河川・河口</option><option>磯</option><option>干潟・ウェーディング</option><option>ボート・カヤック</option><option>船（乗合）</option></select></label>
 
     <div class="cf-sec">釣り方・タックル <span class="cf-sub">（過去の入力から選べます）</span></div>
@@ -518,7 +518,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
     <div class="cf-sec">コメント</div>
     <label>メモ・状況<textarea id="cfMemo" rows="3"></textarea></label>
-    <label class="cf-check"><input type="checkbox" id="cfTags" checked>ハッシュタグを付ける（魚種・地点・潮名・上げ／下げ）</label>
+    <label class="cf-check"><input type="checkbox" id="cfTags" checked>ハッシュタグを付ける（魚種・潮位観測所名・潮名・上げ／下げ）</label>
 
     <div class="cf-sec">自動で添える情報と投稿文</div>
     <div class="cf-prev" id="cfPrev"></div>
@@ -533,14 +533,14 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 <dialog id="picker">
   <div class="pk-head">
     <div class="pk-row">
-      <input id="pkQ" type="search" placeholder="地点名・住所で検索" autocomplete="off">
+      <input id="pkQ" type="search" placeholder="潮位観測所の名前・住所で検索" autocomplete="off">
       <button id="pkClose">閉じる</button>
     </div>
     <div class="pk-row">
-      <span class="pk-lbl">観測所</span>
-      <div class="seg" id="stFilterSeg" role="group" aria-label="観測所の範囲">
+      <span class="pk-lbl">潮位観測所</span>
+      <div class="seg" id="stFilterSeg" role="group" aria-label="潮位観測所の範囲">
         <button data-f="all" aria-pressed="true">すべて</button>
-        <button data-f="jcg" aria-pressed="false">海上保安庁サイトの観測所のみ</button>
+        <button data-f="jcg" aria-pressed="false">海上保安庁サイトの潮位観測所のみ</button>
       </div>
     </div>
   </div>
@@ -832,7 +832,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     note.innerHTML = r.tidal ?
       esc('河川水位：' + (r.river ? r.river + ' ' : '') + '「' + r.name + '」（' + (S.riverGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(r.dist) + (S.riverFcd ? '・選択' : '') + '）' +
         (last ? ' 最新 ' + hm(last[0]) + ' ' + fmtH(last[1]) + 'cm' : '')) + ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">川の防災情報</a>' :
-      esc((S.riverFcd ? '選択した河川観測所「' : '最寄りの河川観測所「') + r.name + '」（' + (S.riverGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(r.dist) + '）は標高が高く潮位と同じ目盛りに収まらないため、重ねていません' + (last ? '（最新 ' + hm(last[0]) + ' T.P.' + (last[1] / 100).toFixed(2) + 'm）' : '')) + ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">川の防災情報</a>';
+      esc((S.riverFcd ? '選択した河川の水位観測所「' : '最寄りの河川の水位観測所「') + r.name + '」（' + (S.riverGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(r.dist) + '）は標高が高く潮位と同じ目盛りに収まらないため、重ねていません' + (last ? '（最新 ' + hm(last[0]) + ' T.P.' + (last[1] / 100).toFixed(2) + 'm）' : '')) + ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">川の防災情報</a>';
   }
   // 河川観測所の選択肢（現在地の近くの、TP 換算値のある観測所）。
   // 取得回数が多いので、水位表示がオンで選択欄に触れたときだけ読み込む
@@ -863,12 +863,12 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (S.riverFcd && !list.some(function (x) { return x.fcd === S.riverFcd; }) && S.river && S.river.fcd === S.riverFcd) {
       list.unshift({ fcd: S.river.fcd, name: S.river.name, river: S.river.river, dist: S.river.dist });
     }
-    sel.innerHTML = '<option value="">自動（' + (here() && here().gps ? '現在地' : '潮位観測所') + 'から一番近い観測所・欠測中は除く）</option>' +
+    sel.innerHTML = '<option value="">自動（' + (here() && here().gps ? '現在地' : '潮位観測所') + 'から一番近い水位観測所・欠測中は除く）</option>' +
       list.map(function (x) {
         return '<option value="' + esc(x.fcd) + '">' + esc((x.river ? x.river + ' ' : '') + x.name) + '（' + fmtKm(x.dist) + '）</option>';
       }).join('') +
-      (loaded ? '' : S.riverListLoading === key ? '<option value="__more" disabled>近くの観測所を読み込み中…</option>'
-        : '<option value="__more">近くの観測所を表示…</option>');
+      (loaded ? '' : S.riverListLoading === key ? '<option value="__more" disabled>近くの水位観測所を読み込み中…</option>'
+        : '<option value="__more">近くの水位観測所を表示…</option>');
     sel.value = S.riverFcd || '';
   }
   function loadRiver() {
@@ -1087,7 +1087,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var s = S.st;
     if (!s) return;
     $('stName').textContent = s.n;
-    var parts = [s.o];
+    var parts = ['潮位観測所' + (s.o ? '（' + s.o + '）' : '')];
     if (S.pos) parts.push('現在地から ' + fmtKm(distKm(S.pos.latitude, S.pos.longitude, s.lat, s.lon)));
     parts.push(s.a);
     $('stSub').textContent = parts.filter(Boolean).join(' · ');
@@ -1120,8 +1120,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       $('curTideSub').innerHTML = esc(hm(lo.t) + ' 観測') + '<br>' + esc(dur(now - lo.t) + '前') +
         '<br>' + (stale ? '<span class="tag warn">⚠ 更新停止</span>' : '<span class="tag">' + (useTable() ? '基準面' : 'TP') + '</span>');
       var alt = S.data.near && S.data.near.fallback ? '近くの「' + S.data.near.src + '」など、' : '';
-      var staleMsg = stale ? '⚠ この地点の観測データは ' + hm(lo.t) + ' から更新されていません（配信元の停止または欠測）。' +
-        alt + '他の観測地点に変更してください（画面上部の地点名をタップすると選べます）。' : '';
+      var staleMsg = stale ? '⚠ この潮位観測所の観測データは ' + hm(lo.t) + ' から更新されていません（配信元の停止または欠測）。' +
+        alt + '他の潮位観測所に変更してください（画面左上の潮位観測所名をタップすると選べます）。' : '';
       note.push(hm(lo.t) + ' 観測' + (isRt ? '（海上保安庁 速報）' : '（気象庁）') + '・同時刻の推算 ' + fmtH(a) + 'cm');
       if (an != null && dn != null) note.push('現在 ' + hm(now) + ' の推定 ' + fmtH(an + dn) + 'cm' +
         (nr && nr.t > lo.t ? '（' + nr.src + (nr.fallback ? '（' + fmtKm(nr.dist) + '）' : '') + ' ' + hm(nr.t) + (nr.fallback ? ' の偏差 ' : ' の速報偏差 ') + fmtDev(nr.dep) + ' を使用）' : ''));
@@ -1160,7 +1160,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
   function renderWeather() {
     var w = S.wx, now = Date.now(), p = here();
-    $('wxLbl').textContent = p && p.gps ? '現在地の天気' : '観測地点付近の天気';
+    $('wxLbl').textContent = p && p.gps ? '現在地の天気' : '潮位観測所付近の天気';
     var a = w && w.amedas, f = w && w.forecast;
 
     // 予報
@@ -1266,7 +1266,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     });
     $('tt').innerHTML = html;
     $('extSrc').textContent = S.data.ext ? '満潮・干潮：気象庁 潮位表（' + S.st.sc + '）' :
-      '満潮・干潮：この地点は潮位表が無いため、毎時の推算潮位から算出した目安です';
+      '満潮・干潮：この潮位観測所は潮位表が無いため、毎時の推算潮位から算出した目安です';
   }
 
   /* ---------- charts ---------- */
@@ -1671,7 +1671,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   function renderAll() {
     if (!S.data) return;
     renderHeader(); renderControls(); renderHero(); renderTable(); renderRiver(); drawCharts();
-    $('updLbl').textContent = '最終取得 ' + hm(S.lastFetch) + (latestObs() ? ' · 最新観測 ' + mdw(latestObs().t) + ' ' + hm(latestObs().t) : '');
+    $('updLbl').textContent = '最終取得 ' + hm(S.lastFetch) + (latestObs() ? ' · 最新の潮位観測 ' + mdw(latestObs().t) + ' ' + hm(latestObs().t) : '');
   }
 
   /* ---------- data loading ---------- */
@@ -1702,7 +1702,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       S.curve = m.curve; S.ext = m.ext;
       mergeRt(d);
       S.lastFetch = Date.now();
-      notice(S.st.miss ? 'この地点は現在欠測中の可能性があります。' : '');
+      notice(S.st.miss ? 'この潮位観測所は現在欠測中の可能性があります。' : '');
       renderAll();
     }).catch(function (e) {
       notice('データを取得できませんでした：' + (e && e.message || e));
@@ -1720,7 +1720,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       var s = nearest(c.latitude, c.longitude);
       if (s) return selectStation(s);
     }).catch(function (e) {
-      if (explicit) notice('位置情報を取得できませんでした（' + (e && e.message || e) + '）。右上の地点名から選択してください。');
+      if (explicit) notice('位置情報を取得できませんでした（' + (e && e.message || e) + '）。画面左上の潮位観測所名をタップして選択してください。');
       throw e;
     }).then(function (v) { $('locBtn').classList.remove('spin'); return v; },
       function (e) { $('locBtn').classList.remove('spin'); throw e; });
@@ -1773,7 +1773,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var q = S.wq, card = $('wqCard');
     card.hidden = !q;
     if (!q) return;
-    $('wqLbl').textContent = '水質（' + (q.river ? q.river + '「' + q.name + '」' : q.name) + '・' + (S.wqGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(q.dist) + '）';
+    $('wqLbl').textContent = '水質（水質観測所 ' + (q.river ? q.river + '「' + q.name + '」' : q.name) + '・' + (S.wqGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(q.dist) + '）';
     if (!q.layers.length) { $('wqBody').innerHTML = '<div class="sub">現在は欠測中です</div>'; }
     else {
       $('wqBody').innerHTML = '<table class="wq num"><thead><tr><th></th><th>水温</th><th>塩分濃度</th><th>観測</th></tr></thead><tbody>' +
@@ -2377,11 +2377,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     // まず前回の地点（無ければ東京）を表示し、位置情報が取れたら最寄りに切り替える
     var first = selectStation(last || byCode(DEFAULT_ST) || list[0]);
     useLocation(false).catch(function () {
-      if (!last) notice('位置情報を利用できないため東京を表示しています。右上の地点名から変更できます。');
+      if (!last) notice('位置情報を利用できないため、潮位観測所「東京」を表示しています。画面左上の潮位観測所名をタップすると変更できます。');
     });
     return first;
   }).catch(function (e) {
-    notice('地点一覧を取得できませんでした：' + (e && e.message || e));
+    notice('潮位観測所の一覧を取得できませんでした：' + (e && e.message || e));
     $('stName').textContent = 'エラー';
   });
 })();
