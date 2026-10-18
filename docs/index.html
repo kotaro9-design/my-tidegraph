@@ -760,6 +760,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <dt>表示が古いまま</dt><dd>右上の ↻ を押してください。</dd>
     </dl>
 
+    <h3>利用状況の集計について</h3>
+    <p>アプリの改善のため、利用状況（端末ごとの匿名ID、表示した潮位観測所、約10km単位の地域、使った機能、エラーの種類）を集計しています。名前・メールアドレス・正確な位置など、個人を特定できる情報は集めていません。</p>
+
     <h3>ご注意</h3>
     <p>実測値は速報値で、推算や天気予報は目安です。実際の海や天候の状況を必ず自分の目で確かめ、安全第一で釣りを楽しんでください。</p>
     <p class="guide-foot">my tide-graph <span id="guideVer2" class="num"></span> ／ 作成：<a href="https://x.com/kotaro9_lures" target="_blank" rel="noopener">kotaro9</a></p>
@@ -771,7 +774,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.2.0', APP_DATE = '2026-10-18';
+  var APP_VERSION = '1.3.0', APP_DATE = '2026-10-18';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var PICK_DAYS = 365;   // カレンダーで選べる範囲（今日の前後、サーバーの上限は400日）
@@ -791,10 +794,39 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   // サーバーの関数を呼ぶ。サーバーが「このURLのデータが必要」と返したら、ブラウザで直接取ってきて渡して呼び直す。
   // 気象庁などは他サイトからの取得を許可しているので、サーバーの URL Fetch（1日の上限あり）を使わずに済む。
   // ブラウザで取れなかったものは { err: 1 } として渡し、サーバーが代わりに取る。
+  /* ---------- 利用状況（匿名。次のデータ取得の通信に相乗りさせて送るので通信回数は増えない） ---------- */
+  var EVQ = [];
+  function anonId() {
+    var a = load('aid');
+    if (!a || !/^[A-Za-z0-9]{10}$/.test(a)) {
+      a = ''; var c = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+      for (var i = 0; i < 10; i++) a += c.charAt(Math.floor(Math.random() * c.length));
+      save('aid', a);
+    }
+    return a;
+  }
+  function track(kind, v) { if (EVQ.length < 50) EVQ.push([kind, v]); }
+  // 表示回数（1回の起動につき1回）。潮位観測所が決まってから数える
+  function trackPv(code, pos) {
+    if (S.pvSent || !code) return;
+    S.pvSent = true;
+    track('pv', { st: code, area: pos ? pos.lat.toFixed(1) + ',' + pos.lon.toFixed(1) : '' });
+  }
+  // 次の通信を待たずに送る（キャッシュ済みの軽い呼び出しに相乗り）
+  function flushEvents() { if (EVQ.length) run('getStations').catch(function () {}); }
+  function takeEvents() { return EVQ.length ? { aid: anonId(), list: EVQ.splice(0, EVQ.length) } : null; }
+  // 閉じるときに残っている分（GitHub Pages 版のみ。Apps Script の画面では次回の通信で送る）
+  window.addEventListener('pagehide', function () {
+    var api = document.querySelector('meta[name="tide-api"]');
+    if (!api || !EVQ.length || !navigator.sendBeacon) return;
+    try { navigator.sendBeacon(api.content, new Blob([JSON.stringify({ fn: 'track', args: [takeEvents()] })], { type: 'text/plain;charset=utf-8' })); } catch (e) { /* 無視 */ }
+  });
+
   function run(name) {
-    var args = Array.prototype.slice.call(arguments, 1), pre = {}, rounds = 0;
+    var args = Array.prototype.slice.call(arguments, 1), pre = {}, rounds = 0, ev = takeEvents();
     var call = function () {
-      return rawRun('callWithPre', name, args, pre).then(function (r) {
+      var e1 = ev; ev = null;
+      return rawRun('callWithPre', name, args, pre, e1).then(function (r) {
         if (!r || !r.need) return r ? r.result : r;
         if (++rounds > 10) throw new Error('データの取得に失敗しました（' + name + '）');
         return Promise.all(r.need.map(function (u) {
@@ -806,7 +838,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         })).then(call);
       });
     };
-    return call();
+    return call().catch(function (e) { track('e', String(name).replace(/[^a-zA-Z]/g, '').slice(0, 30)); throw e; });
   }
   function rawRun(name) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -2066,6 +2098,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     return locate().then(function (c) {
       S.pos = c;
       var s = nearest(c.latitude, c.longitude);
+      if (s) trackPv(s.c, { lat: c.latitude, lon: c.longitude });
       if (s) return selectStation(s);
     }).catch(function (e) {
       if (explicit) notice('位置情報を取得できませんでした（' + (e && e.message || e) + '）。画面左上の潮位観測所名をタップして選択してください。');
@@ -2775,6 +2808,21 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var b = ev.target.closest('button'); if (!b || b.disabled) return;
     S.datum = b.dataset.d; save('datum', S.datum); renderAll();
   };
+  // 機能の利用状況：押されたボタンを機能名に置き換えて記録する
+  var TRACK_IDS = { guideBtn: 'guide_open', guideBtn2: 'guide_open', catchBtn: 'catch_open', cfShare: 'catch_share', cfCopy: 'catch_copy',
+    cfGo: 'catch_cal', cfSaveCam: 'catch_savephoto', todayBtn: 'today_btn', prevDay: 'prev_day', nextDay: 'next_day', refBtn: 'refresh_btn',
+    locBtn: 'loc_btn', stBtn: 'picker_open' };
+  var TRACK_SEGS = { viewSeg: ['view_', 'v'], datumSeg: ['datum_', 'd'], riverSeg: ['river_', 'r'], stFilterSeg: ['filter_', 'f'] };
+  document.addEventListener('click', function (ev) {
+    var el = ev.target.closest && ev.target.closest('button, a, li');
+    if (!el) return;
+    if (TRACK_IDS[el.id]) return track('f', TRACK_IDS[el.id]);
+    var seg = el.parentNode && TRACK_SEGS[el.parentNode.id];
+    if (seg && el.dataset[seg[1]] != null) return track('f', seg[0] + el.dataset[seg[1]]);
+    if (el.tagName === 'LI' && el.dataset.c && el.closest('#pkList')) { track('st', el.dataset.c); track('f', 'picker_select'); }
+  }, true);
+  $('datePick').addEventListener('change', function () { track('f', 'date_pick'); });
+  $('riverSel').addEventListener('change', function () { track('f', this.value === '__more' ? 'river_list' : 'river_sel'); });
   bindHover($('main'));
   bindHover($('dev'));
   bindHover($('rate'));
@@ -2799,12 +2847,15 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     S.stations = list;
     var byCode = function (c) { return list.filter(function (s) { return s.c === c; })[0]; };
     var init = byCode(document.body.dataset.st || (/[?&]st=([^&]+)/.exec(location.search) || [])[1] || '');
-    if (init) return selectStation(init);
+    if (init) { trackPv(init.c, here() || { lat: init.lat, lon: init.lon }); return selectStation(init); }
     var last = byCode(load('st') || '');
     if (last && !stationOk(last)) last = null;
     // まず前回の地点（無ければ東京）を表示し、位置情報が取れたら最寄りに切り替える
     var first = selectStation(last || byCode(DEFAULT_ST) || list[0]);
-    useLocation(false).catch(function () {
+    useLocation(false).then(function () {
+      if (!S.pvSent && S.st) { trackPv(S.st.c, here()); flushEvents(); }
+    }, function () {
+      if (S.st) { trackPv(S.st.c, here()); flushEvents(); }
       if (!last) notice('位置情報を利用できないため、潮位観測所「東京」を表示しています。画面左上の潮位観測所名をタップすると変更できます。');
     });
     return first;

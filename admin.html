@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>my tide-graph 利用状況</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2; --surface: #fcfcfb; --surface-2: #efeeea; --border: #e2e1dc;
+  --text: #0b0b0b; --text-2: #52514d; --text-3: #8a8984;
+  --bar: #2a78d6; --bar-2: #9ec1ec; --grid: #e7e6e1;
+  --good: #1f8a4c; --warn: #b7791f; --crit: #c53030;
+  --font: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface: #1a1a19; --surface-2: #242422; --border: #2e2e2b;
+    --text: #f0efec; --text-2: #b5b4ae; --text-3: #7d7c77;
+    --bar: #3987e5; --bar-2: #2c5a93; --grid: #2a2a28;
+    --good: #48bb78; --warn: #ecc94b; --crit: #fc8181;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface: #1a1a19; --surface-2: #242422; --border: #2e2e2b;
+  --text: #f0efec; --text-2: #b5b4ae; --text-3: #7d7c77;
+  --bar: #3987e5; --bar-2: #2c5a93; --grid: #2a2a28;
+  --good: #48bb78; --warn: #ecc94b; --crit: #fc8181;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
+.wrap { max-width: 960px; margin: 0 auto; padding: 12px 16px 40px; }
+h1 { font-size: 18px; margin: 4px 0 2px; }
+.sub { color: var(--text-2); font-size: 12px; }
+.bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
+.seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 2px; }
+.seg button { border: 0; background: none; padding: 6px 10px; border-radius: 8px; font: inherit; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 10px; padding: 7px 12px; font: inherit; font-size: 13px; cursor: pointer; text-decoration: none; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 8px 0 14px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; }
+.tile .k { font-size: 12px; color: var(--text-2); }
+.tile .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.tile .v small { font-size: 13px; font-weight: 500; color: var(--text-2); margin-left: 2px; }
+.tile .s { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.meter { height: 6px; border-radius: 3px; background: var(--surface-2); margin-top: 6px; overflow: hidden; }
+.meter i { display: block; height: 100%; border-radius: 3px; background: var(--good); }
+.status { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; margin-top: 4px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin-bottom: 10px; min-width: 0; }
+.card h2 { font-size: 14px; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: baseline; }
+.card h2 span { font-size: 11px; font-weight: 400; color: var(--text-3); }
+svg.chart { width: 100%; height: 180px; display: block; }
+svg.chart text { font-size: 10px; fill: var(--text-3); font-family: var(--font); }
+.hbar { display: grid; grid-template-columns: minmax(0, 1fr) 2fr auto; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; }
+.hbar .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hbar .t { height: 10px; background: var(--surface-2); border-radius: 0 4px 4px 0; }
+.hbar .t i { display: block; height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+.hbar .c { font-variant-numeric: tabular-nums; color: var(--text-2); min-width: 3em; text-align: right; }
+.empty { color: var(--text-3); font-size: 13px; padding: 8px 0; }
+#tip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); display: none; z-index: 9; white-space: nowrap; }
+.msg { color: var(--crit); font-size: 13px; margin: 8px 0; }
+.note { font-size: 11px; color: var(--text-3); line-height: 1.6; margin-top: 14px; }
+</style>
+</head>
+<body data-key="<?= adminKey ?>">
+<div class="wrap">
+  <h1>my tide-graph 利用状況</h1>
+  <div class="sub" id="upd">読み込み中…</div>
+  <div class="bar-row">
+    <div class="seg" id="daysSeg" role="group" aria-label="期間">
+      <button data-d="7" aria-pressed="false">7日</button>
+      <button data-d="30" aria-pressed="true">30日</button>
+      <button data-d="90" aria-pressed="false">90日</button>
+    </div>
+    <button class="btn" id="flushBtn">今すぐ集計</button>
+    <button class="btn" id="reloadBtn">再読み込み</button>
+    <a class="btn" id="sheetLink" href="#" target="_blank" rel="noopener" hidden>スプレッドシート</a>
+  </div>
+  <div class="msg" id="msg" hidden></div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="grid2">
+    <div class="card"><h2>日ごとの表示回数 <span>回</span></h2><svg class="chart" id="cPv"></svg></div>
+    <div class="card"><h2>日ごとの利用者数 <span>人（匿名ID）</span></h2><svg class="chart" id="cUsers"></svg></div>
+    <div class="card"><h2>時間帯別の表示回数（期間合計） <span>回</span></h2><svg class="chart" id="cHour"></svg></div>
+    <div class="card"><h2>日ごとの URL Fetch 回数 <span>回（点線は1日の上限）</span></h2><svg class="chart" id="cUf"></svg></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h2>よく使われる潮位観測所 <span>回</span></h2><div id="tStations"></div></div>
+    <div class="card"><h2>よく使われる地域（約10km） <span>回</span></h2><div id="tAreas"></div></div>
+    <div class="card"><h2>機能の利用 <span>回</span></h2><div id="tFeatures"></div></div>
+    <div class="card"><h2>エラー <span>件</span></h2><div id="tErrors"></div></div>
+  </div>
+  <p class="note">
+    データは1時間ごとにスプレッドシートへ集計されます（今の1時間の分も含めて表示）。利用者数は端末ごとの匿名IDの数です（ブラウザのデータを消すと別の人として数えます）。
+    地域は約10km単位に丸めた位置で、名前は国土地理院の逆ジオコーダで求めた目安です。
+  </p>
+</div>
+<div id="tip"></div>
+<script>
+(function () {
+  'use strict';
+  var KEY = document.body.dataset.key, DAYS = 30, D = null;
+  var FEATURES = {
+    guide_open: '利用ガイドを開く', catch_open: '釣果の記録を開く', catch_share: '釣果：写真と文章を共有', catch_copy: '釣果：投稿文をコピー',
+    catch_cal: '釣果：Googleカレンダー', catch_savephoto: '釣果：写真を保存', today_btn: '今日に戻る', prev_day: '前日へ', next_day: '翌日へ',
+    date_pick: 'カレンダーで日付選択', refresh_btn: '更新ボタン', loc_btn: '現在地ボタン', picker_open: '潮位観測所の一覧を開く',
+    picker_select: '潮位観測所を選ぶ', river_sel: '河川の水位観測所を選ぶ', river_list: '河川の水位観測所の一覧', 'river_1': '河川水位：表示',
+    'river_0': '河川水位：非表示', datum_table: '高さ：潮位表基準面', datum_tp: '高さ：TP', filter_all: '一覧：すべて', filter_jcg: '一覧：海保のみ',
+    view_3d: '表示：3日', view_day: '表示：1日', view_h12: '表示：±12h', view_h6: '表示：±6h', view_h3: '表示：±3h', view_h1: '表示：±1h'
+  };
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function n(v) { return Math.round(v).toLocaleString('ja-JP'); }
+  function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  function call(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (res, rej) { var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej); r[fn].apply(r, args); });
+  }
+  function msg(t) { $('msg').hidden = !t; $('msg').textContent = t || ''; }
+
+  function ymd(ms) { var d = new Date(ms + 9 * 3600e3); return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2); }
+  function dayList() { var out = [], now = D.now; for (var i = DAYS - 1; i >= 0; i--) out.push(ymd(now - i * 86400e3)); return out; }
+
+  // 集計済み（スプレッドシート）と未集計（今の1時間など）を合わせる
+  function aggregate() {
+    var days = dayList(), byDay = {}, hours = new Array(24).fill(0), users = {}, all = {};
+    days.forEach(function (d) { byDay[d] = { pv: 0, uf: 0, lim: 0, serr: 0, cerr: 0 }; users[d] = {}; });
+    D.hourly.forEach(function (r) {
+      var d = r[0].slice(0, 10), h = +r[0].slice(11, 13);
+      if (!byDay[d]) return;
+      byDay[d].pv += r[1]; byDay[d].uf += r[3]; byDay[d].lim += r[4]; byDay[d].serr += r[5]; byDay[d].cerr += r[6];
+      hours[h] += r[1];
+    });
+    D.users.forEach(function (r) { if (users[r[0]]) { users[r[0]][r[1]] = 1; all[r[1]] = 1; } });
+    var st = Object.assign({}, D.stations), ar = Object.assign({}, D.areas), fe = Object.assign({}, D.features), er = Object.assign({}, D.errors);
+    var add = function (o, src, pre) { Object.keys(src || {}).forEach(function (k) { var kk = (pre || '') + k; o[kk] = (o[kk] || 0) + src[k]; }); };
+    D.pending.forEach(function (p) {
+      var d = p.hour.slice(0, 10), h = +p.hour.slice(11, 13);
+      if (!byDay[d]) return;
+      byDay[d].pv += p.pv; byDay[d].lim += p.lim; byDay[d].serr += p.serr; byDay[d].cerr += p.cerr;
+      hours[h] += p.pv;
+      p.ids.forEach(function (a) { users[d][a] = 1; all[a] = 1; });
+      add(st, p.st); add(ar, p.area); add(fe, p.f);
+      Object.keys(p.err || {}).forEach(function (k) { er[k] = (er[k] || 0) + p.err[k]; });
+    });
+    // 今日の URL Fetch は日ごとの実数（未集計の時間を含む）
+    var today = ymd(D.now);
+    if (byDay[today]) byDay[today].uf = Math.max(byDay[today].uf, D.ufToday);
+    return { days: days, byDay: byDay, hours: hours, users: users, allUsers: Object.keys(all).length, st: st, ar: ar, fe: fe, er: er };
+  }
+
+  function tiles(A) {
+    var today = ymd(D.now), t = A.byDay[today], sum = function (k) { return A.days.reduce(function (s, d) { return s + A.byDay[d][k]; }, 0); };
+    var dayPct = D.ufToday / D.limits.day, hourPct = D.ufHour / D.limits.hour;
+    var level = function (p) { return p >= .9 ? ['--crit', '⛔ 上限間近'] : p >= .6 ? ['--warn', '⚠ 注意'] : ['--good', '✓ 余裕あり']; };
+    var meter = function (p) { var l = level(p); return '<div class="meter"><i style="width:' + Math.min(100, p * 100).toFixed(1) + '%;background:var(' + l[0] + ')"></i></div><div class="status" style="color:var(' + l[0] + ')">' + l[1] + '</div>'; };
+    $('tiles').innerHTML = [
+      '<div class="tile"><div class="k">今日の表示回数</div><div class="v">' + n(t.pv) + '<small>回</small></div><div class="s">期間合計 ' + n(sum('pv')) + ' 回</div></div>',
+      '<div class="tile"><div class="k">今日の利用者数</div><div class="v">' + n(Object.keys(A.users[today]).length) + '<small>人</small></div><div class="s">期間の延べ ' + n(A.allUsers) + ' 人</div></div>',
+      '<div class="tile"><div class="k">今日の URL Fetch</div><div class="v">' + n(D.ufToday) + '<small>/ ' + n(D.limits.day) + '</small></div>' + meter(dayPct) + '</div>',
+      '<div class="tile"><div class="k">この1時間の URL Fetch</div><div class="v">' + n(D.ufHour) + '<small>/ ' + n(D.limits.hour) + '</small></div>' + meter(hourPct) + '</div>',
+      '<div class="tile"><div class="k">上限超え（期間）</div><div class="v">' + n(sum('lim')) + '<small>回</small></div><div class="s">アクセス集中で断った回数</div></div>',
+      '<div class="tile"><div class="k">エラー（期間）</div><div class="v">' + n(sum('serr') + sum('cerr')) + '<small>件</small></div><div class="s">サーバー ' + n(sum('serr')) + ' / 画面 ' + n(sum('cerr')) + '</div></div>'
+    ].join('');
+  }
+
+  // 縦棒グラフ（1系列・1軸）。ホバー／タップで値
+  function bars(svg, labels, values, opt) {
+    opt = opt || {};
+    var W = svg.clientWidth || 300, H = svg.clientHeight || 180, L = 36, R = 6, T = 8, B = 20;
+    var max = Math.max(opt.limit || 0, Math.max.apply(null, values.concat([1])));
+    var step = Math.pow(10, Math.floor(Math.log10(max))), nice = Math.ceil(max / step) * step;
+    if (nice / step > 5) step *= 2; else if (nice / step <= 2) step /= 2;
+    step = Math.max(1, step);   // 回数・人数は整数
+    nice = Math.ceil(max / step) * step;
+    var bw = (W - L - R) / values.length, y = function (v) { return T + (1 - v / nice) * (H - T - B); };
+    var h = '';
+    for (var v = 0; v <= nice + 1e-9; v += step) {
+      h += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="' + css(v ? '--grid' : '--text-3') + '"/>';
+      h += '<text x="' + (L - 4) + '" y="' + (y(v) + 3) + '" text-anchor="end">' + n(v) + '</text>';
+    }
+    var every = Math.ceil(values.length / (opt.ticks || 7));
+    values.forEach(function (v, i) {
+      var x = L + i * bw, w = Math.max(1, bw - 2), top = y(v);
+      if (v > 0) h += '<path d="M' + (x + 1) + ',' + y(0) + 'V' + (top + 2) + 'q0,-2 2,-2h' + Math.max(0, w - 4) + 'q2,0 2,2V' + y(0) + 'Z" fill="' + css('--bar') + '"/>';
+      h += '<rect class="hit" x="' + x + '" y="' + T + '" width="' + bw + '" height="' + (H - T - B) + '" fill="transparent" data-l="' + esc(labels[i]) + '" data-v="' + v + '"/>';
+      if (i % every === 0) h += '<text x="' + (x + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(opt.short ? opt.short(labels[i]) : labels[i]) + '</text>';
+    });
+    if (opt.limit) h += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(opt.limit) + '" y2="' + y(opt.limit) + '" stroke="' + css('--crit') + '" stroke-dasharray="4 3"/>';
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.innerHTML = h;
+    svg.dataset.unit = opt.unit || '';
+  }
+  document.addEventListener('pointermove', tipAt);
+  document.addEventListener('pointerdown', tipAt);
+  function tipAt(ev) {
+    var el = ev.target, tip = $('tip');
+    if (!el.classList || !el.classList.contains('hit')) { tip.style.display = 'none'; return; }
+    tip.innerHTML = '<b>' + esc(el.dataset.l) + '</b> ' + n(+el.dataset.v) + ' ' + esc(el.ownerSVGElement.dataset.unit);
+    tip.style.display = 'block';
+    var x = Math.min(ev.clientX + 12, window.innerWidth - tip.offsetWidth - 8);
+    tip.style.left = x + 'px'; tip.style.top = (ev.clientY - 34) + 'px';
+  }
+
+  // 横棒の上位一覧
+  function hlist(el, obj, name, max) {
+    var rows = Object.keys(obj).map(function (k) { return [k, obj[k]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, max || 10);
+    if (!rows.length) { el.innerHTML = '<div class="empty">まだデータがありません</div>'; return; }
+    var top = rows[0][1];
+    el.innerHTML = rows.map(function (r) {
+      return '<div class="hbar"><span class="n" title="' + esc(name(r[0])) + '" data-k="' + esc(r[0]) + '">' + esc(name(r[0])) + '</span><span class="t"><i style="width:' + (r[1] / top * 100).toFixed(1) + '%"></i></span><span class="c">' + n(r[1]) + '</span></div>';
+    }).join('');
+  }
+  // 地域の名前（国土地理院 逆ジオコーダ。表示のときだけブラウザから）
+  var areaNames = {};
+  function nameAreas(el) {
+    Array.prototype.forEach.call(el.querySelectorAll('[data-k]'), function (s) {
+      var k = s.dataset.k, p = k.split(',');
+      if (areaNames[k]) { s.textContent = areaNames[k] + '（' + k + '）'; return; }
+      fetch('https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=' + p[0] + '&lon=' + p[1]).then(function (r) { return r.json(); }).then(function (j) {
+        areaNames[k] = (j && j.results && j.results.lv01Nm && j.results.lv01Nm !== '－' ? j.results.lv01Nm + ' 付近' : '海上など');
+        s.textContent = areaNames[k] + '（' + k + '）';
+      }).catch(function () { /* 座標のまま */ });
+    });
+  }
+
+  function render() {
+    var A = aggregate();
+    tiles(A);
+    var short = function (d) { return +d.slice(5, 7) + '/' + +d.slice(8, 10); };
+    bars($('cPv'), A.days, A.days.map(function (d) { return A.byDay[d].pv; }), { short: short, unit: '回' });
+    bars($('cUsers'), A.days, A.days.map(function (d) { return Object.keys(A.users[d]).length; }), { short: short, unit: '人' });
+    bars($('cHour'), A.hours.map(function (_, i) { return i + '時'; }), A.hours, { ticks: 8, unit: '回' });
+    bars($('cUf'), A.days, A.days.map(function (d) { return A.byDay[d].uf; }), { short: short, unit: '回', limit: D.limits.day });
+    hlist($('tStations'), A.st, function (c) { return (D.stationNames[c] || '') + '（' + c + '）'; });
+    hlist($('tAreas'), A.ar, function (k) { return k; });
+    nameAreas($('tAreas'));
+    hlist($('tFeatures'), A.fe, function (k) { return FEATURES[k] || k; }, 30);
+    hlist($('tErrors'), A.er, function (k) { return k.replace(/^client:/, '画面：').replace(/^server:/, 'サーバー：'); }, 20);
+    var d = new Date(D.now + 9 * 3600e3);
+    $('upd').textContent = '直近' + DAYS + '日（' + D.since + '〜）・' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' 時点';
+    $('sheetLink').href = D.sheetUrl; $('sheetLink').hidden = false;
+  }
+
+  function load() {
+    msg('');
+    $('upd').textContent = '読み込み中…';
+    return call('getMonitorData', KEY, DAYS).then(function (d) { D = d; render(); }).catch(function (e) { msg('読み込めませんでした：' + (e && e.message || e)); });
+  }
+  $('daysSeg').onclick = function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    DAYS = +b.dataset.d;
+    Array.prototype.forEach.call(this.children, function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    load();
+  };
+  $('reloadBtn').onclick = load;
+  $('flushBtn').onclick = function () {
+    var b = this; b.disabled = true;
+    call('adminFlush', KEY).then(function (k) { msg(''); return load(); }).catch(function (e) { msg('集計できませんでした：' + (e && e.message || e)); })
+      .then(function () { b.disabled = false; });
+  };
+  window.addEventListener('resize', function () { if (D) render(); });
+  load();
+})();
+</script>
+</body>
+</html>

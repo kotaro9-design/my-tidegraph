@@ -32,6 +32,14 @@ var APP_NAME = 'my tide-graph';
 var ICON_FILE_ID = '';
 
 function doGet(e) {
+  // 管理画面（利用状況）：?admin=合言葉
+  if (e && e.parameter && e.parameter.admin) {
+    if (!monAdminOk_(e.parameter.admin)) return HtmlService.createHtmlOutput('ページが見つかりません').setTitle(APP_NAME);
+    var a = HtmlService.createTemplateFromFile('admin');
+    a.adminKey = e.parameter.admin;
+    return a.evaluate().setTitle(APP_NAME + ' 利用状況')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
   var t = HtmlService.createTemplateFromFile('index');
   t.initialSt = (e && e.parameter && e.parameter.st) || '';
   // 釣果の予定に付けるアプリへのリンク用
@@ -59,9 +67,10 @@ function doPost(e) {
   var out;
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    if (req.fn !== 'callWithPre') throw new Error('不正な呼び出しです');
     var a = req.args || [];
-    out = { result: callWithPre(a[0], a[1], a[2]) };
+    if (req.fn === 'track') { monRecord_(a[0]); out = { result: true }; }   // 閉じるときの利用状況
+    else if (req.fn === 'callWithPre') out = { result: callWithPre(a[0], a[1], a[2], a[3]) };
+    else throw new Error('不正な呼び出しです');
   } catch (err) {
     out = { error: String(err && err.message || err) };
   }
@@ -910,7 +919,8 @@ var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300 };
  * ブラウザから呼ぶ入口。必要なデータが揃っていなければ { need: [url…] } を返し、
  * ブラウザが取ってきて pre に入れて呼び直す。揃えば { result }。
  */
-function callWithPre(name, args, pre) {
+function callWithPre(name, args, pre, ev) {
+  if (ev) monRecord_(ev);   // 利用状況（Monitor.gs）
   var api = { getStations: getStations, getTideData: getTideData, getWeather: getWeather, getRiver: getRiver,
     getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality };
   if (!Object.prototype.hasOwnProperty.call(api, name)) throw new Error('不正な呼び出しです: ' + name);
@@ -928,6 +938,7 @@ function callWithPre(name, args, pre) {
     return { result: api[name].apply(null, args || []) };
   } catch (e) {
     if (e && e.needUrls) return { need: e.needUrls };
+    if (!/アクセスが集中/.test(String(e && e.message))) monServer_('err', name);
     throw e;
   } finally {
     PRE = null; FROM_PRE = false;
@@ -965,6 +976,7 @@ function spendFetch_(n, fallback) {   // fallback：そのうちブラウザで�
   var props = PropertiesService.getScriptProperties(), today = ymd_(now), d = 0;
   try { var j = JSON.parse(props.getProperty('uf_day') || '{}'); d = j.d === today ? +j.n || 0 : 0; } catch (e) { d = 0; }
   if (h + n > FETCH_LIMIT.hour || d + n > FETCH_LIMIT.day || (fallback && f + fallback > FETCH_LIMIT.fallbackHour)) {
+    monServer_('lim');
     throw new Error('アクセスが集中しているため、新しいデータを取得できません。しばらくしてからお試しください。');
   }
   cache.put(hk, String(h + n), 2 * 3600);
@@ -1050,7 +1062,7 @@ function cached_(key, ttl, fn) {
 
 function jstParts_(ms) {
   var d = new Date(ms + JST);
-  return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate() };
+  return { y: d.getUTCFullYear(), m: d.getUTCMonth() + 1, d: d.getUTCDate(), h: d.getUTCHours() };
 }
 function ymd_(ms) {
   var p = jstParts_(ms);
