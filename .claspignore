@@ -6,3 +6,4 @@ icon*.png
 docs/**
 tools/**
 .gitignore
+CHANGELOG.md

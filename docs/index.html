@@ -287,6 +287,29 @@ footer a { color: var(--text-2); }
 .cf-hint.left { text-align: left; }
 #catchDlg .catch-btn { margin-top: 2px; }
 /* picker */
+.guide-btn { flex: none; height: 40px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.guide-link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; }
+#guideDlg { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.guide-title { font-size: 16px; }
+.guide-ver { font-size: 12px; color: var(--text-3); margin-right: auto; margin-left: 8px; }
+.guide { padding: 6px 16px calc(24px + env(safe-area-inset-bottom)); font-size: 14px; line-height: 1.7; }
+.guide h3 { font-size: 15px; margin: 22px 0 6px; padding-top: 6px; border-top: 1px solid var(--border); scroll-margin-top: 70px; }
+.guide p, .guide ul, .guide ol, .guide dl { margin: 6px 0; }
+.guide ul, .guide ol { padding-left: 1.3em; }
+.guide dt { font-weight: 600; margin-top: 8px; }
+.guide dd { margin: 0 0 0 1em; color: var(--text-2); }
+.guide a { color: var(--accent); }
+.guide .tag { font-size: 11px; }
+.guide-toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.guide-toc button { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.guide .gl { display: inline-block; width: 18px; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
+.guide .gl.dash { border-top-style: dashed; }
+.guide .gb { display: inline-block; width: 16px; height: 11px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+.guide .gk { display: inline-block; min-width: 1.4em; text-align: center; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; }
+.guide-tbl { border-collapse: collapse; width: 100%; font-size: 13px; }
+.guide-tbl th, .guide-tbl td { border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: left; vertical-align: top; }
+.guide-tbl th { white-space: nowrap; padding-right: 10px; }
+.guide-foot { color: var(--text-3); font-size: 12px; margin-top: 18px !important; }
 dialog { border: 0; padding: 0; width: 100%; max-width: 720px; height: 100%; max-height: 100%; margin: 0 auto; background: var(--bg); color: var(--text); }
 dialog::backdrop { background: rgba(0,0,0,.4); }
 .pk-head { position: sticky; top: 0; background: var(--bg); padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border); }
@@ -311,6 +334,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div class="st-name" id="stName">読み込み中…</div>
       <div class="st-sub" id="stSub">&nbsp;</div>
     </button>
+    <button class="guide-btn" id="guideBtn">利用ガイド</button>
     <button class="icon-btn" id="locBtn" aria-label="現在地から最寄りの潮位観測所">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>
     </button>
@@ -479,8 +503,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   <footer>
     <div class="brand">
       <svg viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="bgI" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3987e5"/><stop offset="1" stop-color="#104281"/></linearGradient><clipPath id="rI"><rect width="512" height="512" rx="112"/></clipPath></defs><g clip-path="url(#rI)"><rect width="512" height="512" fill="url(#bgI)"/><path d="M-20 300H56C120 300 140 150 200 150S280 330 336 330 420 190 456 190H532" fill="none" stroke="#fff" stroke-width="36" stroke-linecap="round"/><circle cx="269.5" cy="240" r="40" fill="#eb6834" stroke="#fff" stroke-width="14"/></g></svg>
-      my tide-graph<span class="by">作成：<a href="https://x.com/kotaro9_lures" target="_blank" rel="noopener">kotaro9</a></span>
+      my tide-graph<span class="by num" id="verLbl"></span><span class="by">作成：<a href="https://x.com/kotaro9_lures" target="_blank" rel="noopener">kotaro9</a></span>
     </div>
+    <div><button class="guide-link" id="guideBtn2">利用ガイド</button></div>
     <div id="updLbl">&nbsp;</div>
     <div id="extSrc">&nbsp;</div>
     潮位：気象庁「<a href="https://www.jma.go.jp/bosai/map.html#contents=tidelevel" target="_blank" rel="noopener">潮位観測情報</a>」（気象庁・国土交通省港湾局・海上保安庁・国土地理院 等の潮位観測所＝検潮所）、
@@ -576,10 +601,138 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   <ul class="pk-list" id="pkList"></ul>
 </dialog>
 
+<dialog id="guideDlg" aria-labelledby="guideTitle">
+  <div class="pk-head">
+    <div class="pk-row"><b id="guideTitle" class="guide-title">利用ガイド</b><span class="guide-ver num" id="guideVer"></span><button id="guideClose">閉じる</button></div>
+  </div>
+  <div class="guide">
+    <nav class="guide-toc" aria-label="目次">
+      <button data-jump="g-about">このアプリについて</button>
+      <button data-jump="g-top">画面上部（潮の動き・天気・潮位）</button>
+      <button data-jump="g-chart">潮位グラフの見方</button>
+      <button data-jump="g-wind">風・水質</button>
+      <button data-jump="g-station">潮位観測所の選び方</button>
+      <button data-jump="g-date">日付・表示範囲</button>
+      <button data-jump="g-catch">釣果を記録する</button>
+      <button data-jump="g-setting">表示の設定</button>
+      <button data-jump="g-kinds">4種類の観測所</button>
+      <button data-jump="g-words">用語</button>
+      <button data-jump="g-home">ホーム画面に追加する</button>
+      <button data-jump="g-trouble">困ったときは</button>
+    </nav>
+
+    <h3 id="g-about">このアプリについて</h3>
+    <p>潮汐の<b>推算（予測）</b>と、潮位観測所の<b>実測値</b>を重ねて表示する釣り人向けのアプリです。満潮・干潮、「上げ◯分／下げ◯分」、潮位偏差、天気・風、日の出・日の入り・マヅメ、月齢などを1画面で確認できます。</p>
+    <p>開くと位置情報（GPS）から一番近い潮位観測所を選びます。表示は<b>5分ごとに自動で更新</b>され、右上の <span class="gk">↻</span> ですぐに更新することもできます。</p>
+
+    <h3 id="g-top">画面上部（潮の動き・天気・潮位）</h3>
+    <dl>
+      <dt>潮の動き</dt><dd>今が「上げ◯分」「下げ◯分」のどこかを大きく表示します。バーは直前の干潮（満潮）から次の満潮（干潮）までの進み具合です。</dd>
+      <dt>現在地の天気</dt><dd>気温（アメダスの実測）、天気と降水確率（気象庁の予報）、明日の天気。GPS が使えないときは潮位観測所付近の天気になります。</dd>
+      <dt>観測潮位</dt><dd>潮位観測所の最新の実測値と、観測時刻・何分前の値か。赤い「⚠ 更新停止」が出たら、配信が止まっています（<a href="#" data-jump="g-trouble">困ったときは</a>）。</dd>
+      <dt>潮位偏差</dt><dd>実測と推算の差です。マイナスなら推算より潮位が低い状態です。</dd>
+      <dt>次の満潮・次の干潮</dt><dd>時刻、あと何時間何分か、推算の高さ。偏差が大きいときは、今の偏差を加えた「補正」の高さも出ます。</dd>
+    </dl>
+    <p>その下の小さな文字は、観測の出どころ（気象庁／海上保安庁の速報）、同時刻の推算、現在の推定潮位、高さの基準です。</p>
+
+    <h3 id="g-chart">潮位グラフの見方</h3>
+    <dl>
+      <dt><span class="gl" style="border-color:var(--pred)"></span>推算潮位（青）</dt><dd>天文計算による潮位の予測です。●と数字は満潮・干潮の時刻と高さ。</dd>
+      <dt><span class="gl" style="border-color:var(--obs)"></span>実測潮位（オレンジ）</dt><dd>潮位観測所の実測値です。</dd>
+      <dt><span class="gl dash" style="border-color:var(--obs)"></span>偏差補正予測（オレンジの点線）</dt><dd>推算に最新の潮位偏差を足した、これからの見込みです。</dd>
+      <dt><span class="gl" style="border-color:var(--river)"></span>河川水位（緑）</dt><dd>近くの川の水位（オンのとき）。高さが海面に近い観測所だけ重ねます。</dd>
+      <dt><span class="gb" style="background:var(--mazume);border-top:3px solid var(--mazume-ink)"></span>朝マヅメ・夕マヅメ（黄色の帯）</dt><dd>朝は常用薄明の始まり〜日の出30分後、夕は日の入り30分前〜常用薄明の終わり。</dd>
+      <dt><span class="gb" style="background:var(--night)"></span>夜間（暗い背景）</dt><dd>日の入り後の薄明が終わってから、翌朝の薄明が始まるまで。</dd>
+      <dt>点線の縦線と「上1・上3…／下1・下3…」</dt><dd>上げ・下げの1・3・5・7・9分の時刻です。</dd>
+      <dt>月の出・南中・月の入り（紫の●）</dt><dd>グラフの下側に時刻と一緒に表示します。</dd>
+    </dl>
+    <p>グラフを指でなぞると、その時刻の推算・実測・偏差が表示されます。下の「潮位偏差」グラフは実測と推算の差の推移です。グラフの上の行には、月齢・輝面（月の明るさ）・旧暦と、日の出・日の入り・薄明の時刻を表示します。</p>
+
+    <h3 id="g-wind">風・水質</h3>
+    <dl>
+      <dt>風の推移・予報</dt><dd>現在地の地図の上に、0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（アメダス）、薄い矢印が予報、赤い線が現在時刻です。</dd>
+      <dt>風（地上の観測）</dt><dd>近くのアメダスの最新の風速・風向・最大瞬間風速と、気象庁の予報の風・波です。</dd>
+      <dt>水質</dt><dd>現在地から10km以内に水質観測所があるときだけ、水温・塩分濃度を表示します。</dd>
+    </dl>
+
+    <h3 id="g-station">潮位観測所の選び方</h3>
+    <ul>
+      <li><b>画面左上の潮位観測所名</b>をタップすると一覧が開きます。現在地から近い順に並び、名前や住所で検索できます。</li>
+      <li>「海上保安庁サイトの潮位観測所のみ」を選ぶと、5分ごとの速報がある観測所だけに絞れます（気象庁の公開は15〜20分ほど遅れます）。</li>
+      <li>一覧の印：<span class="tag">海保速報</span> 速報あり、<span class="tag">欠測</span> 現在欠測中の可能性、<span class="tag">潮位表なし</span> 満潮・干潮は推算からの目安。</li>
+      <li>右上の <span class="gk">◎</span> で、現在地から一番近い潮位観測所に戻ります。</li>
+    </ul>
+
+    <h3 id="g-date">日付・表示範囲</h3>
+    <ul>
+      <li>日付の左右の ‹ › で前日・翌日に移動します。日付の横は潮名（大潮・小潮など）です。</li>
+      <li>「3日・1日」は表示する日数、「±12h・±6h・±3h・±1h」は今の前後だけを拡大します（今日のみ）。</li>
+    </ul>
+
+    <h3 id="g-catch">釣果を記録する</h3>
+    <ol>
+      <li>日付の行の右の<b>「釣果を記録」</b>を押します。</li>
+      <li>写真を最大3枚、カメラで撮るか写真フォルダから選びます。写真の撮影日時と位置から、釣った時刻・場所・潮位観測所が自動で入ります。カメラで撮った写真は「写真フォルダに保存」で端末に保存できます。</li>
+      <li>魚種・サイズ・ルアー・タックルなどを入力します。ルアーやロッドなどは<b>過去の入力から選べます</b>（× で候補から削除）。</li>
+      <li>潮・天気・風・月齢などは自動で添えられます。次のどれかで記録・共有します。
+        <ul>
+          <li><b>写真と文章を共有</b>：SNS やメッセージアプリへ</li>
+          <li><b>アングラーズ投稿用の文章をコピー</b>：アングラーズのアプリに貼り付け</li>
+          <li><b>Googleカレンダーで予定を作成</b>：釣果を予定として保存（写真はファイル名と Google フォトへのリンクを記載）</li>
+        </ul>
+      </li>
+    </ol>
+
+    <h3 id="g-setting">表示の設定</h3>
+    <p>画面の下のほう（風のカードの下）にあります。</p>
+    <dl>
+      <dt>高さの基準</dt><dd>「潮位表基準面」は潮位表や釣り情報で一般的な高さ（ほぼ最低の潮位が0）。「TP」は東京湾平均海面が0の高さで、河川水位と比べるときに使います。</dd>
+      <dt>河川水位の重ね表示</dt><dd>グラフに近くの川の水位を重ねるかどうか。</dd>
+      <dt>河川の水位観測所</dt><dd>「自動」は現在地から一番近い（欠測中を除く）観測所。「近くの水位観測所を表示…」から別の観測所を選べます。</dd>
+    </dl>
+
+    <h3 id="g-kinds">4種類の観測所</h3>
+    <table class="guide-tbl">
+      <tr><th>潮位観測所</th><td>海の潮位を測る観測所（検潮所）。画面左上の名前。</td></tr>
+      <tr><th>河川の水位観測所</th><td>川の水位を測る観測所。グラフの緑の線。</td></tr>
+      <tr><th>水質観測所</th><td>川の水温・塩分濃度を測る観測所（水位観測所とは別）。</td></tr>
+      <tr><th>アメダス</th><td>気温・風などを測る気象庁の観測所。</td></tr>
+    </table>
+
+    <h3 id="g-words">用語</h3>
+    <dl>
+      <dt>上げ◯分・下げ◯分</dt><dd>干潮から満潮（満潮から干潮）までを10等分した経過の目安。「上げ3分」は干潮から3割ほど進んだところ。</dd>
+      <dt>潮位偏差</dt><dd>実測 − 推算。気圧や風などで潮位が予測からずれた量です。</dd>
+      <dt>薄明</dt><dd>日の出前・日の入り後の薄明るい時間。常用薄明は太陽高度−6°、天文薄明は−18°まで。</dd>
+      <dt>潮名・月齢・旧暦</dt><dd>旧暦の日付から求めた大潮・中潮・小潮・長潮・若潮。月齢と輝面（月の明るさ、%）も表示します。</dd>
+    </dl>
+
+    <h3 id="g-home">ホーム画面に追加する</h3>
+    <ul>
+      <li><b>iPhone</b>：Safari で開き、共有ボタン →「ホーム画面に追加」。</li>
+      <li><b>Android</b>：Chrome で開き、メニュー（︙）→「ホーム画面に追加」または「アプリをインストール」。</li>
+    </ul>
+
+    <h3 id="g-trouble">困ったときは</h3>
+    <dl>
+      <dt>赤字で「更新されていません」と出る</dt><dd>配信元の停止や欠測です。左上の潮位観測所名から、近くの別の潮位観測所に変えてください。</dd>
+      <dt>現在地が使われない</dt><dd>位置情報の許可を確認してください。許可しない場合は、前回の潮位観測所（初回は東京）を表示します。</dd>
+      <dt>「アクセスが集中しているため…」と出る</dt><dd>多くの人が使っているときに表示されます。しばらくしてから更新してください。</dd>
+      <dt>表示が古いまま</dt><dd>右上の ↻ を押してください。</dd>
+    </dl>
+
+    <h3>ご注意</h3>
+    <p>実測値は速報値で、推算や天気予報は目安です。実際の海や天候の状況を必ず自分の目で確かめ、安全第一で釣りを楽しんでください。</p>
+    <p class="guide-foot">my tide-graph <span id="guideVer2" class="num"></span> ／ 作成：<a href="https://x.com/kotaro9_lures" target="_blank" rel="noopener">kotaro9</a></p>
+  </div>
+</dialog>
+
 <script>
 (function () {
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
+  // バージョン（更新したら CHANGELOG.md にも書く）
+  var APP_VERSION = '1.0.0', APP_DATE = '2026-10-18';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
 
@@ -1763,6 +1916,27 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function closePicker() { var dlg = $('picker'); if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
+
+  /* ---------- 利用ガイド・バージョン ---------- */
+  function openGuide() {
+    var dlg = $('guideDlg');
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    dlg.scrollTop = 0;
+  }
+  function closeGuide() { var dlg = $('guideDlg'); if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
+  (function () {
+    var v = 'v' + APP_VERSION + '（' + APP_DATE.replace(/-/g, '/') + '）';
+    $('verLbl').textContent = v; $('guideVer').textContent = v; $('guideVer2').textContent = v;
+    $('guideBtn').onclick = openGuide; $('guideBtn2').onclick = openGuide; $('guideClose').onclick = closeGuide;
+    // 目次などのリンク：ページ内のスクロール（Apps Script では <base target="_top"> のため # リンクを使わない）
+    $('guideDlg').addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-jump]');
+      if (!b) return;
+      ev.preventDefault();
+      var t = document.getElementById(b.getAttribute('data-jump'));
+      if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  })();
   function renderPicker() {
     var q = $('pkQ').value.trim();
     Array.prototype.forEach.call($('stFilterSeg').children, function (b) { b.setAttribute('aria-pressed', String(b.dataset.f === S.stFilter)); });

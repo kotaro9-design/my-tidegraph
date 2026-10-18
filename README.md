@@ -53,6 +53,12 @@
   - 画面は GitHub Pages、データの取得は Apps Script（`doPost`）が担当します
 - Apps Script：`https://script.google.com/macros/s/AKfycbxqSwgZb3ulIir7BVRTHzDGkPbNWjk0jAVC-WPlZcBkvSfHnCl1IpdAVT7d0gxxPZcW6A/exec`（従来どおり使えます）
 
+### バージョン
+
+- 画面下と利用ガイドに表示するバージョンは、`index.html` の `APP_VERSION` / `APP_DATE` です
+- 番号は「大きな変更.機能追加.修正」（例：1.2.3）。更新したら [CHANGELOG.md](CHANGELOG.md) に内容を書き、GitHub に `v1.2.3` のタグを付けます
+- 利用ガイドは `index.html` の `<dialog id="guideDlg">` にあります。機能を変えたらガイドも直します
+
 ### 更新の流れ
 
 1. `index.html` / `Code.gs` を編集
