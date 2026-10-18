@@ -32,6 +32,7 @@
   --pred-soft: rgba(42, 120, 214, .10);
   --obs: #eb6834;
   --river: #1baf7a;
+  --pres: #6e56cf;
   --warn: #c62828;
   --accent: #2a78d6;
   --night: rgba(30, 45, 90, .08);
@@ -56,6 +57,8 @@
     --pred-soft: rgba(57, 135, 229, .14);
     --obs: #d95926;
     --river: #199e70;
+  --pres: #9d8cf0;
+    --pres: #9d8cf0;
     --warn: #ff7b72;
     --accent: #3987e5;
     --night: rgba(0, 0, 0, .32);
@@ -187,6 +190,9 @@ canvas { display: block; width: 100%; touch-action: pan-y; }
 #main { height: 270px; }
 #dev { height: 110px; }
 #rate { height: 120px; }
+#pres { height: 130px; }
+.pres-now { padding: 0 8px 4px; font-size: 12px; color: var(--text-2); }
+.pres-now b { color: var(--text); font-size: 15px; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 8px 2px; font-size: 12px; color: var(--text-2); }
 .legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
 .legend .dash { border-top-style: dashed; }
@@ -465,6 +471,17 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         <span id="rateRiverLeg" hidden><i style="border-color:var(--river)"></i>河川水位の変化</span>
       </div>
     </div>
+    <div class="gap"></div>
+    <div class="chart-card">
+      <div class="chart-title">気圧（海面気圧） <span>hPa</span></div>
+      <div class="pres-now num" id="presNow"></div>
+      <canvas id="pres"></canvas>
+      <div class="legend">
+        <span id="presObsLeg" hidden><i style="border-color:var(--pres)"></i><span id="presObsTxt">実測</span></span>
+        <span id="presFcLeg" hidden><i class="dash" style="border-color:var(--pres)"></i><span id="presFcTxt">推移・予報</span></span>
+      </div>
+      <div class="river-note" id="presNote"></div>
+    </div>
   </div>
 
   <section class="tt" id="tt"></section>
@@ -547,7 +564,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     気象庁「<a href="https://www.data.jma.go.jp/kaiyou/db/tide/suisan/" target="_blank" rel="noopener">潮位表</a>」。
     天気・風：気象庁「<a href="https://www.jma.go.jp/bosai/forecast/" target="_blank" rel="noopener">天気予報</a>」「<a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" rel="noopener">アメダス</a>」（気象の観測所）、地域の判定に国土地理院「逆ジオコーダ」を利用。
     河川水位：国土交通省「<a href="https://www.river.go.jp/" target="_blank" rel="noopener">川の防災情報</a>」（現在地から一番近い河川の水位観測所。位置が取れない場合は表示中の潮位観測所の位置から。T.P.基準）。水質（水温・塩分濃度）：同「川の防災情報」の水質観測所（水位観測所とは別の観測所。10km以内にある場合のみ表示）。
-    風の予報：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁 MSM/GSM モデル、CC BY 4.0）。海面水温：Open-Meteo Marine（解析・予報モデルによる推定値、CC BY 4.0）。地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>。
+    風の予報：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁 MSM/GSM モデル、CC BY 4.0）。海面水温：Open-Meteo Marine（解析・予報モデルによる推定値、CC BY 4.0）。気圧：気象庁「アメダス」（気象台などの海面気圧）、Open-Meteo（気象庁モデル）。地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>。
     日の出・日の入り・薄明（常用薄明＝太陽高度−6°、天文薄明＝−18°）は計算値（誤差1〜2分程度）。「薄明」の2つの時刻は、朝は天文薄明・常用薄明、夕は常用薄明・天文薄明の順です。
     実測値は速報値です。気象庁の公開は15〜20分程度遅れるため、直近分は海上保安庁「<a href="https://www1.kaiho.mlit.go.jp/KAN2/tide/realtime/realtime.html" target="_blank" rel="noopener">リアルタイム験潮データ</a>」（5分毎・暫定値）で補っています（同じ潮位観測所が無い場合は近くの潮位観測所の偏差を利用）。
     「上げ◯分／下げ◯分」は直前の干潮（満潮）から次の満潮（干潮）までを10等分した経過の目安です。月齢・月輝面（正午）、月の出・南中・月の入り、旧暦は天文計算による値で、潮名は旧暦の日付から求めています。
@@ -681,7 +698,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <dt>点線の縦線と「上1・上3…／下1・下3…」</dt><dd>上げ・下げの1・3・5・7・9分の時刻です。</dd>
       <dt>月の出・南中・月の入り（紫の●）</dt><dd>グラフの下側に時刻と一緒に表示します。</dd>
     </dl>
-    <p>グラフを指でなぞると、その時刻の推算・実測・偏差が表示されます。下の「潮位偏差」グラフは実測と推算の差の推移、「変化量」グラフは実測潮位（オレンジ）と河川水位（緑）が1時間あたり何cm上がって（＋）／下がって（−）いるかです。グラフの上の行には、月齢・輝面（月の明るさ）・旧暦と、日の出・日の入り・薄明の時刻を表示します。</p>
+    <p>グラフを指でなぞると、その時刻の推算・実測・偏差が表示されます。下の「潮位偏差」グラフは実測と推算の差の推移、「変化量」グラフは実測潮位（オレンジ）と河川水位（緑）が1時間あたり何cm上がって（＋）／下がって（−）いるかです。「気圧」グラフは海面気圧の推移で、実線が近くの気象台などの実測、点線が現在地の推移・予報です。気圧が1 hPa 下がると潮位は約1 cm 上がる（吸い上げ効果）ので、潮位偏差の原因を見る手がかりになります。グラフの上の行には、月齢・輝面（月の明るさ）・旧暦と、日の出・日の入り・薄明の時刻を表示します。</p>
 
     <h3 id="g-wind">風・水質</h3>
     <dl>
@@ -774,7 +791,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.3.0', APP_DATE = '2026-10-18';
+  var APP_VERSION = '1.4.0', APP_DATE = '2026-10-18';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var PICK_DAYS = 365;   // カレンダーで選べる範囲（今日の前後、サーバーの上限は400日）
@@ -1936,6 +1953,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var tr = tideRateAt(t), rr = riverRateOn() ? riverRateAt(t) : null;
     if (tr != null) rows += row('var(--obs)', '潮位の変化', fmtRate(tr));
     if (rr != null) rows += row('var(--river)', '河川の変化', fmtRate(rr));
+    var pr = presAt(t);
+    if (pr != null) rows += row('var(--pres)', '気圧', pr.toFixed(1) + ' hPa（潮位 ' + fmtDev(1013 - pr) + ' cm）');
     var p = phaseAt(t);
     if (p) rows += row(null, '潮', phaseText(p).replace(/<[^>]+>/g, ''));
     tip.innerHTML = rows;
@@ -2041,9 +2060,150 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       g.beginPath(); g.moveTo(Math.round(X(S.hover)) + .5, top); g.lineTo(Math.round(X(S.hover)) + .5, bottom); g.stroke();
     }
   }
+  /* ---------- 気圧（海面気圧）：実測は近くの気象台など（アメダスの気圧観測地点）、推移・予報は Open-Meteo（GPS の位置） ---------- */
+  var PRES_BLOCKS = {};   // アメダスの3時間ごとのファイル（過去の分は変わらないので残す）
+  function loadPressure(force) {
+    var p = here();
+    if (!p) return Promise.resolve();
+    var key = p.lat.toFixed(2) + ',' + p.lon.toFixed(2);
+    var jobs = [];
+    // 推移・予報（30分ごと）
+    if (force || !S.presFc || S.presFcKey !== key || Date.now() - S.presFcAt > 30 * MIN) {
+      jobs.push(fetch('https://api.open-meteo.com/v1/forecast?latitude=' + p.lat.toFixed(4) + '&longitude=' + p.lon.toFixed(4) +
+        '&hourly=pressure_msl&past_days=3&forecast_days=3&models=jma_seamless&timeformat=unixtime&timezone=GMT')
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) {
+          var h = j.hourly || {};
+          S.presFc = (h.time || []).map(function (t, i) { return [t * 1000, h.pressure_msl[i]]; }).filter(function (x) { return x[1] != null; });
+          S.presFcKey = key; S.presFcAt = Date.now();
+        }).catch(function () { if (S.presFcKey !== key) S.presFc = null; }));
+    }
+    // 実測（10分ごと、直近48時間）
+    jobs.push(presStation(p).then(function (st) {
+      S.presSt = st;
+      if (!st) { S.presObs = null; return; }
+      var now = Date.now(), b0 = Math.floor((now + JST) / (3 * HOUR)) * 3 * HOUR - JST, list = [];
+      for (var t = b0 - 15 * 3 * HOUR; t <= b0; t += 3 * HOUR) list.push(t);
+      return Promise.all(list.map(function (t) {
+        var d = jd(t), name = st.code + '/' + d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + '_' + pad(d.getUTCHours());
+        var cur = t >= b0 - 3 * HOUR;   // 新しい2つは更新中の可能性
+        if (PRES_BLOCKS[name] && !(cur && (force || now - PRES_BLOCKS[name].at > 9 * MIN))) return PRES_BLOCKS[name].pts;
+        return fetch('https://www.jma.go.jp/bosai/amedas/data/point/' + name + '.json').then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) {
+          var pts = Object.keys(j).map(function (k) {
+            var v = j[k].normalPressure;
+            var ms = Date.UTC(+k.slice(0, 4), +k.slice(4, 6) - 1, +k.slice(6, 8), +k.slice(8, 10), +k.slice(10, 12)) - JST;
+            return [ms, v && v[1] === 0 ? v[0] : null];   // 2つ目は品質（0 が正常）
+          }).filter(function (x) { return x[1] != null; });
+          PRES_BLOCKS[name] = { pts: pts, at: Date.now() };
+          return pts;
+        }).catch(function () { return PRES_BLOCKS[name] ? PRES_BLOCKS[name].pts : []; });
+      })).then(function (all) {
+        S.presObs = [].concat.apply([], all).sort(function (a, b) { return a[0] - b[0]; });
+      });
+    }).catch(function () { S.presObs = null; }));
+    return Promise.all(jobs).then(function () { renderPressure(); drawPres(); });
+  }
+  // 一番近い気圧観測地点（アメダス観測所一覧の8番目の印が気圧。山頂の富士山は除く）
+  function presStation(p) {
+    var tbl = S.amedasTbl ? Promise.resolve(S.amedasTbl) :
+      fetch('https://www.jma.go.jp/bosai/amedas/const/amedastable.json').then(function (r) { return r.json(); }).then(function (j) { S.amedasTbl = j; return j; });
+    return tbl.then(function (j) {
+      var best = null;
+      Object.keys(j).forEach(function (code) {
+        var a = j[code];
+        if (!a.elems || a.elems.charAt(7) !== '1' || a.type === 'F') return;
+        var la = a.lat[0] + a.lat[1] / 60, lo = a.lon[0] + a.lon[1] / 60, d = distKm(p.lat, p.lon, la, lo);
+        if (!best || d < best.dist) best = { code: code, name: a.kjName, dist: d };
+      });
+      return best && best.dist < 80 ? best : null;
+    });
+  }
+  function presNear(arr, t, tol) {
+    var best = null, bd = tol;
+    (arr || []).forEach(function (q) { var d = Math.abs(q[0] - t); if (d <= bd) { bd = d; best = q[1]; } });
+    return best;
+  }
+  // その時刻の気圧（実測があれば実測、無ければ推移・予報を直線補間）
+  function presAt(t) {
+    var o = presNear(S.presObs, t, 10 * MIN);
+    if (o != null) return o;
+    var f = S.presFc;
+    if (!f || !f.length) return null;
+    for (var i = 1; i < f.length; i++) {
+      if (f[i][0] >= t) { var a = f[i - 1], b = f[i]; return t < a[0] ? null : a[1] + (b[1] - a[1]) * (t - a[0]) / (b[0] - a[0]); }
+    }
+    return null;
+  }
+  function presTrend() {
+    var o = S.presObs, now = Date.now(), cur, curT, prev, obs = false;
+    if (o && o.length && now - o[o.length - 1][0] < HOUR) { cur = o[o.length - 1][1]; curT = o[o.length - 1][0]; prev = presNear(o, curT - 3 * HOUR, 10 * MIN); obs = true; }
+    else { curT = now; cur = presAt(now); prev = presAt(now - 3 * HOUR); }
+    if (cur == null) return null;
+    var d = prev == null ? null : cur - prev;
+    var word = d == null ? '' : Math.abs(d) < 0.5 ? '横ばい' : (Math.abs(d) >= 3 ? '急な' : '') + (d < 0 ? '下降' : '上昇');
+    return { v: cur, t: curT, d: d, word: word, obs: obs };
+  }
+  function renderPressure() {
+    var tr = presTrend(), st = S.presSt, p = here();
+    $('presNow').innerHTML = tr ? '現在 <b>' + tr.v.toFixed(1) + '</b> hPa' + (tr.obs ? '（' + hm(tr.t) + '）' : '') +
+      (tr.d != null ? '・3時間で ' + (tr.d > 0 ? '+' : tr.d < 0 ? '−' : '±') + Math.abs(tr.d).toFixed(1) + ' hPa（' + tr.word + (tr.word === '横ばい' ? '' : '中') + '）' : '') +
+      '・気圧による潮位の目安 ' + fmtDev(1013 - tr.v) + ' cm' : '気圧のデータを読み込み中…';
+    var hasObs = !!(S.presObs && S.presObs.length), hasFc = !!(S.presFc && S.presFc.length);
+    $('presObsLeg').hidden = !hasObs; $('presFcLeg').hidden = !hasFc;
+    if (st) $('presObsTxt').textContent = '実測（' + st.name + '・' + fmtKm(st.dist) + '）';
+    $('presFcTxt').textContent = (p && p.gps ? '現在地' : '潮位観測所付近') + 'の推移・予報';
+    $('presNote').textContent = '実測は気象庁「' + (st ? st.name : '近くの気象台') + '」の海面気圧（10分ごと）、推移・予報は Open-Meteo（気象庁モデル、1時間ごと）。' +
+      '気圧が1 hPa 下がると潮位は約1 cm 上がります（吸い上げ効果、1013 hPa 基準の目安）。';
+  }
+  function drawPres() {
+    var cv = $('pres'), c = setupCanvas(cv), g = c.g, W = c.w, H = c.h;
+    if (!S.data) return;
+    var r = range(), t0 = r[0], t1 = r[1], top = 10, bottom = H - 22;
+    var inR = function (a) { return (a || []).filter(function (q) { return q[0] >= t0 - HOUR && q[0] <= t1 + HOUR; }); };
+    var fc = inR(S.presFc), ob = inR(S.presObs), all = fc.concat(ob);
+    if (!all.length) return;
+    var lo = Math.min.apply(null, all.map(function (q) { return q[1]; })), hi = Math.max.apply(null, all.map(function (q) { return q[1]; }));
+    var mid = (lo + hi) / 2, half = Math.max(4, (hi - lo) / 2 + 1);   // 最低でも ±4 hPa の幅
+    var ys = niceStep(half * 2, 3); lo = Math.floor((mid - half) / ys) * ys; hi = Math.ceil((mid + half) / ys) * ys;
+    var X = function (t) { return PADL + (t - t0) / (t1 - t0) * (W - PADL - PADR); };
+    var Y = function (v) { return top + (hi - v) / (hi - lo) * (bottom - top); };
+    var cGrid = css('--grid'), cText2 = css('--text-2'), cText3 = css('--text-3'), cP = css('--pres');
+    g.font = '11px ' + css('--font');
+    g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (var v = lo; v <= hi + 1e-6; v += ys) {
+      g.strokeStyle = cGrid; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(PADL, Math.round(Y(v)) + .5); g.lineTo(W - PADR, Math.round(Y(v)) + .5); g.stroke();
+      g.fillStyle = cText3; g.fillText(String(Math.round(v)), PADL - 6, Y(v));
+    }
+    drawNight(g, t0, t1, X, top, bottom);
+    drawXAxis(g, t0, t1, X, top, bottom, cGrid, cText3, cText2);
+    g.save(); g.beginPath(); g.rect(PADL, top, W - PADL - PADR, bottom - top); g.clip();
+    var line = function (pts, dash, gapMs) {
+      g.strokeStyle = cP; g.lineWidth = 2; g.lineJoin = 'round'; g.setLineDash(dash);
+      g.beginPath();
+      var prevT = null;
+      pts.forEach(function (q) {
+        if (prevT == null || q[0] - prevT > gapMs) g.moveTo(X(q[0]), Y(q[1])); else g.lineTo(X(q[0]), Y(q[1]));
+        prevT = q[0];
+      });
+      g.stroke(); g.setLineDash([]);
+    };
+    line(fc, [5, 4], 2 * HOUR);
+    line(ob, [], 40 * MIN);
+    g.restore();
+    var now = Date.now();
+    if (now > t0 && now < t1) {
+      g.strokeStyle = cText2; g.setLineDash([3, 3]);
+      g.beginPath(); g.moveTo(Math.round(X(now)) + .5, top); g.lineTo(Math.round(X(now)) + .5, bottom); g.stroke();
+      g.setLineDash([]);
+    }
+    if (S.hover != null && S.hover >= t0 && S.hover <= t1) {
+      g.strokeStyle = cText2; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(Math.round(X(S.hover)) + .5, top); g.lineTo(Math.round(X(S.hover)) + .5, bottom); g.stroke();
+    }
+  }
   function fmtRate(v) { if (v == null) return '--'; var r = Math.round(v); return (r > 0 ? '+' : r < 0 ? '−' : '±') + Math.abs(r) + ' cm/時'; }
 
-  function drawCharts() { drawMain(); drawDev(); drawRate(); }
+  function drawCharts() { drawMain(); drawDev(); drawRate(); drawPres(); }
   function renderAll() {
     if (!S.data) return;
     renderHeader(); renderControls(); renderHero(); renderTable(); renderRiver(); drawCharts();
@@ -2073,6 +2233,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     loadWind(!silent && !S.date);
     loadWQ();
     loadSST();
+    loadPressure();
     loadToday();
     return run('getTideData', code, S.date).then(function (d) {
       if (!S.st || S.st.c !== code) return;
@@ -2537,6 +2698,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var rh = riverOn() ? riverAt(t) : null;
     if (rh != null) r.river = S.river.name + ' ' + fmtH(rh) + 'cm';
     if (Math.abs(t - now) < 2 * HOUR && S.wq) r.wq = wqText(S.wq);
+    var pv = presAt(t);
+    if (pv != null) {
+      var pd = presAt(t - 3 * HOUR), pw = pd == null ? '' : Math.abs(pv - pd) < 0.5 ? '横ばい' : pv < pd ? '下降中' : '上昇中';
+      r.pres = Math.round(pv) + 'hPa' + (pw ? '（' + pw + '）' : '');
+    }
     var sv = sstAt(t);
     if (sv != null) r.sst = fmt1(sv) + '℃（推定）';
     return r;
@@ -2576,6 +2742,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (s.river) post.push('河川水位：' + s.river);
     if (s.wq) post.push('水質：' + s.wq);
     if (s.sst) post.push('海面水温：' + s.sst);
+    if (s.pres) post.push('気圧：' + s.pres);
     if (memo) post.push('', memo);
     if ($('cfTags').checked) {
       var tag = function (x) { return x ? '#' + String(x).replace(/[\s#（）()・,、。]/g, '') : ''; };
@@ -2826,6 +2993,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   bindHover($('main'));
   bindHover($('dev'));
   bindHover($('rate'));
+  bindHover($('pres'));
   var rt;
   window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { drawCharts(); renderWind(); }, 100); });
   if (window.matchMedia) {
