@@ -16,8 +16,11 @@ var MON_SHEETS = {
   stations: ['日付', '潮位観測所コード', '潮位観測所名', '回数'],
   areas: ['日付', '地域（約10km）', '回数'],
   features: ['日付', '機能', '回数'],
-  errors: ['日付', '種類', '内容', '回数']
+  errors: ['日付', '種類', '内容', '回数'],
+  sites: ['日付', 'サイト', 'サーバーから', 'ブラウザから'],
+  referrers: ['日付', '流入元', '回数']
 };
+var MON_HOST_RE = /^[a-z0-9.\-]{3,80}$/;
 // 機能名・エラー名などに使える文字（送られてきた値はこれで絞る）
 var MON_NAME_RE = /^[A-Za-z0-9_:.\-]{1,40}$/;
 
@@ -43,7 +46,9 @@ function monUpdate_(fn) {
 }
 function monHour_(buf, ms) {
   var hk = monHourKey_(ms);
-  return buf.h[hk] || (buf.h[hk] = { pv: 0, ids: {}, st: {}, area: {}, f: {}, cerr: 0, serr: 0, lim: 0, err: {} });
+  var h = buf.h[hk] || (buf.h[hk] = { pv: 0, ids: {}, st: {}, area: {}, f: {}, cerr: 0, serr: 0, lim: 0, err: {} });
+  h.sv = h.sv || {}; h.cl = h.cl || {}; h.ref = h.ref || {};   // 外部サイト（サーバー／ブラウザ）、流入元
+  return h;
 }
 function monInc_(o, k, n) { o[k] = (o[k] || 0) + (n || 1); }
 
@@ -67,10 +72,17 @@ function monRecord_(ev) {
           h.pv++;
           if (v && /^\d{6}$/.test(String(v.st || ''))) monInc_(h.st, String(v.st));
           if (v && /^\d{2}\.\d,\d{3}\.\d$/.test(String(v.area || ''))) monInc_(h.area, String(v.area));
+          if (v && /^[a-z0-9.:_\-]{1,60}$/.test(String(v.ref || ''))) monInc_(h.ref, String(v.ref));
         } else if (kind === 'st') {
           if (/^\d{6}$/.test(String(v || ''))) monInc_(h.st, String(v));
         } else if (kind === 'f') {
           if (MON_NAME_RE.test(String(v || ''))) monInc_(h.f, String(v));
+        } else if (kind === 'h') {
+          // ブラウザから外部サイトへのアクセス回数 { host: 回数 }
+          if (v && typeof v === 'object') Object.keys(v).slice(0, 30).forEach(function (host) {
+            var n = Math.floor(+v[host]);
+            if (MON_HOST_RE.test(host) && n > 0 && n <= 5000) monInc_(h.cl, host, n);
+          });
         } else if (kind === 'e') {
           h.cerr++;
           if (MON_NAME_RE.test(String(v || ''))) monInc_(h.err, 'client:' + v);
@@ -78,6 +90,24 @@ function monRecord_(ev) {
       });
     });
   } catch (e) { /* 記録の失敗でアプリを止めない */ }
+}
+
+/** サーバーから外部サイトへの取得回数。処理の終わりにまとめて記録する */
+var MON_HOSTS = {};
+function monCountHost_(url) {
+  var m = /^https?:\/\/([^\/?#]+)/.exec(String(url));
+  if (m) MON_HOSTS[m[1]] = (MON_HOSTS[m[1]] || 0) + 1;
+}
+function monFlushHosts_() {
+  var hosts = MON_HOSTS;
+  MON_HOSTS = {};
+  if (!Object.keys(hosts).length) return;
+  try {
+    monUpdate_(function (buf) {
+      var h = monHour_(buf, Date.now());
+      Object.keys(hosts).forEach(function (k) { monInc_(h.sv, k, hosts[k]); });
+    });
+  } catch (e) { /* 無視 */ }
 }
 
 /** サーバー側の出来事（上限超え・エラー）を記録する */
@@ -110,9 +140,10 @@ function flushMonitor() {
   var hours = Object.keys(done).sort();
   if (!hours.length) return 0;
   var ss = monSheet_(), stations = {};
+  monEnsureSheets_(ss);
   try { getStations().forEach(function (s) { stations[s.c] = s.n; }); } catch (e) { /* 名前なしで記録 */ }
   var cache = CacheService.getScriptCache();
-  var rows = { hourly: [], users: [], stations: [], areas: [], features: [], errors: [] };
+  var rows = { hourly: [], users: [], stations: [], areas: [], features: [], errors: [], sites: [], referrers: [] };
   // 利用者の重複は日ごとに除く（既に書いた匿名IDは飛ばす）
   var userSheet = ss.getSheetByName('users'), seen = {};
   var last = userSheet.getLastRow();
@@ -130,6 +161,10 @@ function flushMonitor() {
     Object.keys(h.area).forEach(function (a) { rows.areas.push([day, a, h.area[a]]); });
     Object.keys(h.f).forEach(function (f) { rows.features.push([day, f, h.f[f]]); });
     Object.keys(h.err).forEach(function (k) { var i = k.indexOf(':'); rows.errors.push([day, k.slice(0, i), k.slice(i + 1), h.err[k]]); });
+    var sv = h.sv || {}, cl = h.cl || {}, hosts = {};
+    Object.keys(sv).concat(Object.keys(cl)).forEach(function (k) { hosts[k] = 1; });
+    Object.keys(hosts).forEach(function (k) { rows.sites.push([day, k, sv[k] || 0, cl[k] || 0]); });
+    Object.keys(h.ref || {}).forEach(function (k) { rows.referrers.push([day, k, h.ref[k]]); });
   });
   Object.keys(rows).forEach(function (name) {
     var r = rows[name];
@@ -138,6 +173,14 @@ function flushMonitor() {
     sh.getRange(sh.getLastRow() + 1, 1, r.length, r[0].length).setValues(r);
   });
   return hours.length;
+}
+
+/** 後から増えたシートを足す */
+function monEnsureSheets_(ss) {
+  Object.keys(MON_SHEETS).forEach(function (name) {
+    var sh = ss.getSheetByName(name) || ss.insertSheet(name);
+    if (sh.getLastRow() === 0) { sh.appendRow(MON_SHEETS[name]); sh.setFrozenRows(1); }
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -181,6 +224,7 @@ function getMonitorData(key, days) {
   days = Math.min(Math.max(+days || 30, 1), 365);
   var now = Date.now(), since = ymd_(now - (days - 1) * DAY);
   var ss = monSheet_();
+  monEnsureSheets_(ss);
   var read = function (name) {
     var sh = ss.getSheetByName(name), n = sh.getLastRow();
     return n > 1 ? sh.getRange(2, 1, n - 1, sh.getLastColumn()).getDisplayValues() : [];
@@ -204,6 +248,16 @@ function getMonitorData(key, days) {
     areas: sum(read('areas'), 1, 2),
     features: sum(read('features'), 1, 2),
     errors: sum(read('errors').map(function (r) { return [r[0], r[1] + ':' + r[2], r[3]]; }), 1, 2),
+    sites: (function () {
+      var o = {};
+      read('sites').forEach(function (r) {
+        if (r[0] < since) return;
+        var x = o[r[1]] || (o[r[1]] = { sv: 0, cl: 0, days: {} });
+        x.sv += +r[2] || 0; x.cl += +r[3] || 0; x.days[r[0]] = (x.days[r[0]] || 0) + (+r[2] || 0);
+      });
+      return o;
+    })(),
+    referrers: sum(read('referrers'), 1, 2),
     limits: FETCH_LIMIT,
     sheetUrl: ss.getUrl()
   };
@@ -212,7 +266,8 @@ function getMonitorData(key, days) {
   try { buf = JSON.parse(CacheService.getScriptCache().get(CACHE_VER + MON_BUF) || 'null'); } catch (e) { buf = null; }
   out.pending = buf ? Object.keys(buf.h).map(function (hk) {
     var h = buf.h[hk];
-    return { hour: hk, pv: h.pv, ids: Object.keys(h.ids), st: h.st, area: h.area, f: h.f, err: h.err, lim: h.lim, serr: h.serr, cerr: h.cerr };
+    return { hour: hk, pv: h.pv, ids: Object.keys(h.ids), st: h.st, area: h.area, f: h.f, err: h.err, lim: h.lim, serr: h.serr, cerr: h.cerr,
+      sv: h.sv || {}, cl: h.cl || {}, ref: h.ref || {} };
   }) : [];
   var cache = CacheService.getScriptCache();
   out.ufHour = +(cache.get(CACHE_VER + 'uf_h_' + Math.floor(now / HOUR)) || 0);

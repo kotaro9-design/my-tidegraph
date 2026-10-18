@@ -942,6 +942,7 @@ function callWithPre(name, args, pre, ev) {
     throw e;
   } finally {
     PRE = null; FROM_PRE = false;
+    monFlushHosts_();
   }
 }
 
@@ -1003,6 +1004,7 @@ function fetchAll_(urls, allow404) {
   if (need.length) throw needError_(need);
   if (server.length) {
     spendFetch_(server.length, fallback);
+    server.forEach(function (i) { monCountHost_(urls[i]); });   // 利用状況：外部サイトごとの回数（Monitor.gs）
     var res = UrlFetchApp.fetchAll(server.map(function (i) {
       return { url: urls[i], muteHttpExceptions: true, followRedirects: true };
     }));

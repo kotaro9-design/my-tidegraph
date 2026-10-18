@@ -61,6 +61,14 @@ svg.chart text { font-size: 10px; fill: var(--text-3); font-family: var(--font);
 .hbar .t i { display: block; height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
 .hbar .c { font-variant-numeric: tabular-nums; color: var(--text-2); min-width: 3em; text-align: right; }
 .empty { color: var(--text-3); font-size: 13px; padding: 8px 0; }
+table.sites { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.sites th, table.sites td { padding: 6px 6px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.sites th { font-size: 11px; font-weight: 600; color: var(--text-2); }
+table.sites th:first-child, table.sites td:first-child { text-align: left; white-space: normal; }
+table.sites td small { display: block; color: var(--text-3); font-size: 11px; }
+table.sites .bar { width: 30%; }
+table.sites .bar i { display: block; height: 8px; background: var(--bar); border-radius: 0 3px 3px 0; min-width: 2px; }
+.sites-wrap { overflow-x: auto; }
 #tip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); display: none; z-index: 9; white-space: nowrap; }
 .msg { color: var(--crit); font-size: 13px; margin: 8px 0; }
 .note { font-size: 11px; color: var(--text-3); line-height: 1.6; margin-top: 14px; }
@@ -96,9 +104,15 @@ svg.chart text { font-size: 10px; fill: var(--text-3); font-family: var(--font);
     <div class="card"><h2>機能の利用 <span>回</span></h2><div id="tFeatures"></div></div>
     <div class="card"><h2>エラー <span>件</span></h2><div id="tErrors"></div></div>
   </div>
+  <div class="card"><h2>外部サイトへのアクセス（期間合計） <span>回</span></h2><div id="tSites"></div></div>
+  <div class="grid2">
+    <div class="card"><h2>流入元（どこから開いたか） <span>回</span></h2><div id="tRefs"></div></div>
+  </div>
   <p class="note">
     データは1時間ごとにスプレッドシートへ集計されます（今の1時間の分も含めて表示）。利用者数は端末ごとの匿名IDの数です（ブラウザのデータを消すと別の人として数えます）。
     地域は約10km単位に丸めた位置で、名前は国土地理院の逆ジオコーダで求めた目安です。
+    外部サイトの「サーバーから」は Apps Script の URL Fetch（1日の上限に数える）、「ブラウザから」は利用者の端末からの取得です（上限には数えない。地図タイルは端末ごとに初回のみ数える）。
+    流入元はページを開いたときの直前のページのサイト名です。X や LINE のアプリ内から開いた場合は「直接」になることがあります。リンクに ?from=名前 を付けると、その名前で数えます。
   </p>
 </div>
 <div id="tip"></div>
@@ -114,6 +128,19 @@ svg.chart text { font-size: 10px; fill: var(--text-3); font-family: var(--font);
     'river_0': '河川水位：非表示', datum_table: '高さ：潮位表基準面', datum_tp: '高さ：TP', filter_all: '一覧：すべて', filter_jcg: '一覧：海保のみ',
     view_3d: '表示：3日', view_day: '表示：1日', view_h12: '表示：±12h', view_h6: '表示：±6h', view_h3: '表示：±3h', view_h1: '表示：±1h'
   };
+  var SITES = {
+    'www.jma.go.jp': '気象庁（観測・予報）', 'www.data.jma.go.jp': '気象庁（潮位表）', 'www1.kaiho.mlit.go.jp': '海上保安庁（験潮）',
+    'www.river.go.jp': '川の防災情報', 'api.open-meteo.com': 'Open-Meteo（風・気圧）', 'marine-api.open-meteo.com': 'Open-Meteo Marine（海面水温）',
+    'mreversegeocoder.gsi.go.jp': '国土地理院（逆ジオコーダ）', 'msearch.gsi.go.jp': '国土地理院（住所検索）', 'cyberjapandata.gsi.go.jp': '国土地理院（地図タイル）',
+    'script.google.com': 'このアプリのサーバー（Apps Script）', 'www.tbeic.go.jp': '東京湾環境情報センター'
+  };
+  var REFS = {
+    direct: '直接（ブックマーク・URL入力・アプリ内ブラウザなど）', home_screen: 'ホーム画面のアイコン', gas: '旧URL（Apps Script の画面）',
+    't.co': 'X（t.co）', 'x.com': 'X', 'twitter.com': 'X', 'www.google.com': 'Google 検索', 'www.google.co.jp': 'Google 検索',
+    'line.me': 'LINE', 'l.facebook.com': 'Facebook', 'm.facebook.com': 'Facebook', 'www.instagram.com': 'Instagram', 'l.instagram.com': 'Instagram',
+    'search.yahoo.co.jp': 'Yahoo! 検索', 'www.bing.com': 'Bing', 'github.com': 'GitHub'
+  };
+  function refName(k) { return REFS[k] || (/^from:/.test(k) ? 'リンクの指定（from=' + k.slice(5) + '）' : k); }
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function n(v) { return Math.round(v).toLocaleString('ja-JP'); }
@@ -139,6 +166,8 @@ svg.chart text { font-size: 10px; fill: var(--text-3); font-family: var(--font);
     });
     D.users.forEach(function (r) { if (users[r[0]]) { users[r[0]][r[1]] = 1; all[r[1]] = 1; } });
     var st = Object.assign({}, D.stations), ar = Object.assign({}, D.areas), fe = Object.assign({}, D.features), er = Object.assign({}, D.errors);
+    var si = {}, rf = Object.assign({}, D.referrers || {});
+    Object.keys(D.sites || {}).forEach(function (k) { si[k] = { sv: D.sites[k].sv, cl: D.sites[k].cl }; });
     var add = function (o, src, pre) { Object.keys(src || {}).forEach(function (k) { var kk = (pre || '') + k; o[kk] = (o[kk] || 0) + src[k]; }); };
     D.pending.forEach(function (p) {
       var d = p.hour.slice(0, 10), h = +p.hour.slice(11, 13);
@@ -146,13 +175,15 @@ svg.chart text { font-size: 10px; fill: var(--text-3); font-family: var(--font);
       byDay[d].pv += p.pv; byDay[d].lim += p.lim; byDay[d].serr += p.serr; byDay[d].cerr += p.cerr;
       hours[h] += p.pv;
       p.ids.forEach(function (a) { users[d][a] = 1; all[a] = 1; });
-      add(st, p.st); add(ar, p.area); add(fe, p.f);
+      add(st, p.st); add(ar, p.area); add(fe, p.f); add(rf, p.ref);
+      Object.keys(p.sv || {}).forEach(function (k) { (si[k] = si[k] || { sv: 0, cl: 0 }).sv += p.sv[k]; });
+      Object.keys(p.cl || {}).forEach(function (k) { (si[k] = si[k] || { sv: 0, cl: 0 }).cl += p.cl[k]; });
       Object.keys(p.err || {}).forEach(function (k) { er[k] = (er[k] || 0) + p.err[k]; });
     });
     // 今日の URL Fetch は日ごとの実数（未集計の時間を含む）
     var today = ymd(D.now);
     if (byDay[today]) byDay[today].uf = Math.max(byDay[today].uf, D.ufToday);
-    return { days: days, byDay: byDay, hours: hours, users: users, allUsers: Object.keys(all).length, st: st, ar: ar, fe: fe, er: er };
+    return { days: days, byDay: byDay, hours: hours, users: users, allUsers: Object.keys(all).length, st: st, ar: ar, fe: fe, er: er, si: si, rf: rf };
   }
 
   function tiles(A) {
@@ -217,6 +248,20 @@ svg.chart text { font-size: 10px; fill: var(--text-3); font-family: var(--font);
       return '<div class="hbar"><span class="n" title="' + esc(name(r[0])) + '" data-k="' + esc(r[0]) + '">' + esc(name(r[0])) + '</span><span class="t"><i style="width:' + (r[1] / top * 100).toFixed(1) + '%"></i></span><span class="c">' + n(r[1]) + '</span></div>';
     }).join('');
   }
+  // 外部サイトごと：サーバーから（URL Fetch の上限に数える）とブラウザから（上限には数えない）
+  function sitesTable(el, si) {
+    var rows = Object.keys(si).map(function (k) { return [k, si[k].sv, si[k].cl]; })
+      .sort(function (a, b) { return (b[1] + b[2]) - (a[1] + a[2]); });
+    if (!rows.length) { el.innerHTML = '<div class="empty">まだデータがありません</div>'; return; }
+    var top = Math.max.apply(null, rows.map(function (r) { return r[1]; }).concat([1]));
+    var tsv = rows.reduce(function (s, r) { return s + r[1]; }, 0), tcl = rows.reduce(function (s, r) { return s + r[2]; }, 0);
+    el.innerHTML = '<div class="sites-wrap"><table class="sites"><thead><tr><th>サイト</th><th>サーバーから<br>（上限に数える）</th><th class="bar"></th><th>ブラウザから</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr><td>' + esc(SITES[r[0]] || r[0]) + '<small>' + esc(r[0]) + '</small></td><td>' + n(r[1]) + '</td><td class="bar">' +
+          (r[1] ? '<i style="width:' + (r[1] / top * 100).toFixed(1) + '%"></i>' : '') + '</td><td>' + n(r[2]) + '</td></tr>';
+      }).join('') +
+      '<tr><td><b>合計</b></td><td><b>' + n(tsv) + '</b></td><td></td><td><b>' + n(tcl) + '</b></td></tr></tbody></table></div>';
+  }
   // 地域の名前（国土地理院 逆ジオコーダ。表示のときだけブラウザから）
   var areaNames = {};
   function nameAreas(el) {
@@ -242,6 +287,8 @@ svg.chart text { font-size: 10px; fill: var(--text-3); font-family: var(--font);
     hlist($('tAreas'), A.ar, function (k) { return k; });
     nameAreas($('tAreas'));
     hlist($('tFeatures'), A.fe, function (k) { return FEATURES[k] || k; }, 30);
+    sitesTable($('tSites'), A.si);
+    hlist($('tRefs'), A.rf, refName, 15);
     hlist($('tErrors'), A.er, function (k) { return k.replace(/^client:/, '画面：').replace(/^server:/, 'サーバー：'); }, 20);
     var d = new Date(D.now + 9 * 3600e3);
     $('upd').textContent = '直近' + DAYS + '日（' + D.since + '〜）・' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' 時点';

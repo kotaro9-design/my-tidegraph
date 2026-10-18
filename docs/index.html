@@ -778,7 +778,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     </dl>
 
     <h3>利用状況の集計について</h3>
-    <p>アプリの改善のため、利用状況（端末ごとの匿名ID、表示した潮位観測所、約10km単位の地域、使った機能、エラーの種類）を集計しています。名前・メールアドレス・正確な位置など、個人を特定できる情報は集めていません。</p>
+    <p>アプリの改善のため、利用状況（端末ごとの匿名ID、表示した潮位観測所、約10km単位の地域、使った機能、エラーの種類、どのサイトから開いたか、データを取得した外部サイトごとの回数）を集計しています。名前・メールアドレス・正確な位置など、個人を特定できる情報は集めていません。</p>
 
     <h3>ご注意</h3>
     <p>実測値は速報値で、推算や天気予報は目安です。実際の海や天候の状況を必ず自分の目で確かめ、安全第一で釣りを楽しんでください。</p>
@@ -791,7 +791,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.4.0', APP_DATE = '2026-10-18';
+  var APP_VERSION = '1.5.0', APP_DATE = '2026-10-18';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var PICK_DAYS = 365;   // カレンダーで選べる範囲（今日の前後、サーバーの上限は400日）
@@ -823,19 +823,36 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     return a;
   }
   function track(kind, v) { if (EVQ.length < 50) EVQ.push([kind, v]); }
+  // ブラウザから外部サイトへのアクセス回数（サイトごとにまとめて、次の送信に1件として相乗り）
+  var HOSTCNT = {}, TILE_SEEN = {};
+  function countHost(u) { var m = /^https?:\/\/([^\/?#]+)/.exec(String(u)); if (m) HOSTCNT[m[1]] = (HOSTCNT[m[1]] || 0) + 1; }
+  function xfetch(u, o) { countHost(u); return fetch(u, o); }
+  // 流入元：外部サイトから来たときはそのサイト名、ホーム画面のアイコン、旧URL（Apps Script の画面）、直接（ブックマーク・入力）
+  function referrerName() {
+    var q = /[?&]from=([A-Za-z0-9._-]{1,30})/.exec(location.search);
+    if (q) return 'from:' + q[1].toLowerCase();
+    if (window.google && google.script && google.script.run) return 'gas';
+    if ((window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone) return 'home_screen';
+    var m = /^https?:\/\/([^\/?#]+)/.exec(document.referrer || '');
+    return m && m[1] !== location.host ? m[1].toLowerCase() : 'direct';
+  }
   // 表示回数（1回の起動につき1回）。潮位観測所が決まってから数える
   function trackPv(code, pos) {
     if (S.pvSent || !code) return;
     S.pvSent = true;
-    track('pv', { st: code, area: pos ? pos.lat.toFixed(1) + ',' + pos.lon.toFixed(1) : '' });
+    track('pv', { st: code, area: pos ? pos.lat.toFixed(1) + ',' + pos.lon.toFixed(1) : '', ref: referrerName() });
   }
   // 次の通信を待たずに送る（キャッシュ済みの軽い呼び出しに相乗り）
   function flushEvents() { if (EVQ.length) run('getStations').catch(function () {}); }
-  function takeEvents() { return EVQ.length ? { aid: anonId(), list: EVQ.splice(0, EVQ.length) } : null; }
+  function takeEvents() {
+    var hk = Object.keys(HOSTCNT);
+    if (hk.length) { EVQ.push(['h', HOSTCNT]); HOSTCNT = {}; }
+    return EVQ.length ? { aid: anonId(), list: EVQ.splice(0, EVQ.length) } : null;
+  }
   // 閉じるときに残っている分（GitHub Pages 版のみ。Apps Script の画面では次回の通信で送る）
   window.addEventListener('pagehide', function () {
     var api = document.querySelector('meta[name="tide-api"]');
-    if (!api || !EVQ.length || !navigator.sendBeacon) return;
+    if (!api || (!EVQ.length && !Object.keys(HOSTCNT).length) || !navigator.sendBeacon) return;
     try { navigator.sendBeacon(api.content, new Blob([JSON.stringify({ fn: 'track', args: [takeEvents()] })], { type: 'text/plain;charset=utf-8' })); } catch (e) { /* 無視 */ }
   });
 
@@ -847,7 +864,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         if (!r || !r.need) return r ? r.result : r;
         if (++rounds > 10) throw new Error('データの取得に失敗しました（' + name + '）');
         return Promise.all(r.need.map(function (u) {
-          return fetch(u).then(function (res) {
+          return xfetch(u).then(function (res) {
             if (res.status === 404) return null;
             if (!res.ok) throw new Error(res.status);
             return res.text();
@@ -860,6 +877,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   function rawRun(name) {
     var args = Array.prototype.slice.call(arguments, 1);
     if (window.google && google.script && google.script.run) {
+      countHost('https://script.google.com/');
       return new Promise(function (res, rej) {
         var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej);
         r[name].apply(r, args);
@@ -868,6 +886,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     // GitHub Pages など外部に置いたとき：Apps Script の doPost を呼ぶ（text/plain でプリフライトを避ける）
     var api = document.querySelector('meta[name="tide-api"]');
     if (api && api.content) {
+      countHost(api.content);
       return fetch(api.content, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: name, args: args }) })
         .then(function (r) { if (!r.ok) throw new Error('通信エラー ' + r.status); return r.json(); })
         .then(function (j) { if (j.error) throw new Error(j.error); return j.result; });
@@ -2069,7 +2088,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var jobs = [];
     // 推移・予報（30分ごと）
     if (force || !S.presFc || S.presFcKey !== key || Date.now() - S.presFcAt > 30 * MIN) {
-      jobs.push(fetch('https://api.open-meteo.com/v1/forecast?latitude=' + p.lat.toFixed(4) + '&longitude=' + p.lon.toFixed(4) +
+      jobs.push(xfetch('https://api.open-meteo.com/v1/forecast?latitude=' + p.lat.toFixed(4) + '&longitude=' + p.lon.toFixed(4) +
         '&hourly=pressure_msl&past_days=3&forecast_days=3&models=jma_seamless&timeformat=unixtime&timezone=GMT')
         .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) {
           var h = j.hourly || {};
@@ -2087,7 +2106,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         var d = jd(t), name = st.code + '/' + d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + '_' + pad(d.getUTCHours());
         var cur = t >= b0 - 3 * HOUR;   // 新しい2つは更新中の可能性
         if (PRES_BLOCKS[name] && !(cur && (force || now - PRES_BLOCKS[name].at > 9 * MIN))) return PRES_BLOCKS[name].pts;
-        return fetch('https://www.jma.go.jp/bosai/amedas/data/point/' + name + '.json').then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) {
+        return xfetch('https://www.jma.go.jp/bosai/amedas/data/point/' + name + '.json').then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) {
           var pts = Object.keys(j).map(function (k) {
             var v = j[k].normalPressure;
             var ms = Date.UTC(+k.slice(0, 4), +k.slice(4, 6) - 1, +k.slice(6, 8), +k.slice(8, 10), +k.slice(10, 12)) - JST;
@@ -2105,7 +2124,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   // 一番近い気圧観測地点（アメダス観測所一覧の8番目の印が気圧。山頂の富士山は除く）
   function presStation(p) {
     var tbl = S.amedasTbl ? Promise.resolve(S.amedasTbl) :
-      fetch('https://www.jma.go.jp/bosai/amedas/const/amedastable.json').then(function (r) { return r.json(); }).then(function (j) { S.amedasTbl = j; return j; });
+      xfetch('https://www.jma.go.jp/bosai/amedas/const/amedastable.json').then(function (r) { return r.json(); }).then(function (j) { S.amedasTbl = j; return j; });
     return tbl.then(function (j) {
       var best = null;
       Object.keys(j).forEach(function (code) {
@@ -2323,7 +2342,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (!force && S.sstKey === key && Date.now() - S.sstFetch < 30 * MIN) { renderSST(); return Promise.resolve(); }
     var url = 'https://marine-api.open-meteo.com/v1/marine?latitude=' + p.lat.toFixed(4) + '&longitude=' + p.lon.toFixed(4) +
       '&current=sea_surface_temperature&hourly=sea_surface_temperature&past_days=1&forecast_days=3&timeformat=unixtime&timezone=GMT';
-    return fetch(url).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) {
+    return xfetch(url).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) {
       var h = j.hourly || {}, pts = (h.time || []).map(function (t, i) { return [t * 1000, h.sea_surface_temperature[i]]; })
         .filter(function (x) { return x[1] != null; });
       S.sst = pts.length ? { pts: pts, lat: j.latitude, lon: j.longitude, cur: j.current && j.current.sea_surface_temperature,
@@ -2418,7 +2437,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var left = cx - W / 2, top = cy - H / 2, html = '';
     for (var tx = Math.floor(left / 256); tx <= Math.floor((left + W) / 256); tx++) {
       for (var ty = Math.floor(top / 256); ty <= Math.floor((top + H) / 256); ty++) {
-        html += '<img alt="" src="https://cyberjapandata.gsi.go.jp/xyz/pale/' + MAP_Z + '/' + tx + '/' + ty + '.png" style="left:' +
+        var tile = 'https://cyberjapandata.gsi.go.jp/xyz/pale/' + MAP_Z + '/' + tx + '/' + ty + '.png';
+        if (!TILE_SEEN[tile]) { TILE_SEEN[tile] = 1; countHost(tile); }   // 同じ画像は端末に残るので初回だけ数える
+        html += '<img alt="" src="' + tile + '" style="left:' +
           Math.round(tx * 256 - left) + 'px;top:' + Math.round(ty * 256 - top) + 'px">';
       }
     }
