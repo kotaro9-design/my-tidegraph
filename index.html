@@ -147,8 +147,8 @@ header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-to
 /* controls */
 .ctrl { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 8px; flex-wrap: wrap; }
 .daynav { display: flex; align-items: center; gap: 4px; }
-.daynav button { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
-.daynav .date { font-weight: 700; font-size: 16px; padding: 0 6px; white-space: nowrap; }
+.daynav button { width: 30px; height: 34px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+.daynav .date { font-weight: 700; font-size: 15px; padding: 0 4px; white-space: nowrap; }
 .seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 2px; }
 .seg button { border: 0; background: none; padding: 6px 9px; border-radius: 8px; font-size: 13px; color: var(--text-2); cursor: pointer; white-space: nowrap; }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
@@ -171,6 +171,7 @@ header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-to
 canvas { display: block; width: 100%; touch-action: pan-y; }
 #main { height: 270px; }
 #dev { height: 110px; }
+#rate { height: 120px; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 8px 2px; font-size: 12px; color: var(--text-2); }
 .legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
 .legend .dash { border-top-style: dashed; }
@@ -244,9 +245,14 @@ footer a { color: var(--text-2); }
 .cf-chips .del { border: 0; background: none; color: var(--text-3); font-size: 13px; padding: 4px 9px 4px 4px; cursor: pointer; }
 .catch-btn { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
 .catch-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.catch-btn.mini { width: auto; margin-left: auto; padding: 7px 10px; font-size: 13px; gap: 6px; }
+.catch-btn.mini { width: auto; margin-left: auto; padding: 7px 8px; font-size: 12.5px; gap: 5px; white-space: nowrap; }
 .catch-btn.mini svg { width: 16px; height: 16px; }
-.ctrl .seg { flex-basis: 100%; }
+.date-wrap { position: relative; display: flex; align-items: center; border-radius: 10px; }
+.date-ic { width: 14px; height: 14px; flex: none; margin-right: 4px; fill: none; stroke: var(--text-3); stroke-width: 2; stroke-linecap: round; }
+/* 見えない日付入力を日付の上に重ね、タップで端末のカレンダーを開く */
+#datePick { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; cursor: pointer; font-size: 16px; }
+.today-btn { margin-left: auto; height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--accent); background: var(--surface); color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.today-btn[hidden] { display: none; }
 .catch-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; margin-top: 4px; }
 #catchDlg { height: auto; max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .cf { display: flex; flex-direction: column; gap: 10px; padding: calc(12px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)); }
@@ -388,7 +394,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   <div class="ctrl">
     <div class="daynav">
       <button id="prevDay" aria-label="前日">&#8249;</button>
-      <div class="date num" id="dateLbl">--</div>
+      <div class="date-wrap">
+        <div class="date num" id="dateLbl">--</div>
+        <svg class="date-ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+        <input type="date" id="datePick" aria-label="日付をカレンダーから選ぶ">
+      </div>
       <button id="nextDay" aria-label="翌日">&#8250;</button>
     </div>
     <button class="catch-btn mini" id="catchBtn" aria-label="釣果をGoogleカレンダーに記録" title="釣果をGoogleカレンダーに記録">
@@ -403,6 +413,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <button data-v="h3" aria-pressed="false" title="前後3時間">±3h</button>
       <button data-v="h1" aria-pressed="false" title="前後1時間">±1h</button>
     </div>
+    <button class="today-btn" id="todayBtn" hidden>今日に戻る</button>
   </div>
 
   <div class="moon-row num" id="moonRow"></div>
@@ -429,6 +440,15 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <div class="chart-card">
       <div class="chart-title">潮位偏差（実測 − 推算） <span>cm</span></div>
       <canvas id="dev"></canvas>
+    </div>
+    <div class="gap"></div>
+    <div class="chart-card">
+      <div class="chart-title">変化量（上昇＋／下降−） <span>cm/時</span></div>
+      <canvas id="rate"></canvas>
+      <div class="legend">
+        <span><i style="border-color:var(--obs)"></i>実測潮位の変化</span>
+        <span id="rateRiverLeg" hidden><i style="border-color:var(--river)"></i>河川水位の変化</span>
+      </div>
     </div>
   </div>
 
@@ -635,7 +655,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <dt>点線の縦線と「上1・上3…／下1・下3…」</dt><dd>上げ・下げの1・3・5・7・9分の時刻です。</dd>
       <dt>月の出・南中・月の入り（紫の●）</dt><dd>グラフの下側に時刻と一緒に表示します。</dd>
     </dl>
-    <p>グラフを指でなぞると、その時刻の推算・実測・偏差が表示されます。下の「潮位偏差」グラフは実測と推算の差の推移です。グラフの上の行には、月齢・輝面（月の明るさ）・旧暦と、日の出・日の入り・薄明の時刻を表示します。</p>
+    <p>グラフを指でなぞると、その時刻の推算・実測・偏差が表示されます。下の「潮位偏差」グラフは実測と推算の差の推移、「変化量」グラフは実測潮位（オレンジ）と河川水位（緑）が1時間あたり何cm上がって（＋）／下がって（−）いるかです。グラフの上の行には、月齢・輝面（月の明るさ）・旧暦と、日の出・日の入り・薄明の時刻を表示します。</p>
 
     <h3 id="g-wind">風・水質</h3>
     <dl>
@@ -655,6 +675,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <h3 id="g-date">日付・表示範囲</h3>
     <ul>
       <li>日付の左右の ‹ › で前日・翌日に移動します。日付の横は潮名（大潮・小潮など）です。</li>
+      <li><b>日付をタップするとカレンダーが開き</b>、前後1年以内の好きな日に移動できます。</li>
+      <li>今日以外を表示しているときは<b>「今日に戻る」</b>ボタンで今日に戻れます。</li>
       <li>「3日・1日」は表示する日数、「±12h・±6h・±3h・±1h」は今の前後だけを拡大します（今日のみ）。</li>
     </ul>
 
@@ -721,9 +743,10 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.0.0', APP_DATE = '2026-10-18';
+  var APP_VERSION = '1.1.0', APP_DATE = '2026-10-18';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
+  var PICK_DAYS = 365;   // カレンダーで選べる範囲（今日の前後、サーバーの上限は400日）
 
   var S = {
     stations: [], st: null, data: null, pos: null,
@@ -1283,7 +1306,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var datumName = useTable() ? '潮位表基準面' : 'TP';
     var note = [];
     if (lo && now - lo.t < 12 * HOUR) {
-      var stale = now - lo.t > 40 * MIN;
+      // 更新停止の判定は今日を表示しているときだけ（別の日は、その日の範囲のデータしか読み込まないため）
+      var stale = !S.date && now - lo.t > 40 * MIN;
       $('curTide').innerHTML = fmtH(lo.tide) + unit;
       // 推算は観測と同じ時刻の値で比べる。現在時刻の値は「推算＋直近の偏差」で推定
       var a = S.curve(lo.t), an = S.curve(now), dn = depAt(now), nr = S.data.near;
@@ -1400,12 +1424,18 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var base = S.data ? S.data.base : midnight(ymd(Date.now()));
     var tn = tideName(base);
     $('dateLbl').innerHTML = mdw(base) + (tn.name ? '<span class="tag">' + tn.name + '</span>' : '');
+    var today0 = midnight(ymd(Date.now()));
+    $('datePick').value = ymd(base + HOUR);
+    $('datePick').min = ymd(today0 - PICK_DAYS * DAY + HOUR);
+    $('datePick').max = ymd(today0 + PICK_DAYS * DAY + HOUR);
+    $('todayBtn').hidden = !S.date || S.date === ymd(Date.now());
     renderSunTimes(base);
     $('moonRow').innerHTML = moonSvg(tn.age) + '<span>月齢 <b>' + tn.age.toFixed(1) + '</b>（' + moonPhaseName(tn.age) + '）</span><span>輝面 <b>' + Math.round(moonIllum(base + 12 * HOUR) * 100) + '</b>%</span><span>' + lunarText(tn.lunar) + '</span>';
     var isToday = !S.date || S.date === ymd(Date.now());
     Array.prototype.forEach.call($('viewSeg').children, function (b) {
       b.setAttribute('aria-pressed', String(b.dataset.v === effView()));
-      if (AROUND[b.dataset.v]) b.disabled = !isToday, b.style.opacity = isToday ? '' : '.4';
+      // 前後◯時間は今日だけ。今日以外では隠して「今日に戻る」を置く
+      if (AROUND[b.dataset.v]) { b.disabled = !isToday; b.hidden = !isToday; }
     });
     var hasTable = S.data && S.data.offset != null;
     Array.prototype.forEach.call($('datumSeg').children, function (b) {
@@ -1809,6 +1839,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     }
     var rh = riverOn() ? riverAt(t) : null;
     if (rh != null) rows += row('var(--river)', '河川', fmtH(rh) + ' cm');
+    var tr = tideRateAt(t), rr = riverRateOn() ? riverRateAt(t) : null;
+    if (tr != null) rows += row('var(--obs)', '潮位の変化', fmtRate(tr));
+    if (rr != null) rows += row('var(--river)', '河川の変化', fmtRate(rr));
     var p = phaseAt(t);
     if (p) rows += row(null, '潮', phaseText(p).replace(/<[^>]+>/g, ''));
     tip.innerHTML = rows;
@@ -1838,7 +1871,85 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (S.hover != null && ev.target.tagName !== 'CANVAS') { S.hover = null; drawCharts(); }
   });
 
-  function drawCharts() { drawMain(); drawDev(); }
+  /* ---------- 変化量（cm/時）：前後15分（計30分）の差から。河川は前後の観測値の差から ---------- */
+  var RATE_HALF = 15 * MIN;
+  function tideRateAt(t) {
+    var a = obsAt(t - RATE_HALF), b = obsAt(t + RATE_HALF);
+    if (!a || !b || a.tide == null || b.tide == null) return null;
+    return (b.tide - a.tide) / (2 * RATE_HALF) * HOUR;
+  }
+  function tideRatePts(t0, t1) {
+    var out = [], step = 5 * MIN;
+    for (var t = Math.ceil(t0 / step) * step; t <= t1; t += step) out.push([t, tideRateAt(t)]);
+    return out;
+  }
+  function riverRateOn() { return S.showRiver && S.river && !S.river.noData; }
+  function riverRatePts() {
+    var p = riverPts(), out = [];
+    for (var i = 1; i < p.length; i++) {
+      // 10分値は30分おき、毎時値は1時間おきの差（欠測で間が空いたところはつながない）
+      var j = i, gap = p[i][0] - p[i - 1][0];
+      if (gap <= 10 * MIN) { j = i; while (j > 0 && p[i][0] - p[j - 1][0] <= 30 * MIN) j--; if (j === i) continue; }
+      else if (gap <= 70 * MIN) j = i - 1;
+      else { out.push([p[i][0] - gap / 2, null]); continue; }
+      var dt = p[i][0] - p[j][0];
+      out.push([p[j][0] + dt / 2, (p[i][1] - p[j][1]) / dt * HOUR]);
+    }
+    return out;
+  }
+  function riverRateAt(t) {
+    var best = null, bd = 20 * MIN;
+    riverRatePts().forEach(function (p) { var d = Math.abs(p[0] - t); if (d < bd && p[1] != null) { bd = d; best = p[1]; } });
+    return best;
+  }
+  function drawRate() {
+    var cv = $('rate'), c = setupCanvas(cv), g = c.g, W = c.w, H = c.h;
+    if (!S.data) return;
+    var r = range(), t0 = r[0], t1 = r[1];
+    var top = 10, bottom = H - 22, mx = 10;
+    var tp = tideRatePts(t0, t1);
+    var rv = riverRateOn() ? riverRatePts().filter(function (p) { return p[0] >= t0 && p[0] <= t1; }) : [];
+    $('rateRiverLeg').hidden = !rv.some(function (p) { return p[1] != null; });
+    tp.concat(rv).forEach(function (p) { if (p[1] != null) mx = Math.max(mx, Math.abs(p[1])); });
+    var ys = niceStep(mx * 2, 3); mx = Math.ceil(mx / ys) * ys;
+    var X = function (t) { return PADL + (t - t0) / (t1 - t0) * (W - PADL - PADR); };
+    var Y = function (v) { return top + (mx - v) / (2 * mx) * (bottom - top); };
+    var cGrid = css('--grid'), cText2 = css('--text-2'), cText3 = css('--text-3');
+    g.font = '11px ' + css('--font');
+    g.textAlign = 'right'; g.textBaseline = 'middle';
+    for (var v = -mx; v <= mx + 1e-6; v += ys) {
+      g.strokeStyle = v === 0 ? cText3 : cGrid; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(PADL, Math.round(Y(v)) + .5); g.lineTo(W - PADR, Math.round(Y(v)) + .5); g.stroke();
+      g.fillStyle = cText3; g.fillText((v > 0 ? '+' : '') + Math.round(v), PADL - 6, Y(v));
+    }
+    drawNight(g, t0, t1, X, top, bottom);
+    drawXAxis(g, t0, t1, X, top, bottom, cGrid, cText3, cText2);
+    var line = function (pts, color) {
+      g.strokeStyle = color; g.lineWidth = 2; g.lineJoin = 'round';
+      g.beginPath();
+      var pen = false;
+      pts.forEach(function (p) {
+        if (p[1] == null) { pen = false; return; }
+        if (!pen) { g.moveTo(X(p[0]), Y(p[1])); pen = true; } else g.lineTo(X(p[0]), Y(p[1]));
+      });
+      g.stroke();
+    };
+    line(rv, css('--river'));
+    line(tp, css('--obs'));
+    var now = Date.now();
+    if (now > t0 && now < t1) {
+      g.strokeStyle = cText2; g.setLineDash([3, 3]);
+      g.beginPath(); g.moveTo(Math.round(X(now)) + .5, top); g.lineTo(Math.round(X(now)) + .5, bottom); g.stroke();
+      g.setLineDash([]);
+    }
+    if (S.hover != null && S.hover >= t0 && S.hover <= t1) {
+      g.strokeStyle = cText2; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(Math.round(X(S.hover)) + .5, top); g.lineTo(Math.round(X(S.hover)) + .5, bottom); g.stroke();
+    }
+  }
+  function fmtRate(v) { if (v == null) return '--'; var r = Math.round(v); return (r > 0 ? '+' : r < 0 ? '−' : '±') + Math.abs(r) + ' cm/時'; }
+
+  function drawCharts() { drawMain(); drawDev(); drawRate(); }
   function renderAll() {
     if (!S.data) return;
     renderHeader(); renderControls(); renderHero(); renderTable(); renderRiver(); drawCharts();
@@ -2501,6 +2612,16 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   $('refBtn').onclick = function () { refresh(); };
   $('prevDay').onclick = function () { shiftDay(-1); };
   $('nextDay').onclick = function () { shiftDay(1); };
+  function goDate(nd) {
+    if (!nd) return;
+    S.date = nd === ymd(Date.now()) ? null : nd;
+    S.hover = null;
+    refresh();
+  }
+  $('datePick').onchange = function () { if (this.value) goDate(this.value); };
+  // パソコンのブラウザでは入力欄を押しただけでは開かないので、カレンダーを開く
+  $('datePick').addEventListener('click', function () { try { if (this.showPicker) this.showPicker(); } catch (e) { /* 開いている・未対応 */ } });
+  $('todayBtn').onclick = function () { goDate(ymd(Date.now())); };
   function shiftDay(n) {
     var base = S.data ? S.data.base : midnight(ymd(Date.now()));
     var nd = ymd(base + n * DAY + HOUR);
@@ -2542,6 +2663,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   };
   bindHover($('main'));
   bindHover($('dev'));
+  bindHover($('rate'));
   var rt;
   window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { drawCharts(); renderWind(); }, 100); });
   if (window.matchMedia) {
