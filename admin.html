@@ -69,6 +69,7 @@ table.sites td small { display: block; color: var(--text-3); font-size: 11px; }
 table.sites .bar { width: 30%; }
 table.sites .bar i { display: block; height: 8px; background: var(--bar); border-radius: 0 3px 3px 0; min-width: 2px; }
 .sites-wrap { overflow-x: auto; }
+table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
 #tip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); display: none; z-index: 9; white-space: nowrap; }
 .msg { color: var(--crit); font-size: 13px; margin: 8px 0; }
 .note { font-size: 11px; color: var(--text-3); line-height: 1.6; margin-top: 14px; }
@@ -102,8 +103,8 @@ table.sites .bar i { display: block; height: 8px; background: var(--bar); border
     <div class="card"><h2>よく使われる潮位観測所 <span>回</span></h2><div id="tStations"></div></div>
     <div class="card"><h2>よく使われる地域（約10km） <span>回</span></h2><div id="tAreas"></div></div>
     <div class="card"><h2>機能の利用 <span>回</span></h2><div id="tFeatures"></div></div>
-    <div class="card"><h2>エラー <span>件</span></h2><div id="tErrors"></div></div>
   </div>
+  <div class="card"><h2>エラー <span>件</span></h2><div id="tErrors"></div></div>
   <div class="card"><h2>外部サイトへのアクセス（期間合計） <span>回</span></h2><div id="tSites"></div></div>
   <div class="grid2">
     <div class="card"><h2>流入元（どこから開いたか） <span>回</span></h2><div id="tRefs"></div></div>
@@ -111,6 +112,7 @@ table.sites .bar i { display: block; height: 8px; background: var(--bar); border
   <p class="note">
     データは1時間ごとにスプレッドシートへ集計されます（今の1時間の分も含めて表示）。利用者数は端末ごとの匿名IDの数です（ブラウザのデータを消すと別の人として数えます）。
     地域は約10km単位に丸めた位置で、名前は国土地理院の逆ジオコーダで求めた目安です。
+    エラーの「画面」は利用者の端末でデータを受け取れなかった回数（通信の切れ目なども含む）、「サーバー」は Apps Script での処理の失敗です。
     外部サイトの「サーバーから」は Apps Script の URL Fetch（1日の上限に数える）、「ブラウザから」は利用者の端末からの取得です（上限には数えない。地図タイルは端末ごとに初回のみ数える）。
     流入元はページを開いたときの直前のページのサイト名です。X や LINE のアプリ内から開いた場合は「直接」になることがあります。リンクに ?from=名前 を付けると、その名前で数えます。
   </p>
@@ -248,6 +250,21 @@ table.sites .bar i { display: block; height: 8px; background: var(--bar); border
       return '<div class="hbar"><span class="n" title="' + esc(name(r[0])) + '" data-k="' + esc(r[0]) + '">' + esc(name(r[0])) + '</span><span class="t"><i style="width:' + (r[1] / top * 100).toFixed(1) + '%"></i></span><span class="c">' + n(r[1]) + '</span></div>';
     }).join('');
   }
+  // エラー：種類（画面／サーバー）・内容・件数。内容は折り返して全文を出す
+  var ERRS = {
+    getTideData: '潮位データの取得', getStations: '潮位観測所の一覧', getWeather: '天気・気温', getWind: '風の推移・予報',
+    getRiver: '河川水位', getRiverStations: '河川の水位観測所の一覧', getWaterQuality: '水質'
+  };
+  function errorsTable(el, er) {
+    var rows = Object.keys(er).map(function (k) { var i = k.indexOf(':'); return [k.slice(0, i), k.slice(i + 1), er[k]]; })
+      .sort(function (a, b) { return b[2] - a[2]; });
+    if (!rows.length) { el.innerHTML = '<div class="empty">エラーはありません</div>'; return; }
+    el.innerHTML = '<div class="sites-wrap"><table class="sites errs"><thead><tr><th>内容</th><th>種類</th><th>件数</th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr><td>' + esc(ERRS[r[1]] ? ERRS[r[1]] + 'に失敗' : r[1]) + '<small>' + esc(r[1]) + '</small></td><td>' +
+          (r[0] === 'server' ? 'サーバー' : r[0] === 'client' ? '画面' : esc(r[0])) + '</td><td>' + n(r[2]) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
   // 外部サイトごと：サーバーから（URL Fetch の上限に数える）とブラウザから（上限には数えない）
   function sitesTable(el, si) {
     var rows = Object.keys(si).map(function (k) { return [k, si[k].sv, si[k].cl]; })
@@ -289,7 +306,7 @@ table.sites .bar i { display: block; height: 8px; background: var(--bar); border
     hlist($('tFeatures'), A.fe, function (k) { return FEATURES[k] || k; }, 30);
     sitesTable($('tSites'), A.si);
     hlist($('tRefs'), A.rf, refName, 15);
-    hlist($('tErrors'), A.er, function (k) { return k.replace(/^client:/, '画面：').replace(/^server:/, 'サーバー：'); }, 20);
+    errorsTable($('tErrors'), A.er);
     var d = new Date(D.now + 9 * 3600e3);
     $('upd').textContent = '直近' + DAYS + '日（' + D.since + '〜）・' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' 時点';
     $('sheetLink').href = D.sheetUrl; $('sheetLink').hidden = false;
