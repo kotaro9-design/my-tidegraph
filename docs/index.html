@@ -688,6 +688,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <li>日付の左右の ‹ › で前日・翌日に移動します。日付の横は潮名（大潮・小潮など）です。</li>
       <li><b>日付をタップするとカレンダーが開き</b>、前後1年以内の好きな日に移動できます。</li>
       <li>今日以外を表示しているときは<b>「今日に戻る」</b>ボタンで今日に戻れます。</li>
+      <li>別の日を表示していても、画面上部のカード（潮の動き・観測潮位・潮位偏差・次の満潮／干潮）は<b>今日（現在）の値</b>です。</li>
       <li>「3日・1日」は表示する日数、「±12h・±6h・±3h・±1h」は今の前後だけを拡大します（今日のみ）。</li>
     </ul>
 
@@ -754,7 +755,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.1.0', APP_DATE = '2026-10-18';
+  var APP_VERSION = '1.1.1', APP_DATE = '2026-10-18';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var PICK_DAYS = 365;   // カレンダーで選べる範囲（今日の前後、サーバーの上限は400日）
@@ -1299,7 +1300,41 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   }
   function fmtKm(d) { return d < 10 ? d.toFixed(1) + ' km' : Math.round(d) + ' km'; }
 
+  // 上部のカード（潮の動き・観測潮位・偏差・次の満干潮）は、表示中の日付にかかわらず今日の現在の値を出す。
+  // 別の日を表示しているときは、手元に残した今日のデータ（S.today）に一時的に切り替えて描く
+  function todayFresh() { var t = S.today; return !!(t && S.st && t.code === S.st.c && Date.now() - t.at < REFRESH_MS + 2 * MIN); }
   function renderHero() {
+    if (!S.date) return renderHeroNow();
+    if (!S.today || !S.st || S.today.code !== S.st.c) return renderHeroEmpty();
+    var keep = { data: S.data, curve: S.curve, ext: S.ext, rtFrom: S.rtFrom, date: S.date };
+    S.data = S.today.data; S.curve = S.today.curve; S.ext = S.today.ext; S.rtFrom = S.today.rtFrom; S.date = null;
+    try { renderHeroNow(); } finally { S.data = keep.data; S.curve = keep.curve; S.ext = keep.ext; S.rtFrom = keep.rtFrom; S.date = keep.date; }
+    $('tideNote').insertAdjacentHTML('afterbegin', '<b>上のカードは今日（現在）の値です。</b> ');
+  }
+  function renderHeroEmpty() {
+    $('phaseBig').innerHTML = '--';
+    $('gaugeBar').style.width = '0'; $('gaugeL').textContent = ''; $('gaugeR').textContent = ''; $('phaseSub').textContent = '';
+    ['curTide', 'curDev', 'next1', 'next2'].forEach(function (id) { $(id).textContent = '--'; });
+    ['curTideSub', 'curDevSub', 'next1Sub', 'next2Sub'].forEach(function (id) { $(id).textContent = ''; });
+    $('tideNote').textContent = '今日（現在）の潮位を読み込み中…';
+  }
+  // 今日のデータを、表示中のデータと別に組み立てて残す
+  function makeToday(d, code) {
+    var m = buildModel(d), keep = { curve: S.curve, rtFrom: S.rtFrom };
+    S.curve = m.curve; mergeRt(d);
+    var t = { code: code, data: d, curve: m.curve, ext: m.ext, rtFrom: S.rtFrom, at: Date.now() };
+    S.curve = keep.curve; S.rtFrom = keep.rtFrom;
+    return t;
+  }
+  function loadToday() {
+    var code = S.st && S.st.c;
+    if (!code || !S.date || todayFresh() || S.todayLoading === code) return;
+    S.todayLoading = code;
+    run('getTideData', code, null).then(function (d) {
+      if (S.st && S.st.c === code) { S.today = makeToday(d, code); if (S.data) renderHero(); }
+    }).catch(function () { /* 次の更新で再度 */ }).then(function () { if (S.todayLoading === code) S.todayLoading = null; });
+  }
+  function renderHeroNow() {
     var d = S.data, now = Date.now();
     var p = phaseAt(now);
     $('phaseBig').innerHTML = phaseText(p);
@@ -1964,7 +1999,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   function renderAll() {
     if (!S.data) return;
     renderHeader(); renderControls(); renderHero(); renderTable(); renderRiver(); drawCharts();
-    $('updLbl').textContent = '最終取得 ' + hm(S.lastFetch) + (latestObs() ? ' · 最新の潮位観測 ' + mdw(latestObs().t) + ' ' + hm(latestObs().t) : '');
+    var lo = S.date ? (S.today && S.today.code === S.st.c ? (function () { var k = S.data; S.data = S.today.data; try { return latestObs(); } finally { S.data = k; } })() : null) : latestObs();
+    $('updLbl').textContent = '最終取得 ' + hm(S.lastFetch) + (lo ? ' · 最新の潮位観測 ' + mdw(lo.t) + ' ' + hm(lo.t) : '');
   }
 
   /* ---------- data loading ---------- */
@@ -1988,12 +2024,14 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     loadRiver();
     loadWind(!silent && !S.date);
     loadWQ();
+    loadToday();
     return run('getTideData', code, S.date).then(function (d) {
       if (!S.st || S.st.c !== code) return;
       S.data = d;
       var m = buildModel(d);
       S.curve = m.curve; S.ext = m.ext;
       mergeRt(d);
+      if (!S.date) S.today = { code: code, data: d, curve: S.curve, ext: S.ext, rtFrom: S.rtFrom, at: Date.now() };
       S.lastFetch = Date.now();
       notice(S.st.miss ? 'この潮位観測所は現在欠測中の可能性があります。' : '');
       renderAll();
@@ -2685,7 +2723,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   setInterval(function () {
     if (S.loading || document.hidden) return;
     if (!S.date && Date.now() - S.lastFetch >= REFRESH_MS - 5000) refresh(true);
-    else if (S.data) { renderHero(); drawCharts(); renderWind(); }
+    else if (S.data) { loadToday(); renderHero(); drawCharts(); renderWind(); }
   }, 60e3);
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden && !S.date && Date.now() - S.lastFetch > 2 * MIN) refresh(true);
