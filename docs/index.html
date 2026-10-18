@@ -130,8 +130,9 @@ header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-to
 /* weather / wind / sun */
 .wx-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .wx-row img { width: 44px; height: 44px; flex: none; }
-.wx-text { font-size: 15px; font-weight: 700; line-height: 1.3; margin-top: 2px; }
-.wx-temp { font-size: 28px; font-weight: 700; white-space: nowrap; line-height: 1.15; }
+.wx-main { min-width: 0; text-align: right; }
+.wx-text { font-size: 14px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.wx-temp { font-size: 26px; font-weight: 700; white-space: nowrap; line-height: 1.1; }
 .wx-temp small { font-size: 14px; font-weight: 500; color: var(--text-2); }
 .wx-tmr, .fc-wind { border-top: 1px solid var(--border); padding-top: 6px; margin-top: 6px !important; line-height: 1.5; }
 .wx-tmr b, .fc-wind b { font-weight: 600; color: var(--text); margin-right: 4px; }
@@ -145,6 +146,10 @@ header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-to
 .quad .tag { margin: 2px 0 0; vertical-align: 0; font-size: 10px; padding: 0 4px; }
 .quad-note { grid-column: 1 / -1; font-size: 11px; color: var(--text-2); padding: 0 4px; line-height: 1.5; }
 .wind-row { display: flex; align-items: center; gap: 8px; }
+.wind-row .val { white-space: nowrap; }
+.wind-info { min-width: 0; margin-left: 6px; }
+.wind-info .sub { margin-top: 0; line-height: 1.45; }
+.fc-wind div { display: inline; margin-right: 12px; }
 .wind-arrow { width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; }
 .wind-arrow svg { width: 22px; height: 22px; fill: var(--text); transition: transform .3s; }
 .wx-cards { grid-template-columns: 1fr; }
@@ -191,10 +196,10 @@ canvas { display: block; width: 100%; touch-action: pan-y; }
 
 /* tide table */
 .tt { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
-.tt .card { padding: 10px; text-align: center; }
-.tt .k { font-size: 12px; color: var(--text-2); }
+.tt .card { padding: 7px 4px; text-align: center; }
+.tt .k { font-size: 11px; color: var(--text-2); white-space: nowrap; }
 .tt .t { font-size: 20px; font-weight: 700; }
-.tt .h { font-size: 12px; color: var(--text-2); }
+.tt .h { color: var(--text); font-weight: 600; }
 .tt .card.past { opacity: .5; }
 .tt .card.empty { color: var(--text-3); display: grid; place-items: center; }
 
@@ -205,6 +210,8 @@ footer a { color: var(--text-2); }
 .brand .by { font-weight: 400; font-size: 12px; color: var(--text-3); margin-left: 4px; }
 .brand .by a { color: var(--accent); text-decoration: none; }
 .river-sel { flex: 1; min-width: 0; max-width: 100%; font: inherit; font-size: 14px; padding: 7px 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.settings { margin: 14px 0 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.settings-h { font-size: 12px; font-weight: 600; color: var(--text-2); }
 .foot-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 8px 0; color: var(--text-2); font-size: 12px; }
 
 .notice { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--text-2); margin: 8px 0; display: none; }
@@ -248,6 +255,9 @@ footer a { color: var(--text-2); }
 .cf-chips .del { border: 0; background: none; color: var(--text-3); font-size: 13px; padding: 4px 9px 4px 4px; cursor: pointer; }
 .catch-btn { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 11px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; }
 .catch-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.catch-btn.mini { width: auto; margin-left: auto; padding: 7px 10px; font-size: 13px; gap: 6px; }
+.catch-btn.mini svg { width: 16px; height: 16px; }
+.ctrl .seg { flex-basis: 100%; }
 .catch-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; margin-top: 4px; }
 #catchDlg { height: auto; max-height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .cf { display: flex; flex-direction: column; gap: 10px; padding: calc(12px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom)); }
@@ -329,9 +339,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div class="lbl" id="wxLbl">天気</div>
       <div class="wx-row">
         <img id="wxIcon" alt="" hidden>
-        <div class="wx-temp num" id="wxTemp"></div>
+        <div class="wx-main">
+          <div class="wx-temp num" id="wxTemp"></div>
+          <div class="wx-text" id="wxText">--</div>
+        </div>
       </div>
-      <div class="wx-text" id="wxText">--</div>
       <div class="sub num" id="wxSub">&nbsp;</div>
       <div class="sub wx-tmr" id="wxTmr" hidden></div>
     </div>
@@ -358,10 +370,6 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       </div>
       <div class="quad-note num" id="tideNote">&nbsp;</div>
     </div>
-    <button class="catch-btn" id="catchBtn">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg>
-      釣果をGoogleカレンダーに記録
-    </button>
   </section>
 
   <div class="ctrl">
@@ -370,6 +378,10 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div class="date num" id="dateLbl">--</div>
       <button id="nextDay" aria-label="翌日">&#8250;</button>
     </div>
+    <button class="catch-btn mini" id="catchBtn" aria-label="釣果をGoogleカレンダーに記録" title="釣果をGoogleカレンダーに記録">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg>
+      釣果を記録
+    </button>
     <div class="seg" id="viewSeg" role="group" aria-label="表示範囲">
       <button data-v="3d" aria-pressed="false">3日</button>
       <button data-v="day" aria-pressed="true">1日</button>
@@ -409,25 +421,6 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
   <section class="tt" id="tt"></section>
 
-  <div class="foot-row">
-    <span>高さの基準</span>
-    <div class="seg" id="datumSeg" role="group" aria-label="高さの基準">
-      <button data-d="table" aria-pressed="true">潮位表基準面</button>
-      <button data-d="tp" aria-pressed="false" title="東京湾平均海面">TP</button>
-    </div>
-  </div>
-
-  <div class="foot-row">
-    <span>河川水位の重ね表示</span>
-    <div class="seg" id="riverSeg" role="group" aria-label="河川水位の重ね表示">
-      <button data-r="1" aria-pressed="true">表示</button>
-      <button data-r="0" aria-pressed="false">非表示</button>
-    </div>
-  </div>
-  <div class="foot-row" id="riverSelRow" hidden>
-    <span>河川の水位観測所</span>
-    <select id="riverSel" class="river-sel" aria-label="河川の水位観測所"></select>
-  </div>
 
   <section class="hero wx-cards">
     <div class="card" id="wqCard" hidden>
@@ -450,12 +443,37 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div class="wind-row">
         <div class="wind-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" id="windArrow"><path d="M12 2l6 9h-4v11h-4V11H6z"/></svg></div>
         <div class="val num" id="windSpd">--</div>
+        <div class="wind-info">
+          <div class="sub" id="windDir">&nbsp;</div>
+          <div class="sub num" id="windGust">&nbsp;</div>
+        </div>
       </div>
-      <div class="sub" id="windDir">&nbsp;</div>
-      <div class="sub num" id="windGust">&nbsp;</div>
       <div class="sub fc-wind" id="fcWind" hidden></div>
     </div>
     <div class="wx-src" id="wxSrc">&nbsp;</div>
+  </section>
+
+  <section class="settings" aria-label="表示の設定">
+    <div class="settings-h">表示の設定</div>
+    <div class="foot-row">
+      <span>高さの基準</span>
+      <div class="seg" id="datumSeg" role="group" aria-label="高さの基準">
+        <button data-d="table" aria-pressed="true">潮位表基準面</button>
+        <button data-d="tp" aria-pressed="false" title="東京湾平均海面">TP</button>
+      </div>
+    </div>
+
+    <div class="foot-row">
+      <span>河川水位の重ね表示</span>
+      <div class="seg" id="riverSeg" role="group" aria-label="河川水位の重ね表示">
+        <button data-r="1" aria-pressed="true">表示</button>
+        <button data-r="0" aria-pressed="false">非表示</button>
+      </div>
+    </div>
+    <div class="foot-row" id="riverSelRow" hidden>
+      <span>河川の水位観測所</span>
+      <select id="riverSel" class="river-sel" aria-label="河川の水位観測所"></select>
+    </div>
   </section>
 
   <footer>
@@ -1271,8 +1289,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       for (var i = 0; i < 2; i++) {
         var e = g[1][i];
         if (!e) { html += '<div class="card empty"><div class="k">' + g[0] + '</div><div class="t">—</div></div>'; continue; }
-        html += '<div class="card' + (e.t < now ? ' past' : '') + '"><div class="k">' + g[0] + '</div><div class="t num">' + hm(e.t) +
-          '</div><div class="h num">' + fmtH(e.h) + ' cm</div></div>';
+        html += '<div class="card' + (e.t < now ? ' past' : '') + '"><div class="k">' + g[0] + ' <span class="h num">' + fmtH(e.h) + 'cm</span></div><div class="t num">' + hm(e.t) +
+          '</div></div>';
       }
     });
     $('tt').innerHTML = html;
