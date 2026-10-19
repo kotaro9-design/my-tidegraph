@@ -552,10 +552,10 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     潮位：気象庁「<a href="https://www.jma.go.jp/bosai/map.html#contents=tidelevel" target="_blank" rel="noopener">潮位観測情報</a>」（気象庁・国土交通省港湾局・海上保安庁・国土地理院 等の潮位観測所＝検潮所）、
     気象庁「<a href="https://www.data.jma.go.jp/kaiyou/db/tide/suisan/" target="_blank" rel="noopener">潮位表</a>」。
     天気・風：気象庁「<a href="https://www.jma.go.jp/bosai/forecast/" target="_blank" rel="noopener">天気予報</a>」「<a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" rel="noopener">アメダス</a>」（気象の観測所）、地域の判定に国土地理院「逆ジオコーダ」を利用。
-    河川水位：国土交通省「<a href="https://www.river.go.jp/" target="_blank" rel="noopener">川の防災情報</a>」（現在地から一番近い河川の水位観測所。位置が取れない場合は表示中の潮位観測所の位置から。T.P.基準）。水質（水温・塩分濃度）：同「川の防災情報」の水質観測所（水位観測所とは別の観測所。10km以内にある場合のみ表示）。
+    河川水位・水質：出典：国土交通省 <a href="https://www.river.go.jp/" target="_blank" rel="noopener">川の防災情報ホームページ</a>（https://www.river.go.jp/）を加工して作成（観測値をグラフ化し、潮位と重ねて表示）。河川水位は現在地から一番近い河川の水位観測所（位置が取れない場合は表示中の潮位観測所の位置から。T.P.基準）、水質（水温・塩分濃度）は水質観測所（水位観測所とは別の観測所。10km以内にある場合のみ表示）。観測直後の値のため、機器の故障などによる異常値が含まれることがあります。
     風の予報：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁 MSM/GSM モデル、CC BY 4.0）。海面水温：Open-Meteo Marine（解析・予報モデルによる推定値、CC BY 4.0）。気圧：気象庁「アメダス」（気象台などの海面気圧）、Open-Meteo（気象庁モデル）。地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>。
     日の出・日の入り・薄明（常用薄明＝太陽高度−6°、天文薄明＝−18°）は計算値（誤差1〜2分程度）。「薄明」の2つの時刻は、朝は天文薄明・常用薄明、夕は常用薄明・天文薄明の順です。
-    実測値は速報値です。気象庁の公開は15〜20分程度遅れるため、直近分は海上保安庁「<a href="https://www1.kaiho.mlit.go.jp/KAN2/tide/realtime/realtime.html" target="_blank" rel="noopener">リアルタイム験潮データ</a>」（5分毎・暫定値）で補っています（同じ潮位観測所が無い場合は近くの潮位観測所の偏差を利用）。
+    実測値は速報値です。気象庁の公開は15〜20分程度遅れるため、直近分は海上保安庁の速報（5分毎・暫定値）で補っています（同じ潮位観測所が無い場合は近くの潮位観測所の偏差を利用）。出典：「リアルタイム験潮データ」（海上保安庁）（<a href="https://www1.kaiho.mlit.go.jp/KAN2/tide/realtime/realtime.html" target="_blank" rel="noopener">https://www1.kaiho.mlit.go.jp/KAN2/tide/realtime/realtime.html</a>）を加工して作成（潮位の基準面の換算、気象庁の観測値とのつなぎ合わせ）。
     「上げ◯分／下げ◯分」は直前の干潮（満潮）から次の満潮（干潮）までを10等分した経過の目安です。月齢・月輝面（正午）、月の出・南中・月の入り、旧暦は天文計算による値で、潮名は旧暦の日付から求めています。
   </footer>
 </main>
@@ -780,9 +780,10 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.9.0', APP_DATE = '2026-10-20';
+  var APP_VERSION = '1.9.1', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
+  var RIVER_REFRESH_MS = 10 * MIN;
   // 中継（Cloudflare Workers）：ブラウザから直接取れないデータ元（川の防災情報・海上保安庁）を取ってくる
   var PROXY = 'https://tide-proxy.kotaro9.workers.dev/';
   var PROXY_HOSTS = ['www.river.go.jp', 'www1.kaiho.mlit.go.jp'];
@@ -1249,7 +1250,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (!p || !S.showRiver) { renderRiver(); return Promise.resolve(); }
     var key = p.lat.toFixed(3) + ',' + p.lon.toFixed(3) + '|' + S.riverFcd;
     renderRiverSel();
-    if (S.riverFor === key && Date.now() - S.riverFetch < REFRESH_MS - 5000) { renderRiver(); return Promise.resolve(); }
+    // 河川水位は10分ごとのデータなので、取り直しも10分に1回（川の防災情報への負担を減らす）
+    if (S.riverFor === key && Date.now() - S.riverFetch < RIVER_REFRESH_MS - 5000) { renderRiver(); return Promise.resolve(); }
     return run('getRiver', p.lat, p.lon, S.riverFcd || null).then(function (r) {
       var q = here();
       if (!q || q.lat.toFixed(3) + ',' + q.lon.toFixed(3) + '|' + S.riverFcd !== key) return;

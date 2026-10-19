@@ -10,15 +10,16 @@
  * - 呼び出せるのはこのアプリの画面だけ（Origin で確認）
  * - 中継したデータには署名（x-sig）を付ける。Apps Script は同じ合言葉（SECRET）で確かめてから共有キャッシュに入れる
  * - Cloudflare のキャッシュに置き、相手サイトへのアクセスを減らす
+ *   （川の防災情報は「ツール等による定期的なデータ収集は控える」よう求めているため、データの更新間隔に合わせて長めに置く）
  *
  * 設定：Workers の「設定 → 変数とシークレット」に、シークレット SECRET（Apps Script のスクリプト プロパティ PROXY_SECRET と同じ値）
  */
 
 // 中継してよい URL と、Cloudflare に置いておく秒数
 const ALLOW = [
-  { re: /^https:\/\/www\.river\.go\.jp\/kawabou\/file\/system\/tmCrntTime\.json$/, ttl: 120 },       // 河川：最新の観測時刻
-  { re: /^https:\/\/www\.river\.go\.jp\/kawabou\/file\/files\/tmlist\//, ttl: 300 },                  // 河川・水質：推移（10分ごと・1時間ごと）
-  { re: /^https:\/\/www\.river\.go\.jp\/kawabou\/file\/files\/obslist\//, ttl: 600 },                 // 観測所の一覧・最新値
+  { re: /^https:\/\/www\.river\.go\.jp\/kawabou\/file\/system\/tmCrntTime\.json$/, ttl: 300 },       // 河川：最新の観測時刻
+  { re: /^https:\/\/www\.river\.go\.jp\/kawabou\/file\/files\/tmlist\//, ttl: 600 },                  // 河川・水質：推移（10分ごと・1時間ごと）
+  { re: /^https:\/\/www\.river\.go\.jp\/kawabou\/file\/files\/obslist\//, ttl: 1800 },                // 観測所の一覧・最新値
   { re: /^https:\/\/www\.river\.go\.jp\/kawabou\/file\/files\/master\//, ttl: 21600 },                // 観測所の情報
   { re: /^https:\/\/www\.river\.go\.jp\/kawabou\/file\/files\/map\//, ttl: 86400 },                   // 市区町村の一覧
   { re: /^https:\/\/www\.river\.go\.jp\/kawabou\/file\/gjson\/obs\//, ttl: 21600 },                   // 市区町村ごとの観測所
