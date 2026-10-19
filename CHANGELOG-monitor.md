@@ -4,6 +4,10 @@
 「monitor v大きな変更.機能追加.修正」でバージョンを付けます。管理画面の見出しに表示しているのは `Monitor.gs` の `MONITOR_VERSION` / `MONITOR_DATE` です。
 GitHub のタグは `monitor-vX.Y.Z` です。本体の更新履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
+## monitor v1.5.1（2026/10/20）— 本体 v2.0.1
+- データの異常に「古い画面からの河川・海保の取得を止めた」
+- 要約の不具合（MIN 未定義）を修正
+
 ## monitor v1.5.0（2026/10/20）— 本体 v2.0.0
 - 要約をデータ（?admin=…&format=json）と文章（&format=text）で返す出口を追加。スクリーンショットなしで状況を読める（日数は &days=1〜90）
 - 管理画面に「要約をコピー」ボタン

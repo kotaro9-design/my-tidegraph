@@ -12,7 +12,7 @@
  */
 
 // 利用状況アプリ（Monitor.gs と admin.html）のバージョン。更新したら CHANGELOG-monitor.md にも書き、monitor-vX.Y.Z のタグを付ける
-var MONITOR_VERSION = '1.5.0', MONITOR_DATE = '2026-10-20';
+var MONITOR_VERSION = '1.5.1', MONITOR_DATE = '2026-10-20';
 
 var MON_SHEETS = {
   hourly: ['日時', '表示回数', '利用者数', 'URL Fetch回数', '上限超え', 'サーバーエラー', '画面エラー', '使用中（5分単位）'],

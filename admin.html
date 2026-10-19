@@ -369,6 +369,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     if (m) return '潮位の更新停止：' + (D.stationNames[m[1]] || m[1]);
     if (k === 'urlfetch_quota') return 'Google の URL Fetch の上限に到達（非常時モード）';
     if (k === 'river_paused') return '上限の手前で河川・水質を一時停止';
+    if (k === 'old_client_blocked') return '古い画面からの河川・海保の取得を止めた';
     m = /^river_nodata:(\d+)$/.exec(k);
     if (m) return '河川水位の欠測：観測所 ' + m[1];
     return k;

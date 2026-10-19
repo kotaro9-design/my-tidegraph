@@ -1164,6 +1164,14 @@ function fetchAll_(urls, allow404) {
     server.push(i);
   });
   if (need.length) throw needError_(need);
+  // 中継に対応していない古い画面からの呼び出しでは、川の防災情報・海上保安庁をサーバーで取りに行かない
+  // （Google の URL Fetch の上限を使い切る主な原因だったため。新しい画面は中継経由で取る）
+  if (PRE && !PROXY_ON && server.some(function (i) { var m = /^https:\/\/([^\/]+)\//.exec(urls[i]); return m && PROXY_HOSTS.indexOf(m[1]) >= 0; })) {
+    monQuality_('old_client_blocked');
+    var oe = new Error('古い画面のため、河川水位・海上保安庁の速報を表示できません。ページを再読み込みしてください。');
+    oe.paused = true;
+    throw oe;
+  }
   if (server.length) {
     spendFetch_(server.length, fallback, server.every(function (i) { return /^https:\/\/www\.river\.go\.jp\//.test(urls[i]); }));
     server.forEach(function (i) { monCountHost_(urls[i]); });   // 利用状況：外部サイトごとの回数（Monitor.gs）
