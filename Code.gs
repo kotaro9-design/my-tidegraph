@@ -69,7 +69,7 @@ function doPost(e) {
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     var a = req.args || [];
-    if (req.fn === 'track') { monRecord_(a[0]); out = { result: true }; }   // 閉じるときの利用状況
+    if (req.fn === 'track') { monRecord_(a[0]); monCommit_(); out = { result: true }; }   // 閉じるときの利用状況
     else if (req.fn === 'callWithPre') out = { result: callWithPre(a[0], a[1], a[2], a[3]) };
     else throw new Error('不正な呼び出しです');
   } catch (err) {
@@ -249,8 +249,12 @@ function getRiver(lat, lon, fcd) {
     st = last ? cand.filter(function (s) { return s.fcd === last; })[0] : null;
     if (st && !usable(st)) st = null;
     if (!st) {
-      prefetch_(cand.filter(function (s) { return s.ts === undefined; }).map(function (s) { return riverSeriesItem_(s.fcd, near.path); }));
-      st = cand.filter(usable)[0];
+      // 近い順に3か所ずつ調べ、使える観測所が見つかったらそこで止める（URL Fetch の節約）
+      for (var bi = 0; bi < cand.length && !st; bi += 3) {
+        var batch = cand.slice(bi, bi + 3);
+        prefetch_(batch.filter(function (s) { return s.ts === undefined; }).map(function (s) { return riverSeriesItem_(s.fcd, near.path); }));
+        st = batch.filter(usable)[0];
+      }
       if (!st) return null;
       cache.put(autoKey, st.fcd, 3600);
     }
@@ -372,14 +376,18 @@ function getWaterQuality(lat, lon) {
   lat = +lat; lon = +lon;
   checkPos_(lat, lon);
   var LIMIT_KM = 10;
+  // 近くに水質観測所が無いとわかった地点（約5km単位）は、しばらく探しに行かない
+  var cache = CacheService.getScriptCache(), noneKey = CACHE_VER + 'wq_none_' + (Math.round(lat * 20) / 20).toFixed(2) + '_' + (Math.round(lon * 20) / 20).toFixed(2);
+  if (cache.get(noneKey)) return null;
+  var none = function () { cache.put(noneKey, '1', 21600); return null; };
   var towns = cached_('wq_towns', 24 * 3600, function () {
     var a = JSON.parse(fetchAll_([RIVER + 'files/map/twn/twnarea.json'])[0]).towns || [];
     return a.filter(function (t) { return t.qwtrExistFlg; })
       .map(function (t) { return [t.twnCd, Math.round(t.lat * 1e4) / 1e4, Math.round(t.lon * 1e4) / 1e4]; });
   });
   var near = towns.map(function (t) { return [t[0], distKm_(lat, lon, t[1], t[2])]; })
-    .filter(function (t) { return t[1] < 40; }).sort(function (a, b) { return a[1] - b[1]; }).slice(0, 4);
-  if (!near.length) return null;
+    .filter(function (t) { return t[1] < 20; }).sort(function (a, b) { return a[1] - b[1]; }).slice(0, 4);
+  if (!near.length) return none();
 
   // 観測所の一覧と位置（位置が未登録のものは住所から求める）
   prefetch_(near.map(function (t) { return ['wq_twn_' + t[0], RIVER + 'files/obslist/obs/twnlist/' + t[0] + '.json', 6 * 3600]; }));
@@ -401,7 +409,7 @@ function getWaterQuality(lat, lon) {
     });
   });
   stations.sort(function (a, b) { return a.d - b.d; });
-  if (!stations.length || stations[0].d > LIMIT_KM) return null;
+  if (!stations.length || stations[0].d > LIMIT_KM) return none();
 
   // 同じ地点の水深別（平均・上層・中層・下層など）をまとめる
   var LAYER = /(平均|表層|上層|中層|下層|底層)$/;
@@ -925,7 +933,7 @@ var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300, lowShare: 0.7 }; 
  * ブラウザが取ってきて pre に入れて呼び直す。揃えば { result }。
  */
 function callWithPre(name, args, pre, ev) {
-  if (ev) monRecord_(ev);   // 利用状況（Monitor.gs）
+  if (ev) monRecord_(ev);   // 利用状況（Monitor.gs。書き込みは最後にまとめて）
   var t0 = Date.now();
   var api = { getStations: getStations, getTideData: getTideData, getWeather: getWeather, getRiver: getRiver,
     getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality };
@@ -949,7 +957,7 @@ function callWithPre(name, args, pre, ev) {
   } finally {
     PRE = null; FROM_PRE = false;
     monServerPerf_(name, Date.now() - t0);
-    monFlushHosts_();
+    monCommit_();
   }
 }
 

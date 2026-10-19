@@ -743,7 +743,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <p>画面の下のほう（風のカードの下）にあります。</p>
     <dl>
       <dt>高さの基準</dt><dd>「潮位表基準面」は潮位表や釣り情報で一般的な高さ（ほぼ最低の潮位が0）。「TP」は東京湾平均海面が0の高さで、河川水位と比べるときに使います。</dd>
-      <dt>河川水位の重ね表示</dt><dd>グラフに近くの川の水位を重ねるかどうか。</dd>
+      <dt>河川水位の重ね表示</dt><dd>グラフに近くの川の水位を重ねるかどうか。初めて使うときは「非表示」です。河口や川の近くで釣るときは「表示」にしてください（設定は端末に保存されます）。</dd>
       <dt>河川の水位観測所</dt><dd>「自動」は現在地から一番近い（欠測中を除く）観測所。「近くの水位観測所を表示…」から別の観測所を選べます。</dd>
     </dl>
 
@@ -772,7 +772,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <h3 id="g-trouble">困ったときは</h3>
     <dl>
       <dt>赤字で「更新されていません」と出る</dt><dd>配信元の停止や欠測です。左上の潮位観測所名から、近くの別の潮位観測所に変えてください。</dd>
-      <dt>現在地が使われない</dt><dd>位置情報の許可を確認してください。許可しない場合は、前回の潮位観測所（初回は東京）を表示します。</dd>
+      <dt>現在地が使われない</dt><dd>位置情報の許可を確認してください。X などのアプリ内のブラウザでは位置情報が使えないことがあります。その場合は、前回の潮位観測所を表示します（初回は潮位観測所の一覧が開くので、見たい場所を選んでください）。</dd>
       <dt>「アクセスが集中しているため…」と出る</dt><dd>多くの人が使っているときに表示されます。しばらくしてから更新してください。</dd>
       <dt>表示が古いまま</dt><dd>右上の ↻ を押してください。</dd>
     </dl>
@@ -791,18 +791,26 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.6.0', APP_DATE = '2026-10-19';
+  var APP_VERSION = '1.7.0', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var PICK_DAYS = 365;   // カレンダーで選べる範囲（今日の前後、サーバーの上限は400日）
 
+  // 河川水位の重ね表示の初期値。設定済みならそれ、未設定なら以前から使っている人はオン、新しい人はオフ（URL Fetch の節約）
+  function riverDefault() {
+    var v = load('river');
+    if (v === '1' || v === '0') return v === '1';
+    v = load('st') ? '1' : '0';
+    save('river', v);
+    return v === '1';
+  }
   var S = {
     stations: [], st: null, data: null, pos: null,
     date: null,          // 'YYYY-MM-DD' or null(今日)
     view: ({ around: 'h12' })[load('view')] || load('view') || 'day',
     datum: load('datum') || 'table',
     stFilter: load('stfilter') || 'all',
-    showRiver: load('river') !== '0', river: null,
+    showRiver: riverDefault(), river: null,
     riverFcd: load('river_fcd') || '',   // 空なら自動（一番近い観測所）   // 'all' | 'jcg'（海上保安庁サイトの観測所のみ）
     curve: null, ext: [], hover: null, loading: false, lastFetch: 0
   };
@@ -902,7 +910,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       });
     };
     return call().then(function (r) { perf(name, Date.now() - t0); return r; },
-      function (e) { perf(name, Date.now() - t0); track('e', String(name).replace(/[^a-zA-Z]/g, '').slice(0, 30)); throw e; });
+      function (e) {
+        perf(name, Date.now() - t0);
+        if (!/一時的に止めて/.test(String(e && e.message))) track('e', String(name).replace(/[^a-zA-Z]/g, '').slice(0, 30));
+        throw e;
+      });
   }
   function rawRun(name) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -1144,7 +1156,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (r) $('riverLegTxt').textContent = '河川水位（' + r.name + '）';
     var note = $('riverNote');
     renderRiverSel();
-    if (!S.showRiver) { note.hidden = true; return; }
+    if (!S.showRiver) {
+      note.hidden = false;
+      note.textContent = '河川の近くで釣るときは、画面下の「表示の設定」で「河川水位の重ね表示」を「表示」にすると、近くの川の水位をグラフに重ねられます。';
+      return;
+    }
     if (!r) { note.hidden = !S.riverTried; note.textContent = S.riverPaused || '近くに河川の水位観測所が見つかりませんでした'; return; }
     var last = r.min10.length ? r.min10[r.min10.length - 1] : null;
     note.hidden = false;
@@ -3083,7 +3099,12 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       if (!S.pvSent && S.st) { trackPv(S.st.c, here()); flushEvents(); }
     }, function () {
       if (S.st) { trackPv(S.st.c, here()); flushEvents(); }
-      if (!last) notice('位置情報を利用できないため、潮位観測所「東京」を表示しています。画面左上の潮位観測所名をタップすると変更できます。');
+      if (!last) {
+        notice('位置情報を利用できないため、潮位観測所「東京」を表示しています。画面左上の潮位観測所名をタップすると変更できます。');
+        openPicker();
+        $('pkQ').placeholder = '見たい場所を選んでください（名前・住所で検索）';
+        track('f', 'picker_auto');
+      }
     });
     return first;
   }).catch(function (e) {

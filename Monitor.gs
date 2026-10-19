@@ -47,27 +47,54 @@ function monHourKey_(ms) {
   return p.y + '-' + ('0' + p.m).slice(-2) + '-' + ('0' + p.d).slice(-2) + ' ' + ('0' + p.h).slice(-2);
 }
 function monBufKey_(hk) { return CACHE_VER + 'mon_h_' + hk; }
+var MON_SHARDS = 16;
+function monShardKeys_(hk) { var a = []; for (var i = 0; i < MON_SHARDS; i++) a.push(monBufKey_(hk) + '_' + i); return a; }
 function monEmptyHour_() {
   return { pv: 0, ids: {}, st: {}, area: {}, f: {}, cerr: 0, serr: 0, lim: 0, err: {}, sv: {}, cl: {}, ref: {},
     svf: {}, clf: {}, q: {}, perf: {}, env: {}, geo: {}, alive: 0 };
 }
 function monFill_(h) { var e = monEmptyHour_(); Object.keys(e).forEach(function (k) { if (h[k] == null) h[k] = e[k]; }); return h; }
 
-/** その時間帯の一時保存を読み書きする（ロックで同時更新を防ぐ。取れなければ取りこぼしとして数える） */
-function monUpdate_(fn, ms) {
-  var hk = monHourKey_(ms || Date.now());
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(1500)) { monDrop_(); return false; }
+/**
+ * この呼び出しの間に起きたことは MON_PENDING に貯め、最後に monCommit_ で1回だけ書く。
+ * 書き込みはロックを使わず、16個に分けた一時保存のどれかに足す（順番待ちで利用者を待たせない）。
+ */
+var MON_PENDING = null;
+function monPend_() { return MON_PENDING || (MON_PENDING = monEmptyHour_()); }
+function monUpdate_(fn) { fn(monPend_()); return true; }
+function monCommit_() {
+  var p = MON_PENDING;
+  MON_PENDING = null;
+  if (!p || monIsEmpty_(p)) return;
   try {
-    var cache = CacheService.getScriptCache(), k = monBufKey_(hk), h;
+    var cache = CacheService.getScriptCache(), k = monBufKey_(monHourKey_(Date.now())) + '_' + Math.floor(Math.random() * MON_SHARDS), h;
     try { h = JSON.parse(cache.get(k) || 'null'); } catch (e) { h = null; }
-    h = monFill_(h || {});
-    fn(h);
-    try { cache.put(k, JSON.stringify(h), 21600); } catch (e) { monDrop_(); return false; }   // 100KB 超など
-    return true;
-  } finally {
-    lock.releaseLock();
-  }
+    h = monMerge_(monFill_(h || {}), p);
+    cache.put(k, JSON.stringify(h), 21600);
+  } catch (e) { monDrop_(); }   // 100KB 超など
+}
+function monIsEmpty_(h) {
+  return !h.pv && !h.cerr && !h.serr && !h.lim && !h.alive && ['ids', 'st', 'f', 'sv', 'cl', 'svf', 'clf', 'q', 'perf', 'geo', 'err'].every(function (k) { return !Object.keys(h[k]).length; });
+}
+/** 一時保存どうしを足し合わせる */
+function monMerge_(a, b) {
+  ['pv', 'cerr', 'serr', 'lim', 'alive'].forEach(function (k) { a[k] = (a[k] || 0) + (b[k] || 0); });
+  Object.keys(b.ids || {}).forEach(function (k) { a.ids[k] = 1; });
+  ['st', 'area', 'f', 'err', 'sv', 'cl', 'ref', 'svf', 'clf', 'q', 'env', 'geo'].forEach(function (f) {
+    Object.keys(b[f] || {}).forEach(function (k) { monInc_(a[f], k, b[f][k]); });
+  });
+  Object.keys(b.perf || {}).forEach(function (k) { monPerfAdd_(a.perf, k, b.perf[k]); });
+  return a;
+}
+/** その時間帯の一時保存（16個＋以前の形式）をまとめて読む */
+function monReadHour_(cache, hk) {
+  var keys = monShardKeys_(hk).concat([monBufKey_(hk)]), got = cache.getAll(keys), h = monEmptyHour_(), bytes = 0, found = false;
+  keys.forEach(function (k) {
+    if (!got[k]) return;
+    found = true; bytes = Math.max(bytes, got[k].length);
+    try { monMerge_(h, monFill_(JSON.parse(got[k]))); } catch (e) { /* 壊れた分は捨てる */ }
+  });
+  return found ? { h: h, keys: keys, bytes: bytes } : null;
 }
 /** 取りこぼしの件数（日ごと） */
 function monDrop_() {
@@ -141,27 +168,15 @@ function monRecord_(ev) {
   } catch (e) { /* 記録の失敗でアプリを止めない */ }
 }
 
-/** サーバーでの外部サイトへの取得回数・失敗・処理時間。処理の終わりにまとめて記録する */
-var MON_HOSTS = {}, MON_FAILS = {}, MON_PERF = {};
+/** サーバーでの外部サイトへの取得回数・失敗・処理時間（呼び出しの終わりにまとめて書く） */
 function monHostOf_(url) { var m = /^https?:\/\/([^\/?#]+)/.exec(String(url)); return m ? m[1] : ''; }
-function monCountHost_(url) { var h = monHostOf_(url); if (h) monInc_(MON_HOSTS, h); }
-function monFailHost_(url, status) { var h = monHostOf_(url); if (h) monInc_(MON_FAILS, h + '|' + status); }
+function monCountHost_(url) { var h = monHostOf_(url); if (h) monInc_(monPend_().sv, h); }
+function monFailHost_(url, status) { var h = monHostOf_(url); if (h) monInc_(monPend_().svf, h + '|' + status); }
 function monServerPerf_(name, ms) {
-  monPerfAdd_(MON_PERF, 's:' + String(name).replace(/[^A-Za-z]/g, '').slice(0, 30),
+  monPerfAdd_(monPend_().perf, 's:' + String(name).replace(/[^A-Za-z]/g, '').slice(0, 30),
     [1, ms, ms, ms < 1000 ? 1 : 0, ms >= 1000 && ms < 3000 ? 1 : 0, ms >= 3000 && ms < 10000 ? 1 : 0, ms >= 10000 ? 1 : 0]);
 }
-function monFlushHosts_() {
-  var hosts = MON_HOSTS, fails = MON_FAILS, perf = MON_PERF;
-  MON_HOSTS = {}; MON_FAILS = {}; MON_PERF = {};
-  if (!Object.keys(hosts).length && !Object.keys(fails).length && !Object.keys(perf).length) return;
-  try {
-    monUpdate_(function (h) {
-      Object.keys(hosts).forEach(function (k) { monInc_(h.sv, k, hosts[k]); });
-      Object.keys(fails).forEach(function (k) { monInc_(h.svf, k, fails[k]); });
-      Object.keys(perf).forEach(function (k) { monPerfAdd_(h.perf, k, perf[k]); });
-    });
-  } catch (e) { /* 無視 */ }
-}
+function monFlushHosts_() { monCommit_(); }
 
 /** サーバーで見つけたデータの異常・一時停止など */
 function monQuality_(k) {
@@ -197,22 +212,16 @@ function monRecentHours_(now) {
 /** 終わった時間帯の分をスプレッドシートに書き出し（今の時間帯は残す）、異常があれば通知する */
 function flushMonitor() {
   var now = Date.now(), cur = monHourKey_(now), done = {}, cache = CacheService.getScriptCache();
-  var lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  try {
-    monRecentHours_(now).forEach(function (hk) {
-      if (hk >= cur) return;
-      var txt = cache.get(monBufKey_(hk));
-      if (txt) { try { done[hk] = monFill_(JSON.parse(txt)); } catch (e) { /* 壊れた分は捨てる */ } cache.remove(monBufKey_(hk)); }
-    });
-    // 以前の形式（mon_buf）に残っている分
-    var old = cache.get(CACHE_VER + 'mon_buf');
-    if (old) {
-      try { var ob = JSON.parse(old).h || {}; Object.keys(ob).forEach(function (hk) { if (hk < cur && !done[hk]) done[hk] = monFill_(ob[hk]); }); } catch (e) { /* 無視 */ }
-      cache.remove(CACHE_VER + 'mon_buf');
-    }
-  } finally {
-    lock.releaseLock();
+  monRecentHours_(now).forEach(function (hk) {
+    if (hk >= cur) return;
+    var r = monReadHour_(cache, hk);
+    if (r) { done[hk] = r.h; cache.removeAll(r.keys); }
+  });
+  // 以前の形式（mon_buf）に残っている分
+  var old = cache.get(CACHE_VER + 'mon_buf');
+  if (old) {
+    try { var ob = JSON.parse(old).h || {}; Object.keys(ob).forEach(function (hk) { if (hk < cur && !done[hk]) done[hk] = monFill_(ob[hk]); }); } catch (e) { /* 無視 */ }
+    cache.remove(CACHE_VER + 'mon_buf');
   }
   var hours = Object.keys(done).sort(), ss = monSheet_();
   monEnsureSheets_(ss);
@@ -221,8 +230,7 @@ function flushMonitor() {
   props.setProperty('mon_last_flush', JSON.stringify({ t: now, hours: hours.length }));
   // 通知：今の時間帯（途中まで）と、いま書き出した直近の時間帯
   try {
-    var curH = null;
-    try { curH = monFill_(JSON.parse(cache.get(monBufKey_(cur)) || '{}')); } catch (e) { curH = monEmptyHour_(); }
+    var cr = monReadHour_(cache, cur), curH = cr ? cr.h : monEmptyHour_();
     monCheckAlerts_(ss, now, [curH].concat(hours.length ? [done[hours[hours.length - 1]]] : []));
     monDailySummary_(ss, now);
   } catch (e) { Logger.log('通知の確認に失敗：' + e); }
@@ -490,10 +498,9 @@ function getMonitorData(key, days) {
   // 未集計の分（直近6時間）
   out.pending = [];
   monRecentHours_(now).forEach(function (hk) {
-    var txt = cache.get(monBufKey_(hk));
-    if (!txt) return;
-    var h;
-    try { h = monFill_(JSON.parse(txt)); } catch (e) { return; }
+    var r = monReadHour_(cache, hk);
+    if (!r) return;
+    var h = r.h, txt = { length: r.bytes };
     var ids = Object.keys(h.ids);
     ids.forEach(function (a) { if (!out.firstSeen[a]) out.firstSeen[a] = first[a] || hk.slice(0, 10); });
     out.pending.push({ hour: hk, bytes: txt.length, pv: h.pv, ids: ids, st: h.st, area: h.area, f: h.f, err: h.err, lim: h.lim, serr: h.serr, cerr: h.cerr,
