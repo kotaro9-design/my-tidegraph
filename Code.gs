@@ -964,8 +964,18 @@ function callWithPre(name, args, pre, ev) {
 /** ブラウザに取ってきてもらう URL か */
 function clientUrl_(url) {
   var m = /^https:\/\/([^\/]+)(\/[^?#]*)?/.exec(String(url));
-  return !!m && CLIENT_HOSTS.indexOf(m[1]) >= 0 && !/\/const\//.test(m[2] || '');
+  if (!m) return false;
+  if (CLIENT_HOSTS.indexOf(m[1]) >= 0 && !/\/const\//.test(m[2] || '')) return true;
+  // 非常時モード：Google の URL Fetch の上限に達している間は、気象庁のデータ（地点一覧・潮位表など）もブラウザから取る
+  return EMERGENCY_HOSTS.indexOf(m[1]) >= 0 && ufBlocked_();
 }
+var EMERGENCY_HOSTS = ['www.jma.go.jp', 'www.data.jma.go.jp'];
+var UF_BLOCKED = null;   // この実行の中での判定（キャッシュを何度も読まない）
+function ufBlocked_() {
+  if (UF_BLOCKED == null) UF_BLOCKED = !!CacheService.getScriptCache().get(CACHE_VER + 'uf_blocked');
+  return UF_BLOCKED;
+}
+function isQuotaError_(e) { return /urlfetch|回数が多すぎ|too many times|Bandwidth quota/i.test(String(e && e.message || e)); }
 function needError_(urls) { var e = new Error('ブラウザでの取得が必要です'); e.needUrls = urls; return e; }
 /** 「ブラウザに取ってきてほしい」は握りつぶさずに上へ伝える */
 function rethrowNeed_(e) { if (e && e.needUrls) throw e; }
@@ -1032,7 +1042,16 @@ function fetchAll_(urls, allow404) {
         return { url: urls[i], muteHttpExceptions: true, followRedirects: true };
       }));
     } catch (e) {
-      server.forEach(function (i) { monFailHost_(urls[i], 'ex'); });   // 通信の失敗・時間切れ（利用状況）
+      var quota = isQuotaError_(e);
+      server.forEach(function (i) { monFailHost_(urls[i], quota ? 'quota' : 'ex'); });   // 通信の失敗・時間切れ・上限（利用状況）
+      if (quota) {
+        // Google の上限に達した：1時間は非常時モード。ブラウザから取れるものは取ってきてもらう
+        CacheService.getScriptCache().put(CACHE_VER + 'uf_blocked', '1', 3600);
+        UF_BLOCKED = true;
+        monQuality_('urlfetch_quota');
+        var alt = PRE ? server.map(function (i) { return urls[i]; }).filter(function (u) { return clientUrl_(u) && !Object.prototype.hasOwnProperty.call(PRE, u); }) : [];
+        if (alt.length) throw needError_(alt);
+      }
       throw e;
     }
     res.forEach(function (r, j) {

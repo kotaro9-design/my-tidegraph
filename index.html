@@ -780,7 +780,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.7.0', APP_DATE = '2026-10-20';
+  var APP_VERSION = '1.7.1', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var PICK_DAYS = 365;   // カレンダーで選べる範囲（今日の前後、サーバーの上限は400日）
@@ -1213,7 +1213,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       if (!q || q.lat.toFixed(3) + ',' + q.lon.toFixed(3) + '|' + S.riverFcd !== key) return;
       S.river = r; S.riverFor = key; S.riverFetch = Date.now(); S.riverTried = true; S.riverGps = p.gps; S.riverPaused = '';
       renderRiver(); drawCharts();
-    }).catch(function (e) { S.riverTried = true; S.riverPaused = /一時的に止めて/.test(String(e && e.message)) ? e.message : ''; renderRiver(); });
+    }).catch(function (e) { S.riverTried = true; S.riverPaused = /一時的に止めて/.test(String(e && e.message)) ? e.message : /回数が多すぎ|urlfetch/i.test(String(e && e.message)) ? 'アクセスが集中しているため、河川水位を一時的に表示できません（潮位は表示を続けます）。' : ''; renderRiver(); });
   }
 
   function phaseAt(t) {
