@@ -103,6 +103,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     </div>
     <button class="btn" id="flushBtn">今すぐ集計</button>
     <button class="btn" id="reloadBtn">再読み込み</button>
+    <button class="btn" id="copyBtn" title="今の期間の要約を文章でコピー">要約をコピー</button>
     <a class="btn" id="sheetLink" href="#" target="_blank" rel="noopener" hidden>スプレッドシート</a>
   </div>
   <div class="msg" id="msg" hidden></div>
@@ -499,6 +500,14 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     load();
   };
   $('reloadBtn').onclick = load;
+  // 要約を文章でコピー（ほかの人やアシスタントに状況を伝えるとき用）
+  $('copyBtn').onclick = function () {
+    var b = this; b.disabled = true; msg('');
+    call('getMonitorSummaryText', KEY, DAYS).then(function (t) {
+      return navigator.clipboard.writeText(t).then(function () { b.textContent = 'コピーしました'; setTimeout(function () { b.textContent = '要約をコピー'; }, 2000); },
+        function () { msg('コピーできませんでした。要約は ' + location.href.split('#')[0] + '&format=text でも見られます'); });
+    }).catch(function (e) { msg('要約を作れませんでした：' + (e && e.message || e)); }).then(function () { b.disabled = false; });
+  };
   $('flushBtn').onclick = function () {
     var b = this; b.disabled = true;
     call('adminFlush', KEY).then(function (k) { msg(''); return load(); }).catch(function (e) { msg('集計できませんでした：' + (e && e.message || e)); })

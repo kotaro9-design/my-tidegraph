@@ -12,7 +12,7 @@
  */
 
 // 利用状況アプリ（Monitor.gs と admin.html）のバージョン。更新したら CHANGELOG-monitor.md にも書き、monitor-vX.Y.Z のタグを付ける
-var MONITOR_VERSION = '1.4.2', MONITOR_DATE = '2026-10-20';
+var MONITOR_VERSION = '1.5.0', MONITOR_DATE = '2026-10-20';
 
 var MON_SHEETS = {
   hourly: ['日時', '表示回数', '利用者数', 'URL Fetch回数', '上限超え', 'サーバーエラー', '画面エラー', '使用中（5分単位）'],
@@ -548,3 +548,118 @@ function adminTestMail(key) {
   if (!monSendMail_('テスト通知', 'my tide-graph の監視からのテストメールです。異常があると、このアドレスに通知が届きます。')) throw new Error('通知先のメールアドレスがありません');
   return monAlertTo_();
 }
+
+/* ------------------------------------------------------------------ */
+/* 要約（JSON・テキスト）：スクリーンショットなしで状況を読めるように   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 直近 days 日の要約。集計済み（スプレッドシート）と未集計（一時保存）を合わせて、
+ * 判断に必要な数字だけを並べる（匿名IDの一覧などの細かいデータは含めない）。
+ */
+function getMonitorSummary(key, days) {
+  var d = getMonitorData(key, days || 7), now = d.now, today = ymd_(now);
+  var dayList = [];
+  for (var i = d.days - 1; i >= 0; i--) dayList.push(ymd_(now - i * DAY));
+  var byDay = {}, hourly = {}, users = {}, all = {};
+  dayList.forEach(function (x) { byDay[x] = { day: x, pv: 0, users: 0, newUsers: 0, uf: 0, lim: 0, serr: 0, cerr: 0, alive: 0 }; users[x] = {}; });
+  d.hourly.forEach(function (r) {
+    var x = r[0].slice(0, 10), b = byDay[x];
+    if (!b) return;
+    b.pv += r[1]; b.uf += r[3]; b.lim += r[4]; b.serr += r[5]; b.cerr += r[6]; b.alive += r[7] || 0;
+    hourly[r[0].slice(0, 13)] = (hourly[r[0].slice(0, 13)] || 0) + r[1];
+  });
+  d.users.forEach(function (r) { if (users[r[0]]) { users[r[0]][r[1]] = 1; all[r[1]] = 1; } });
+  var add = function (o, src, pre) { Object.keys(src || {}).forEach(function (k) { var kk = (pre || '') + k; o[kk] = (o[kk] || 0) + src[k]; }); };
+  var st = Object.assign({}, d.stations), ar = Object.assign({}, d.areas), fe = Object.assign({}, d.features), er = Object.assign({}, d.errors);
+  var rf = Object.assign({}, d.referrers), fa = Object.assign({}, d.failures), qa = Object.assign({}, d.quality), en = Object.assign({}, d.env), ge = Object.assign({}, d.geo);
+  var si = {}, pf = {};
+  Object.keys(d.sites).forEach(function (k) { si[k] = { sv: d.sites[k].sv, cl: d.sites[k].cl }; });
+  Object.keys(d.perf).forEach(function (k) { pf[k] = d.perf[k].slice(); });
+  d.pending.forEach(function (p) {
+    var x = p.hour.slice(0, 10), b = byDay[x];
+    if (!b) return;
+    b.pv += p.pv; b.lim += p.lim; b.serr += p.serr; b.cerr += p.cerr; b.alive += p.alive || 0;
+    hourly[p.hour] = (hourly[p.hour] || 0) + p.pv;
+    p.ids.forEach(function (a) { users[x][a] = 1; all[a] = 1; });
+    add(st, p.st); add(ar, p.area); add(fe, p.f); add(er, p.err); add(rf, p.ref); add(qa, p.q); add(en, p.env); add(ge, p.geo);
+    Object.keys(p.svf || {}).forEach(function (k) { fa['server|' + k] = (fa['server|' + k] || 0) + p.svf[k]; });
+    Object.keys(p.clf || {}).forEach(function (k) { fa['client|' + k] = (fa['client|' + k] || 0) + p.clf[k]; });
+    Object.keys(p.sv || {}).forEach(function (k) { (si[k] = si[k] || { sv: 0, cl: 0 }).sv += p.sv[k]; });
+    Object.keys(p.cl || {}).forEach(function (k) { (si[k] = si[k] || { sv: 0, cl: 0 }).cl += p.cl[k]; });
+    Object.keys(p.perf || {}).forEach(function (k) { monPerfAdd_(pf, k, p.perf[k]); });
+  });
+  dayList.forEach(function (x) {
+    var ids = Object.keys(users[x]);
+    byDay[x].users = ids.length;
+    byDay[x].newUsers = ids.filter(function (a) { return (d.firstSeen[a] || x) >= x; }).length;
+  });
+  if (byDay[today]) byDay[today].uf = Math.max(byDay[today].uf, d.ufToday);
+  var top = function (o, n, name) {
+    return Object.keys(o).map(function (k) { return { key: k, name: name ? name(k) : k, n: o[k] }; })
+      .sort(function (a, b) { return b.n - a.n; }).slice(0, n || 10);
+  };
+  var sum = function (k) { return dayList.reduce(function (s, x) { return s + byDay[x][k]; }, 0); };
+  var hours48 = [];
+  for (var h = 47; h >= 0; h--) { var hk = monHourKey_(now - h * HOUR); hours48.push({ hour: hk, pv: hourly[hk] || 0 }); }
+  return {
+    generatedAt: new Date(now).toISOString(), monitor: d.version, period: { days: d.days, since: d.since },
+    limits: d.limits,
+    today: { day: today, pv: byDay[today] ? byDay[today].pv : 0, users: byDay[today] ? byDay[today].users : 0, urlFetch: d.ufToday, urlFetchThisHour: d.ufHour },
+    totals: { pv: sum('pv'), users: Object.keys(all).length, limitHits: sum('lim'), serverErrors: sum('serr'), clientErrors: sum('cerr') },
+    health: { lastFlushMinAgo: d.health.lastFlush ? Math.round((now - d.health.lastFlush.t) / 60000) : null, trigger: d.health.trigger,
+      dropsToday: d.health.dropToday, sheetCells: d.health.cells, mailAlerts: d.health.alerts, alertTo: !!d.health.alertTo },
+    byDay: dayList.map(function (x) { return byDay[x]; }),
+    hourly48: hours48,
+    failures: Object.keys(fa).map(function (k) { var p = k.split('|'); return { place: p[0], host: p[1], status: p[2], n: fa[k] }; })
+      .sort(function (a, b) { return b.n - a.n; }).slice(0, 30),
+    dataQuality: top(qa, 15),
+    errors: top(er, 20),
+    perf: Object.keys(pf).map(function (k) {
+      var p = pf[k];
+      return { name: k.slice(2), place: k[0] === 's' ? 'server' : 'client', n: p[0], avgSec: p[0] ? Math.round(p[1] / p[0] / 100) / 10 : null,
+        maxSec: Math.round(p[2] / 100) / 10, over3sPct: p[0] ? Math.round((p[5] + p[6]) / p[0] * 100) : null };
+    }).sort(function (a, b) { return a.name.localeCompare(b.name) || a.place.localeCompare(b.place); }),
+    sites: Object.keys(si).map(function (k) { return { host: k, server: si[k].sv, browser: si[k].cl }; }).sort(function (a, b) { return (b.server + b.browser) - (a.server + a.browser); }),
+    referrers: top(rf, 10),
+    geo: ge, env: top(en, 30),
+    stations: top(st, 10, function (c) { return (d.stationNames[c] || '') + '(' + c + ')'; }),
+    areas: top(ar, 10),
+    features: top(fe, 25),
+    recentAlerts: (d.alerts || []).slice(0, 10)
+  };
+}
+
+/** 要約を人が読める文章に */
+function monSummaryText_(s) {
+  var L = [];
+  var pct = function (a, b) { return b ? Math.round(a / b * 100) + '%' : '-'; };
+  L.push('my tide-graph 利用状況の要約（monitor v' + s.monitor + '、' + s.generatedAt.replace('T', ' ').slice(0, 16) + ' UTC 時点、直近' + s.period.days + '日）');
+  L.push('');
+  L.push('■ 今日（' + s.today.day + '）');
+  L.push('表示 ' + s.today.pv + ' 回／利用者 ' + s.today.users + ' 人／URL Fetch ' + s.today.urlFetch + ' 回（上限 ' + s.limits.day + ' の ' + pct(s.today.urlFetch, s.limits.day) + '）／この1時間 ' + s.today.urlFetchThisHour + ' 回');
+  L.push('■ 監視の状態');
+  L.push('最後の集計 ' + s.health.lastFlushMinAgo + ' 分前／トリガー ' + (s.health.trigger ? 'あり' : 'なし') + '／取りこぼし（今日） ' + s.health.dropsToday + ' 件／スプレッドシート ' + s.health.sheetCells + ' セル／メール通知 ' + (s.health.mailAlerts && s.health.alertTo ? 'オン' : '無効'));
+  L.push('■ 期間の合計');
+  L.push('表示 ' + s.totals.pv + ' 回／利用者 ' + s.totals.users + ' 人／上限超え ' + s.totals.limitHits + ' 回／エラー サーバー ' + s.totals.serverErrors + '・画面 ' + s.totals.clientErrors);
+  L.push('■ 日ごと（日付 表示 利用者[新規] URLFetch 上限超え エラー(サーバー/画面)）');
+  s.byDay.forEach(function (b) { if (b.pv || b.uf) L.push(b.day + ' ' + b.pv + ' ' + b.users + '[' + b.newUsers + '] ' + b.uf + ' ' + b.lim + ' ' + b.serr + '/' + b.cerr); });
+  L.push('■ データ元の失敗（場所 サイト 状態 回数）');
+  s.failures.slice(0, 15).forEach(function (f) { L.push(f.place + ' ' + f.host + ' ' + f.status + ' ' + f.n); });
+  L.push('■ データの異常');
+  s.dataQuality.forEach(function (q) { L.push(q.key + ' ' + q.n); });
+  L.push('■ エラー');
+  s.errors.forEach(function (e) { L.push(e.key + ' ' + e.n); });
+  L.push('■ 表示の速さ（処理 場所 回数 平均秒 最大秒 3秒以上%）');
+  s.perf.forEach(function (p) { L.push(p.name + ' ' + p.place + ' ' + p.n + ' ' + p.avgSec + ' ' + p.maxSec + ' ' + p.over3sPct + '%'); });
+  L.push('■ 外部サイト（サイト サーバーから ブラウザから）');
+  s.sites.forEach(function (x) { L.push(x.host + ' ' + x.server + ' ' + x.browser); });
+  L.push('■ 流入元'); s.referrers.forEach(function (x) { L.push(x.key + ' ' + x.n); });
+  L.push('■ 位置情報'); Object.keys(s.geo).forEach(function (k) { L.push(k + ' ' + s.geo[k]); });
+  L.push('■ 利用環境'); s.env.forEach(function (x) { L.push(x.key + ' ' + x.n); });
+  L.push('■ よく使われる潮位観測所'); s.stations.forEach(function (x) { L.push(x.name + ' ' + x.n); });
+  L.push('■ 機能'); s.features.forEach(function (x) { L.push(x.key + ' ' + x.n); });
+  if (s.recentAlerts.length) { L.push('■ 最近の通知'); s.recentAlerts.forEach(function (a) { L.push(a.join(' ')); }); }
+  return L.join('\n');
+}
+function getMonitorSummaryText(key, days) { return monSummaryText_(getMonitorSummary(key, days)); }
