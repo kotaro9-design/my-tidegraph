@@ -11,6 +11,9 @@
  * 個人を特定する情報は集めない（匿名ID・潮位観測所コード・約10km単位の地域・機能名・エラー名・端末の種類など）。
  */
 
+// 利用状況アプリ（Monitor.gs と admin.html）のバージョン。更新したら CHANGELOG-monitor.md にも書き、monitor-vX.Y.Z のタグを付ける
+var MONITOR_VERSION = '1.4.0', MONITOR_DATE = '2026-10-20';
+
 var MON_SHEETS = {
   hourly: ['日時', '表示回数', '利用者数', 'URL Fetch回数', '上限超え', 'サーバーエラー', '画面エラー', '使用中（5分単位）'],
   users: ['日付', '匿名ID'],
@@ -431,6 +434,7 @@ function setupMonitor() {
   Logger.log('スプレッドシート：' + ss.getUrl());
   Logger.log('管理画面：' + url + '?admin=' + props.getProperty('ADMIN_KEY'));
   Logger.log('通知先：' + (monAlertTo_() || '（未設定）'));
+  Logger.log('利用状況アプリ：monitor v' + MONITOR_VERSION + '（' + MONITOR_DATE + '）');
 }
 
 /* ------------------------------------------------------------------ */
@@ -493,6 +497,7 @@ function getMonitorData(key, days) {
     geo: sum(read('geo'), 1, 2),
     alerts: read('alerts', true).slice(-20).reverse(),
     limits: FETCH_LIMIT,
+    version: MONITOR_VERSION, versionDate: MONITOR_DATE,
     sheetUrl: ss.getUrl()
   };
   // 未集計の分（直近6時間）

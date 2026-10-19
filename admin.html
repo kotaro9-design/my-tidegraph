@@ -34,6 +34,7 @@
 body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
 .wrap { max-width: 960px; margin: 0 auto; padding: 12px 16px 40px; }
 h1 { font-size: 18px; margin: 4px 0 2px; }
+h1 .ver { font-size: 12px; font-weight: 400; color: var(--text-3); margin-left: 6px; font-variant-numeric: tabular-nums; }
 .sub { color: var(--text-2); font-size: 12px; }
 .bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
 .seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 2px; }
@@ -92,7 +93,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
 </head>
 <body data-key="<?= adminKey ?>">
 <div class="wrap">
-  <h1>my tide-graph 利用状況</h1>
+  <h1>my tide-graph 利用状況 <span class="ver" id="ver"></span></h1>
   <div class="sub" id="upd">読み込み中…</div>
   <div class="bar-row">
     <div class="seg" id="daysSeg" role="group" aria-label="期間">
@@ -365,6 +366,8 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   function qualityName(k) {
     var m = /^tide_stale:(\d{6})$/.exec(k);
     if (m) return '潮位の更新停止：' + (D.stationNames[m[1]] || m[1]);
+    if (k === 'urlfetch_quota') return 'Google の URL Fetch の上限に到達（非常時モード）';
+    if (k === 'river_paused') return '上限の手前で河川・水質を一時停止';
     m = /^river_nodata:(\d+)$/.exec(k);
     if (m) return '河川水位の欠測：観測所 ' + m[1];
     return k;
@@ -481,6 +484,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     var d = new Date(D.now + 9 * 3600e3);
     $('upd').textContent = '直近' + DAYS + '日（' + D.since + '〜）・' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' 時点';
     $('sheetLink').href = D.sheetUrl; $('sheetLink').hidden = false;
+    if (D.version) $('ver').textContent = 'monitor v' + D.version + '（' + String(D.versionDate || '').replace(/-/g, '/') + '）';
   }
 
   function load() {

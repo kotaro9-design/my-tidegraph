@@ -8,3 +8,4 @@ tools/**
 .gitignore
 CHANGELOG.md
 cloudflare/**
+CHANGELOG-monitor.md
