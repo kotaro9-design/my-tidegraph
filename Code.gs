@@ -71,6 +71,7 @@ function doPost(e) {
     var a = req.args || [];
     if (req.fn === 'track') { monRecord_(a[0]); monCommit_(); out = { result: true }; }   // 閉じるときの利用状況
     else if (req.fn === 'callWithPre') out = { result: callWithPre(a[0], a[1], a[2], a[3]) };
+    else if (req.fn === 'callBatch') out = { result: callBatch(a[0], a[1], a[2]) };
     else throw new Error('不正な呼び出しです');
   } catch (err) {
     out = { error: String(err && err.message || err) };
@@ -939,15 +940,70 @@ var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300, lowShare: 0.7 }; 
  * ブラウザから呼ぶ入口。必要なデータが揃っていなければ { need: [url…] } を返し、
  * ブラウザが取ってきて pre に入れて呼び直す。揃えば { result }。
  */
+// 画面から呼べる処理
+function api_() {
+  return { getStations: getStations, getTideData: getTideData, getWeather: getWeather, getRiver: getRiver,
+    getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality };
+}
 function callWithPre(name, args, pre, ev) {
   if (ev) monRecord_(ev);   // 利用状況（Monitor.gs。書き込みは最後にまとめて）
   var t0 = Date.now();
-  var api = { getStations: getStations, getTideData: getTideData, getWeather: getWeather, getRiver: getRiver,
-    getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality };
+  var api = api_();
   if (!Object.prototype.hasOwnProperty.call(api, name)) throw new Error('不正な呼び出しです: ' + name);
   if (args != null && !Array.isArray(args)) throw new Error('不正な呼び出しです');
+  setupPre_(pre);
+  try {
+    return { result: api[name].apply(null, args || []) };
+  } catch (e) {
+    if (e && e.needUrls) return { need: e.needUrls };
+    if (!/アクセスが集中/.test(String(e && e.message)) && !(e && e.paused)) monServer_('err', name);
+    throw e;
+  } finally {
+    PRE = null; FROM_PRE = false; PROXY_ON = false;
+    monServerPerf_(name, Date.now() - t0);
+    monCommit_();
+  }
+}
+
+/**
+ * まとめて呼ぶ入口（起動時などに、潮位・天気・風などを1回の呼び出しで処理する。同時実行の枠を節約）。
+ * calls = [[番号, 処理名, 引数], …]。終わったものは done に、ブラウザに取ってきてほしい URL は need に（全部の分をまとめて）返す。
+ * 画面は need を取ってきて、まだ終わっていないものだけを pre と一緒に呼び直す。
+ */
+function callBatch(calls, pre, ev) {
+  if (ev) monRecord_(ev);
+  if (!Array.isArray(calls) || !calls.length || calls.length > 12) throw new Error('不正な呼び出しです');
+  var api = api_(), done = {}, need = {};
+  setupPre_(pre);
+  try {
+    calls.forEach(function (c) {
+      if (!Array.isArray(c)) return;
+      var id = String(c[0]).slice(0, 20), name = c[1], args = c[2], t0 = Date.now();
+      if (!Object.prototype.hasOwnProperty.call(api, name) || (args != null && !Array.isArray(args))) { done[id] = { error: '不正な呼び出しです' }; return; }
+      FROM_PRE = false;
+      try {
+        done[id] = { result: api[name].apply(null, args || []) };
+      } catch (e) {
+        if (e && e.needUrls) e.needUrls.forEach(function (u) { need[u] = 1; });
+        else {
+          done[id] = { error: String(e && e.message || e) };
+          if (!/アクセスが集中/.test(String(e && e.message)) && !(e && e.paused)) monServer_('err', name);
+        }
+      } finally {
+        monServerPerf_(name, Date.now() - t0);
+      }
+    });
+    var nu = Object.keys(need);
+    return { done: done, need: nu.length ? nu : null };
+  } finally {
+    PRE = null; FROM_PRE = false; PROXY_ON = false;
+    monCommit_();
+  }
+}
+
+/** ブラウザから渡されたデータを受け入れる（こちらが求めたサイトの URL の本文だけ。中継のデータは署名を確かめる） */
+function setupPre_(pre) {
   PRE = {};
-  // 渡されるのは、こちらが求めたサイトの URL の本文だけ
   PRE_TRUST = {};
   PROXY_ON = !!(pre && pre.__proxy === 1);
   if (pre && typeof pre === 'object') {
@@ -963,17 +1019,6 @@ function callWithPre(name, args, pre, ev) {
       }
       if (v === null || typeof v === 'string' || (v && typeof v === 'object' && v.err)) PRE[u] = typeof v === 'object' && v ? { err: 1 } : v;
     });
-  }
-  try {
-    return { result: api[name].apply(null, args || []) };
-  } catch (e) {
-    if (e && e.needUrls) return { need: e.needUrls };
-    if (!/アクセスが集中/.test(String(e && e.message)) && !(e && e.paused)) monServer_('err', name);
-    throw e;
-  } finally {
-    PRE = null; FROM_PRE = false; PROXY_ON = false;
-    monServerPerf_(name, Date.now() - t0);
-    monCommit_();
   }
 }
 

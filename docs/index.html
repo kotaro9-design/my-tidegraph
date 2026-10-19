@@ -791,7 +791,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.8.0', APP_DATE = '2026-10-20';
+  var APP_VERSION = '1.9.0', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   // 中継（Cloudflare Workers）：ブラウザから直接取れないデータ元（川の防災情報・海上保安庁）を取ってくる
@@ -897,37 +897,66 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     try { navigator.sendBeacon(api.content, new Blob([JSON.stringify({ fn: 'track', args: [takeEvents()] })], { type: 'text/plain;charset=utf-8' })); } catch (e) { /* 無視 */ }
   });
 
+  // サーバーの呼び出しは、ほぼ同時に出たもの（起動時の潮位・天気・風など）を20ミリ秒待って1回にまとめる（callBatch）。
+  // Apps Script の同時実行の枠（約30件）を節約し、大勢が一斉に開いても詰まりにくくする
+  var RUNQ = [], RUN_TIMER = null, RUN_ID = 0;
   function run(name) {
-    var args = Array.prototype.slice.call(arguments, 1), pre = {}, rounds = 0, ev = takeEvents(), t0 = Date.now();
-    if (viaProxy('https://www.river.go.jp/')) pre.__proxy = 1;   // 中継に対応していることをサーバーに伝える
-    var call = function () {
-      var e1 = ev; ev = null;
-      return rawRun('callWithPre', name, args, pre, e1).then(function (r) {
-        if (!r || !r.need) return r ? r.result : r;
-        if (++rounds > 10) throw new Error('データの取得に失敗しました（' + name + '）');
-        return Promise.all(r.need.map(function (u) {
-          if (viaProxy(u)) {
-            // 中継：署名（x-sig）つきで受け取り、そのまま渡す。サーバーが署名を確かめる
-            return xfetch(PROXY + '?u=' + encodeURIComponent(u)).then(function (res) {
-              if (!res.ok) throw new Error(res.status);
-              var sig = res.headers.get('x-sig'), st = res.headers.get('x-status');
-              return res.text().then(function (t) { pre[u] = st === '404' ? { n: 1, s: sig } : { b: t, s: sig }; });
-            }).catch(function () { pre[u] = { err: 1 }; });
-          }
-          return xfetch(u).then(function (res) {
-            if (res.status === 404) return null;
-            if (!res.ok) throw new Error(res.status);
-            return res.text();
-          }).then(function (t) { pre[u] = t; }, function () { pre[u] = { err: 1 }; });
-        })).then(call);
-      });
-    };
-    return call().then(function (r) { perf(name, Date.now() - t0); return r; },
+    var args = Array.prototype.slice.call(arguments, 1), t0 = Date.now();
+    return new Promise(function (res, rej) {
+      RUNQ.push({ id: 'c' + (++RUN_ID), name: name, args: args, res: res, rej: rej });
+      if (!RUN_TIMER) RUN_TIMER = setTimeout(flushRun, 20);
+    }).then(function (r) { perf(name, Date.now() - t0); return r; },
       function (e) {
         perf(name, Date.now() - t0);
         if (!/一時的に止めて/.test(String(e && e.message))) track('e', String(name).replace(/[^a-zA-Z]/g, '').slice(0, 30));
         throw e;
       });
+  }
+  function flushRun() {
+    RUN_TIMER = null;
+    var left = RUNQ.splice(0, 12);
+    if (RUNQ.length) RUN_TIMER = setTimeout(flushRun, 0);
+    var pre = {}, rounds = 0, ev = takeEvents();
+    if (viaProxy('https://www.river.go.jp/')) pre.__proxy = 1;   // 中継に対応していることをサーバーに伝える
+    var step = function () {
+      var e1 = ev; ev = null;
+      return rawRun('callBatch', left.map(function (it) { return [it.id, it.name, it.args]; }), pre, e1).then(function (r) {
+        var done = (r && r.done) || {};
+        // 終わったものは先に返す
+        left = left.filter(function (it) {
+          var d = done[it.id];
+          if (!d) return true;
+          if (d.error != null) it.rej(new Error(d.error)); else it.res(d.result);
+          return false;
+        });
+        if (!left.length) return;
+        if (!r || !r.need || ++rounds > 10) {
+          left.forEach(function (it) { it.rej(new Error('データの取得に失敗しました（' + it.name + '）')); });
+          left = [];
+          return;
+        }
+        // 全部の分をまとめて取ってきて、残りだけ呼び直す
+        return fetchNeed(r.need, pre).then(step);
+      });
+    };
+    step().catch(function (e) { left.forEach(function (it) { it.rej(e); }); });
+  }
+  // サーバーが「取ってきてほしい」と言った URL を取る（中継の対象は署名つきで受け取る）
+  function fetchNeed(urls, pre) {
+    return Promise.all(urls.map(function (u) {
+      if (viaProxy(u)) {
+        return xfetch(PROXY + '?u=' + encodeURIComponent(u)).then(function (res) {
+          if (!res.ok) throw new Error(res.status);
+          var sig = res.headers.get('x-sig'), st = res.headers.get('x-status');
+          return res.text().then(function (t) { pre[u] = st === '404' ? { n: 1, s: sig } : { b: t, s: sig }; });
+        }).catch(function () { pre[u] = { err: 1 }; });
+      }
+      return xfetch(u).then(function (res) {
+        if (res.status === 404) return null;
+        if (!res.ok) throw new Error(res.status);
+        return res.text();
+      }).then(function (t) { pre[u] = t; }, function () { pre[u] = { err: 1 }; });
+    }));
   }
   function rawRun(name) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -2308,18 +2337,25 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     return refresh();
   }
 
+  // 位置（GPS）で変わるものだけ読み直す（天気・風・河川・水質・海面水温・気圧）。まとめて1回の呼び出しになる
+  function refreshPlace() {
+    loadWeather(); loadRiver(); loadWind(); loadWQ(); loadSST(); loadPressure();
+    return Promise.resolve();
+  }
   function refresh(silent) {
     if (!S.st) return Promise.resolve();
     S.loading = true;
     $('refBtn').classList.add('spin');
     if (!silent) $('app').classList.add('loading');
     var code = S.st.c;
-    loadWeather(!silent && !S.date);
-    loadRiver();
-    loadWind(!silent && !S.date);
-    loadWQ();
-    loadSST();
-    loadPressure();
+    if (!S.locPending) {
+      loadWeather(!silent && !S.date);
+      loadRiver();
+      loadWind(!silent && !S.date);
+      loadWQ();
+      loadSST();
+      loadPressure();
+    }
     loadToday();
     return run('getTideData', code, S.date).then(function (d) {
       if (!S.st || S.st.c !== code) return;
@@ -2346,6 +2382,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       S.pos = c;
       var s = nearest(c.latitude, c.longitude);
       if (s) trackPv(s.c, { lat: c.latitude, lon: c.longitude });
+      S.locPending = false;   // 位置がわかったので、位置で変わるものを読み込んでよい
+      if (s && S.st && s.c === S.st.c && S.data && !S.date) { renderHeader(); return refreshPlace(); }
       if (s) return selectStation(s);
     }).catch(function (e) {
       if (explicit) notice('位置情報を取得できませんでした（' + (e && e.message || e) + '）。画面左上の潮位観測所名をタップして選択してください。');
@@ -3106,11 +3144,22 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (init) { trackPv(init.c, here() || { lat: init.lat, lon: init.lon }); return selectStation(init); }
     var last = byCode(load('st') || '');
     if (last && !stationOk(last)) last = null;
-    // まず前回の地点（無ければ東京）を表示し、位置情報が取れたら最寄りに切り替える
-    var first = selectStation(last || byCode(DEFAULT_ST) || list[0]);
+    // 位置情報を少し待つ（前回の潮位観測所がある人は1.5秒、初めての人は3秒）。取れればその最寄りを1回で読み込み、
+    // 取れなければ前回の潮位観測所（初めての人は東京）を表示する（同じ読み込みを2回しないため）
+    var first = Promise.resolve(), shown = false;
+    S.locPending = !!navigator.geolocation;
+    var placeReady = function () { if (S.locPending) { S.locPending = false; if (S.st) refreshPlace(); } };
+    setTimeout(placeReady, 3000);
+    // 前回の潮位観測所（無ければ東京）を表示する。位置情報が先に取れたら、そちらを1回で読み込む
+    var showDefault = function () { if (!shown && !S.st) { shown = true; first = selectStation(last || byCode(DEFAULT_ST) || list[0]); } };
+    setTimeout(showDefault, last ? 1500 : 3000);
     useLocation(false).then(function () {
+      placeReady();
+      showDefault();   // 近くに潮位観測所が無かったときなど、まだ何も表示していなければ東京
       if (!S.pvSent && S.st) { trackPv(S.st.c, here()); flushEvents(); }
     }, function () {
+      placeReady();
+      showDefault();
       if (S.st) { trackPv(S.st.c, here()); flushEvents(); }
       if (!last) {
         notice('位置情報を利用できないため、潮位観測所「東京」を表示しています。画面左上の潮位観測所名をタップすると変更できます。');
