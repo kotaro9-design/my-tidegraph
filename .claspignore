@@ -7,3 +7,4 @@ docs/**
 tools/**
 .gitignore
 CHANGELOG.md
+cloudflare/**

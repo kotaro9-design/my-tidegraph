@@ -169,7 +169,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     'www.jma.go.jp': '気象庁（観測・予報）', 'www.data.jma.go.jp': '気象庁（潮位表）', 'www1.kaiho.mlit.go.jp': '海上保安庁（験潮）',
     'www.river.go.jp': '川の防災情報', 'api.open-meteo.com': 'Open-Meteo（風・気圧）', 'marine-api.open-meteo.com': 'Open-Meteo Marine（海面水温）',
     'mreversegeocoder.gsi.go.jp': '国土地理院（逆ジオコーダ）', 'msearch.gsi.go.jp': '国土地理院（住所検索）', 'cyberjapandata.gsi.go.jp': '国土地理院（地図タイル）',
-    'script.google.com': 'このアプリのサーバー（Apps Script）', 'www.tbeic.go.jp': '東京湾環境情報センター'
+    'script.google.com': 'このアプリのサーバー（Apps Script）', 'tide-proxy': '中継（Cloudflare Workers）', 'www.tbeic.go.jp': '東京湾環境情報センター'
   };
   var REFS = {
     direct: '直接（ブックマーク・URL入力・アプリ内ブラウザなど）', home_screen: 'ホーム画面のアイコン', gas: '旧URL（Apps Script の画面）',
@@ -437,7 +437,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     var tsv = rows.reduce(function (s, r) { return s + r[1]; }, 0), tcl = rows.reduce(function (s, r) { return s + r[2]; }, 0);
     el.innerHTML = '<div class="sites-wrap"><table class="sites"><thead><tr><th>サイト</th><th>サーバーから<br>（上限に数える）</th><th class="bar"></th><th>ブラウザから</th></tr></thead><tbody>' +
       rows.map(function (r) {
-        return '<tr><td>' + esc(SITES[r[0]] || r[0]) + '<small>' + esc(r[0]) + '</small></td><td>' + n(r[1]) + '</td><td class="bar">' +
+        return '<tr><td>' + esc(SITES[r[0]] || (/^tide-proxy\./.test(r[0]) ? SITES['tide-proxy'] : r[0])) + '<small>' + esc(r[0]) + '</small></td><td>' + n(r[1]) + '</td><td class="bar">' +
           (r[1] ? '<i style="width:' + (r[1] / top * 100).toFixed(1) + '%"></i>' : '') + '</td><td>' + n(r[2]) + '</td></tr>';
       }).join('') +
       '<tr><td><b>合計</b></td><td><b>' + n(tsv) + '</b></td><td></td><td><b>' + n(tcl) + '</b></td></tr></tbody></table></div>';

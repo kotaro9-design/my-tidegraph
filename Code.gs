@@ -392,6 +392,13 @@ function getWaterQuality(lat, lon) {
   // 観測所の一覧と位置（位置が未登録のものは住所から求める）
   prefetch_(near.map(function (t) { return ['wq_twn_' + t[0], RIVER + 'files/obslist/obs/twnlist/' + t[0] + '.json', 6 * 3600]; }));
   var stations = [];
+  // 観測所の情報もまとめて用意する（1件ずつだと、ブラウザ経由のときに往復が増える）
+  var masters = [];
+  near.forEach(function (t) {
+    var txt = cachedText_('wq_twn_' + t[0], 6 * 3600, RIVER + 'files/obslist/obs/twnlist/' + t[0] + '.json', true);
+    try { ((txt && JSON.parse(txt).obsList || {}).obsQwtr || []).forEach(function (q) { masters.push(['wq_m_' + q.obsFcd, RIVER + 'files/master/obs/qwtr/' + q.obsFcd + '.json', 6 * 3600]); }); } catch (e) { /* 無視 */ }
+  });
+  if (masters.length) prefetch_(masters);
   near.forEach(function (t) {
     var txt = cachedText_('wq_twn_' + t[0], 6 * 3600, RIVER + 'files/obslist/obs/twnlist/' + t[0] + '.json', true);
     if (!txt) return;
@@ -941,10 +948,19 @@ function callWithPre(name, args, pre, ev) {
   if (args != null && !Array.isArray(args)) throw new Error('不正な呼び出しです');
   PRE = {};
   // 渡されるのは、こちらが求めたサイトの URL の本文だけ
+  PRE_TRUST = {};
+  PROXY_ON = !!(pre && pre.__proxy === 1);
   if (pre && typeof pre === 'object') {
     Object.keys(pre).forEach(function (u) {
       var v = pre[u];
       if (!clientUrl_(u)) return;
+      if (proxyUrl_(u)) {
+        // 中継のデータは署名が正しいものだけ使う（正しくなければサーバーで取り直す）
+        if (v && typeof v === 'object' && !v.err && (typeof v.b === 'string' || v.n === 1) && proxyVerify_(u, v.n === 1 ? '__404__' : v.b, v.s)) {
+          PRE[u] = v.n === 1 ? null : v.b; PRE_TRUST[u] = true;
+        } else PRE[u] = { err: 1 };
+        return;
+      }
       if (v === null || typeof v === 'string' || (v && typeof v === 'object' && v.err)) PRE[u] = typeof v === 'object' && v ? { err: 1 } : v;
     });
   }
@@ -955,7 +971,7 @@ function callWithPre(name, args, pre, ev) {
     if (!/アクセスが集中/.test(String(e && e.message)) && !(e && e.paused)) monServer_('err', name);
     throw e;
   } finally {
-    PRE = null; FROM_PRE = false;
+    PRE = null; FROM_PRE = false; PROXY_ON = false;
     monServerPerf_(name, Date.now() - t0);
     monCommit_();
   }
@@ -966,10 +982,31 @@ function clientUrl_(url) {
   var m = /^https:\/\/([^\/]+)(\/[^?#]*)?/.exec(String(url));
   if (!m) return false;
   if (CLIENT_HOSTS.indexOf(m[1]) >= 0 && !/\/const\//.test(m[2] || '')) return true;
+  if (proxyUrl_(url)) return true;
   // 非常時モード：Google の URL Fetch の上限に達している間は、気象庁のデータ（地点一覧・潮位表など）もブラウザから取る
   return EMERGENCY_HOSTS.indexOf(m[1]) >= 0 && ufBlocked_();
 }
 var EMERGENCY_HOSTS = ['www.jma.go.jp', 'www.data.jma.go.jp'];
+// 中継（Cloudflare Workers）経由でブラウザに取ってきてもらうデータ元。署名を確かめてから共有キャッシュに入れる
+var PROXY_HOSTS = ['www.river.go.jp', 'www1.kaiho.mlit.go.jp'];
+var PROXY_SECRET = null, PRE_TRUST = {}, PROXY_ON = false;   // PROXY_ON：画面が中継に対応している（pre.__proxy）
+function proxySecret_() {
+  if (PROXY_SECRET == null) PROXY_SECRET = PropertiesService.getScriptProperties().getProperty('PROXY_SECRET') || '';
+  return PROXY_SECRET;
+}
+// 市区町村の一覧（files/map、1MB 超）はブラウザから送ると重いので、サーバーで取って1日キャッシュする
+function proxyUrl_(url) {
+  var m = /^https:\/\/([^\/]+)\//.exec(String(url));
+  return PROXY_ON && !!m && PROXY_HOSTS.indexOf(m[1]) >= 0 && !/\/files\/map\//.test(url) && !!proxySecret_();
+}
+/** 中継の署名（HMAC-SHA256、16進）を確かめる */
+function proxyVerify_(url, body, sig) {
+  var key = proxySecret_();
+  if (!key || !/^[0-9a-f]{64}$/.test(String(sig || ''))) return false;
+  var raw = Utilities.computeHmacSha256Signature(url + '\n' + body, key, Utilities.Charset.UTF_8);
+  var hex = raw.map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('');
+  return hex === sig;
+}
 var UF_BLOCKED = null;   // この実行の中での判定（キャッシュを何度も読まない）
 function ufBlocked_() {
   if (UF_BLOCKED == null) UF_BLOCKED = !!CacheService.getScriptCache().get(CACHE_VER + 'uf_blocked');
@@ -1024,7 +1061,7 @@ function fetchAll_(urls, allow404) {
         var v = PRE[u];
         if (v && typeof v === 'object') { server.push(i); fallback++; return; }   // ブラウザで取れなかった → サーバーで取る
         out[i] = v;                                                                // 本文、または null（404）
-        FROM_PRE = true;
+        if (!PRE_TRUST[u]) FROM_PRE = true;                                         // 署名つきの中継データは共有してよい
         return;
       }
       need.push(u);
@@ -1075,7 +1112,7 @@ function prefetch_(items) {
   if (!miss.length) return;
   var txts = fetchAll_(miss.map(function (it) { return it[1]; }), true);
   miss.forEach(function (it, i) {
-    if (PRE && clientUrl_(it[1])) return;   // ブラウザ由来は共有しない
+    if (PRE && clientUrl_(it[1]) && !PRE_TRUST[it[1]]) return;   // ブラウザ由来は共有しない（署名つきの中継データは共有）
     try { cache.put(CACHE_VER + it[0], txts[i] == null ? '__404__' : txts[i], Math.min(it[2], 21600)); } catch (e) { /* 100KB 超など */ }
   });
 }
@@ -1086,7 +1123,7 @@ function cachedText_(key, ttl, url, allow404) {
   var hit = cache.get(k);
   if (hit != null) return hit === '__404__' ? null : hit;
   var txt = fetchAll_([url], allow404)[0];
-  if (PRE && clientUrl_(url)) return txt;   // ブラウザ由来は共有しない
+  if (PRE && clientUrl_(url) && !PRE_TRUST[url]) return txt;   // ブラウザ由来は共有しない（署名つきの中継データは共有）
   try { cache.put(k, txt == null ? '__404__' : txt, Math.min(ttl, 21600)); } catch (e) { /* 100KB 超など */ }
   return txt;
 }
