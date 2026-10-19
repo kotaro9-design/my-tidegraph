@@ -529,8 +529,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     </div>
 
     <div class="foot-row">
-      <span>河川水位の重ね表示</span>
-      <div class="seg" id="riverSeg" role="group" aria-label="河川水位の重ね表示">
+      <span>河川水位・水質の表示</span>
+      <div class="seg" id="riverSeg" role="group" aria-label="河川水位・水質の表示">
         <button data-r="1" aria-pressed="true">表示</button>
         <button data-r="0" aria-pressed="false">非表示</button>
       </div>
@@ -694,7 +694,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <dt>風の推移・予報</dt><dd>現在地の地図の上に、0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（アメダス）、薄い矢印が予報、赤い線が現在時刻です。</dd>
       <dt>風（地上の観測）</dt><dd>近くのアメダスの最新の風速・風向・最大瞬間風速と、気象庁の予報の風・波です。</dd>
       <dt>海面水温（推定）</dt><dd>近くの海の海面水温と、24時間前との差、明日の予報範囲です。約8km四方の解析・予報モデルの値なので、湾奥・河口・岸近くの実際の水温とは差があることがあります。どの海域の値かはカードの下に表示します。</dd>
-      <dt>水質</dt><dd>現在地から10km以内に水質観測所があるときだけ、水温・塩分濃度を表示します。</dd>
+      <dt>水質</dt><dd>「表示の設定」の「河川水位・水質の表示」が「表示」で、現在地から10km以内に水質観測所があるときだけ、水温・塩分濃度を表示します。</dd>
     </dl>
 
     <h3 id="g-station">潮位観測所の選び方</h3>
@@ -732,7 +732,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <p>画面の下のほう（風のカードの下）にあります。</p>
     <dl>
       <dt>高さの基準</dt><dd>「潮位表基準面」は潮位表や釣り情報で一般的な高さ（ほぼ最低の潮位が0）。「TP」は東京湾平均海面が0の高さで、河川水位と比べるときに使います。</dd>
-      <dt>河川水位の重ね表示</dt><dd>グラフに近くの川の水位を重ねるかどうか。初めて使うときは「非表示」です。河口や川の近くで釣るときは「表示」にしてください（設定は端末に保存されます）。</dd>
+      <dt>河川水位・水質の表示</dt><dd>グラフに近くの川の水位を重ねるか、近くの水質観測所の水温・塩分濃度を表示するかどうか。初めて使うときは「非表示」です。河口や川の近くで釣るときは「表示」にしてください（設定は端末に保存されます）。</dd>
       <dt>河川の水位観測所</dt><dd>「自動」は現在地から一番近い（欠測中を除く）観測所。「近くの水位観測所を表示…」から別の観測所を選べます。</dd>
     </dl>
 
@@ -780,7 +780,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.9.1', APP_DATE = '2026-10-20';
+  var APP_VERSION = '1.9.2', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -1190,7 +1190,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     renderRiverSel();
     if (!S.showRiver) {
       note.hidden = false;
-      note.textContent = '河川の近くで釣るときは、画面下の「表示の設定」で「河川水位の重ね表示」を「表示」にすると、近くの川の水位をグラフに重ねられます。';
+      note.textContent = '河川の近くで釣るときは、画面下の「表示の設定」で「河川水位・水質の表示」を「表示」にすると、近くの川の水位をグラフに重ね、水温・塩分濃度も表示できます。';
       return;
     }
     if (!r) { note.hidden = !S.riverTried; note.textContent = S.riverPaused || '近くに河川の水位観測所が見つかりませんでした'; return; }
@@ -2478,6 +2478,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   function loadWQ(force) {
     var p = here();
     if (!p) return Promise.resolve();
+    if (!S.showRiver) { renderWQ(); return Promise.resolve(); }   // 河川水位・水質の表示がオフなら取りに行かない
     var key = p.lat.toFixed(3) + ',' + p.lon.toFixed(3);
     if (!force && S.wqKey === key && Date.now() - S.wqFetch < 30 * MIN) { renderWQ(); return Promise.resolve(); }
     return run('getWaterQuality', p.lat, p.lon).then(function (q) {
@@ -2493,7 +2494,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     }).join(' / ') + '（' + (q.river ? q.river + ' ' : '') + q.name + '）';
   }
   function renderWQ() {
-    var q = S.wq, card = $('wqCard');
+    var q = S.showRiver ? S.wq : null, card = $('wqCard');
     card.hidden = !q;
     if (!q) return;
     $('wqLbl').textContent = '水質（水質観測所 ' + (q.river ? q.river + '「' + q.name + '」' : q.name) + '・' + (S.wqGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(q.dist) + '）';
@@ -2814,7 +2815,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     }
     var rh = riverOn() ? riverAt(t) : null;
     if (rh != null) r.river = S.river.name + ' ' + fmtH(rh) + 'cm';
-    if (Math.abs(t - now) < 2 * HOUR && S.wq) r.wq = wqText(S.wq);
+    if (Math.abs(t - now) < 2 * HOUR && S.wq && S.showRiver) r.wq = wqText(S.wq);
     var pv = presAt(t);
     if (pv != null) {
       var pd = presAt(t - 3 * HOUR), pw = pd == null ? '' : Math.abs(pv - pd) < 0.5 ? '横ばい' : pv < pd ? '下降中' : '上昇中';
@@ -3086,7 +3087,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   $('riverSeg').onclick = function (ev) {
     var b = ev.target.closest('button'); if (!b) return;
     S.showRiver = b.dataset.r === '1'; save('river', S.showRiver ? '1' : '0');
-    renderRiver(); drawCharts(); loadRiver();
+    renderRiver(); drawCharts(); loadRiver(); loadWQ();
   };
   $('datumSeg').onclick = function (ev) {
     var b = ev.target.closest('button'); if (!b || b.disabled) return;
