@@ -780,11 +780,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.7.1', APP_DATE = '2026-10-20';
+  var APP_VERSION = '1.8.0', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   // 中継（Cloudflare Workers）：ブラウザから直接取れないデータ元（川の防災情報・海上保安庁）を取ってくる
-  var PROXY = 'https://tide-proxy.example.workers.dev/';
+  var PROXY = 'https://tide-proxy.kotaro9.workers.dev/';
   var PROXY_HOSTS = ['www.river.go.jp', 'www1.kaiho.mlit.go.jp'];
   function viaProxy(u) { var m = /^https:\/\/([^\/]+)\//.exec(u); return !!PROXY && !/example\.workers\.dev/.test(PROXY) && !!m && PROXY_HOSTS.indexOf(m[1]) >= 0; }
   var PICK_DAYS = 365;   // カレンダーで選べる範囲（今日の前後、サーバーの上限は400日）

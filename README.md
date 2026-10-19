@@ -129,6 +129,13 @@ Apps Script の Web アプリは独自のページ枠の中で動くため、ホ
 - 外部サイトごとのアクセス回数（サーバー／ブラウザ別）と流入元も記録します。共有するリンクに `?from=名前`（例：`?from=x`）を付けると、流入元をその名前で数えます
 - 管理画面：`/exec?admin=合言葉`（合言葉はスクリプト プロパティ `ADMIN_KEY`）
 
+### 中継（Cloudflare Workers）
+
+- [cloudflare/worker.js](cloudflare/worker.js)：ブラウザから直接取れない川の防災情報・海上保安庁の験潮データを中継します（`https://tide-proxy.kotaro9.workers.dev/?u=…`）
+- 中継できる URL と呼び出し元（このアプリの画面）を限定し、Cloudflare でキャッシュします
+- 中継したデータには HMAC 署名を付け、Apps Script が確かめてから共有キャッシュに入れます。合言葉は Workers のシークレット `SECRET` と Apps Script のスクリプト プロパティ `PROXY_SECRET` に同じ値を置きます（リポジトリには載せません）
+- 中継が使えないときは Apps Script の URL Fetch で取得します
+
 ### 不正利用への対策
 
 - 位置（日本の周辺）・日付（前後400日）・地点コードなどの入力値をチェックします

@@ -791,9 +791,13 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.7.1', APP_DATE = '2026-10-20';
+  var APP_VERSION = '1.8.0', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
+  // 中継（Cloudflare Workers）：ブラウザから直接取れないデータ元（川の防災情報・海上保安庁）を取ってくる
+  var PROXY = 'https://tide-proxy.kotaro9.workers.dev/';
+  var PROXY_HOSTS = ['www.river.go.jp', 'www1.kaiho.mlit.go.jp'];
+  function viaProxy(u) { var m = /^https:\/\/([^\/]+)\//.exec(u); return !!PROXY && !/example\.workers\.dev/.test(PROXY) && !!m && PROXY_HOSTS.indexOf(m[1]) >= 0; }
   var PICK_DAYS = 365;   // カレンダーで選べる範囲（今日の前後、サーバーの上限は400日）
 
   // 河川水位の重ね表示の初期値。設定済みならそれ、未設定なら以前から使っている人はオン、新しい人はオフ（URL Fetch の節約）
@@ -895,12 +899,21 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
   function run(name) {
     var args = Array.prototype.slice.call(arguments, 1), pre = {}, rounds = 0, ev = takeEvents(), t0 = Date.now();
+    if (viaProxy('https://www.river.go.jp/')) pre.__proxy = 1;   // 中継に対応していることをサーバーに伝える
     var call = function () {
       var e1 = ev; ev = null;
       return rawRun('callWithPre', name, args, pre, e1).then(function (r) {
         if (!r || !r.need) return r ? r.result : r;
         if (++rounds > 10) throw new Error('データの取得に失敗しました（' + name + '）');
         return Promise.all(r.need.map(function (u) {
+          if (viaProxy(u)) {
+            // 中継：署名（x-sig）つきで受け取り、そのまま渡す。サーバーが署名を確かめる
+            return xfetch(PROXY + '?u=' + encodeURIComponent(u)).then(function (res) {
+              if (!res.ok) throw new Error(res.status);
+              var sig = res.headers.get('x-sig'), st = res.headers.get('x-status');
+              return res.text().then(function (t) { pre[u] = st === '404' ? { n: 1, s: sig } : { b: t, s: sig }; });
+            }).catch(function () { pre[u] = { err: 1 }; });
+          }
           return xfetch(u).then(function (res) {
             if (res.status === 404) return null;
             if (!res.ok) throw new Error(res.status);

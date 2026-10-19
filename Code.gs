@@ -997,7 +997,8 @@ function proxySecret_() {
 // 市区町村の一覧（files/map、1MB 超）はブラウザから送ると重いので、サーバーで取って1日キャッシュする
 function proxyUrl_(url) {
   var m = /^https:\/\/([^\/]+)\//.exec(String(url));
-  return PROXY_ON && !!m && PROXY_HOSTS.indexOf(m[1]) >= 0 && !/\/files\/map\//.test(url) && !!proxySecret_();
+  // ただし Google の上限に達している間（非常時モード）は、市区町村の一覧も中継から取る
+  return PROXY_ON && !!m && PROXY_HOSTS.indexOf(m[1]) >= 0 && (!/\/files\/map\//.test(url) || ufBlocked_()) && !!proxySecret_();
 }
 /** 中継の署名（HMAC-SHA256、16進）を確かめる */
 function proxyVerify_(url, body, sig) {
