@@ -72,6 +72,21 @@ table.sites .bar i { display: block; height: 8px; background: var(--bar); border
 table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
 #tip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); display: none; z-index: 9; white-space: nowrap; }
 .msg { color: var(--crit); font-size: 13px; margin: 8px 0; }
+.tiles.mini { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); margin: 0; }
+.tiles.mini .tile { background: var(--surface-2); border: 0; }
+.tiles.mini .v { font-size: 18px; }
+.h3 { font-size: 13px; margin: 14px 0 4px; color: var(--text-2); }
+.lg { display: inline-flex; gap: 6px; align-items: center; }
+.lg i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.ok { color: var(--good); } .warn { color: var(--warn); } .crit { color: var(--crit); }
+.muted td { color: var(--text-3); }
+.env .card { margin: 0; padding: 0; border: 0; background: none; }
+.env h4 { font-size: 12px; margin: 4px 0; color: var(--text-2); }
+.form { display: grid; gap: 8px; font-size: 13px; }
+.form input[type=email] { width: 100%; margin-top: 4px; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; }
+.alog { font-size: 12px; border-bottom: 1px solid var(--border); padding: 6px 0; }
+.alog b { margin-right: 6px; }
+.alog .t { color: var(--text-3); margin-right: 6px; font-variant-numeric: tabular-nums; }
 .note { font-size: 11px; color: var(--text-3); line-height: 1.6; margin-top: 14px; }
 </style>
 </head>
@@ -91,11 +106,15 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   </div>
   <div class="msg" id="msg" hidden></div>
 
+  <div class="card"><h2>監視の状態 <span id="healthSub"></span></h2><div class="tiles mini" id="health"></div></div>
+  <div class="card"><h2>データ元の異常 <span>回（404 は普段から起きるため薄く表示）</span></h2><div id="tFails"></div>
+    <h3 class="h3">画面で見つかったデータの異常</h3><div id="tQuality"></div></div>
+
   <div class="tiles" id="tiles"></div>
 
   <div class="grid2">
     <div class="card"><h2>日ごとの表示回数 <span>回</span></h2><svg class="chart" id="cPv"></svg></div>
-    <div class="card"><h2>日ごとの利用者数 <span>人（匿名ID）</span></h2><svg class="chart" id="cUsers"></svg></div>
+    <div class="card"><h2>日ごとの利用者数 <span class="lg"><i style="background:var(--bar)"></i>再訪 <i style="background:var(--bar-2)"></i>新規</span></h2><svg class="chart" id="cUsers"></svg></div>
     <div class="card"><h2>時間帯別の表示回数（期間合計） <span>回</span></h2><svg class="chart" id="cHour"></svg></div>
     <div class="card"><h2>日ごとの URL Fetch 回数 <span>回（点線は1日の上限）</span></h2><svg class="chart" id="cUf"></svg></div>
   </div>
@@ -104,16 +123,32 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     <div class="card"><h2>よく使われる地域（約10km） <span>回</span></h2><div id="tAreas"></div></div>
     <div class="card"><h2>機能の利用 <span>回</span></h2><div id="tFeatures"></div></div>
   </div>
+  <div class="card"><h2>表示の速さ <span>利用者の端末で計測（サーバーは Apps Script の処理時間）</span></h2><div id="tPerf"></div></div>
   <div class="card"><h2>エラー <span>件</span></h2><div id="tErrors"></div></div>
   <div class="card"><h2>外部サイトへのアクセス（期間合計） <span>回</span></h2><div id="tSites"></div></div>
   <div class="grid2">
     <div class="card"><h2>流入元（どこから開いたか） <span>回</span></h2><div id="tRefs"></div></div>
+    <div class="card"><h2>位置情報（GPS）が使えたか <span>起動時</span></h2><div id="tGeo"></div></div>
+  </div>
+  <div class="card"><h2>利用環境 <span>表示回数</span></h2><div class="grid2 env" id="tEnv"></div></div>
+  <div class="grid2">
+    <div class="card"><h2>通知の設定</h2>
+      <div class="form">
+        <label><input type="checkbox" id="alOn"> 異常があればメールで知らせる（15分ごとに確認）</label>
+        <label><input type="checkbox" id="alDaily"> 毎朝7時ごろに前日の要約を送る</label>
+        <label>通知先 <input type="email" id="alTo" placeholder="空欄なら Apps Script の持ち主のアドレス"></label>
+        <div class="bar-row"><button class="btn" id="alSave">保存</button><button class="btn" id="alTest">テストメールを送る</button><span class="sub" id="alMsg"></span></div>
+      </div>
+    </div>
+    <div class="card"><h2>最近の通知 <span>最大20件</span></h2><div id="tAlerts"></div></div>
   </div>
   <p class="note">
     データは1時間ごとにスプレッドシートへ集計されます（今の1時間の分も含めて表示）。利用者数は端末ごとの匿名IDの数です（ブラウザのデータを消すと別の人として数えます）。
     地域は約10km単位に丸めた位置で、名前は国土地理院の逆ジオコーダで求めた目安です。
     エラーの「画面」は利用者の端末でデータを受け取れなかった回数（通信の切れ目なども含む）、「サーバー」は Apps Script での処理の失敗です。
     外部サイトの「サーバーから」は Apps Script の URL Fetch（1日の上限に数える）、「ブラウザから」は利用者の端末からの取得です（上限には数えない。地図タイルは端末ごとに初回のみ数える）。
+    データ元の異常の「ex」はサーバーからの通信の失敗・時間切れ、「net」はブラウザの通信の失敗です（利用者側の電波の弱さでも起きます）。
+    表示の速さの「起動〜表示」は、ページを開いてから潮位のグラフが出るまでの時間です。
     流入元はページを開いたときの直前のページのサイト名です。X や LINE のアプリ内から開いた場合は「直接」になることがあります。リンクに ?from=名前 を付けると、その名前で数えます。
   </p>
 </div>
@@ -169,6 +204,11 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     D.users.forEach(function (r) { if (users[r[0]]) { users[r[0]][r[1]] = 1; all[r[1]] = 1; } });
     var st = Object.assign({}, D.stations), ar = Object.assign({}, D.areas), fe = Object.assign({}, D.features), er = Object.assign({}, D.errors);
     var si = {}, rf = Object.assign({}, D.referrers || {});
+    var fa = Object.assign({}, D.failures || {}), qa = Object.assign({}, D.quality || {}), en = Object.assign({}, D.env || {}), ge = Object.assign({}, D.geo || {});
+    var pf = {}, alive = 0, pvAll = 0;
+    var addPerf = function (src) { Object.keys(src || {}).forEach(function (k) { var x = pf[k] || (pf[k] = [0, 0, 0, 0, 0, 0, 0]), p = src[k]; x[0] += p[0]; x[1] += p[1]; x[2] = Math.max(x[2], p[2]); for (var i = 3; i < 7; i++) x[i] += p[i]; }); };
+    addPerf(D.perf);
+    D.hourly.forEach(function (r) { if (byDay[r[0].slice(0, 10)]) { alive += r[7] || 0; pvAll += r[1]; } });
     Object.keys(D.sites || {}).forEach(function (k) { si[k] = { sv: D.sites[k].sv, cl: D.sites[k].cl }; });
     var add = function (o, src, pre) { Object.keys(src || {}).forEach(function (k) { var kk = (pre || '') + k; o[kk] = (o[kk] || 0) + src[k]; }); };
     D.pending.forEach(function (p) {
@@ -181,11 +221,21 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
       Object.keys(p.sv || {}).forEach(function (k) { (si[k] = si[k] || { sv: 0, cl: 0 }).sv += p.sv[k]; });
       Object.keys(p.cl || {}).forEach(function (k) { (si[k] = si[k] || { sv: 0, cl: 0 }).cl += p.cl[k]; });
       Object.keys(p.err || {}).forEach(function (k) { er[k] = (er[k] || 0) + p.err[k]; });
+      Object.keys(p.svf || {}).forEach(function (k) { var kk = 'server|' + k; fa[kk] = (fa[kk] || 0) + p.svf[k]; });
+      Object.keys(p.clf || {}).forEach(function (k) { var kk = 'client|' + k; fa[kk] = (fa[kk] || 0) + p.clf[k]; });
+      add(qa, p.q); add(en, p.env); add(ge, p.geo); addPerf(p.perf);
+      alive += p.alive || 0; pvAll += p.pv;
     });
     // 今日の URL Fetch は日ごとの実数（未集計の時間を含む）
     var today = ymd(D.now);
     if (byDay[today]) byDay[today].uf = Math.max(byDay[today].uf, D.ufToday);
-    return { days: days, byDay: byDay, hours: hours, users: users, allUsers: Object.keys(all).length, st: st, ar: ar, fe: fe, er: er, si: si, rf: rf };
+    // 新規・再訪（匿名IDが初めて現れた日がその日なら新規）
+    var newRet = days.map(function (d) {
+      var ids = Object.keys(users[d]), nw = ids.filter(function (a) { return (D.firstSeen[a] || d) >= d; }).length;
+      return [nw, ids.length - nw];
+    });
+    return { days: days, byDay: byDay, hours: hours, users: users, allUsers: Object.keys(all).length, st: st, ar: ar, fe: fe, er: er, si: si, rf: rf,
+      fa: fa, qa: qa, en: en, ge: ge, pf: pf, alive: alive, pvAll: pvAll, newRet: newRet };
   }
 
   function tiles(A) {
@@ -199,6 +249,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
       '<div class="tile"><div class="k">今日の URL Fetch</div><div class="v">' + n(D.ufToday) + '<small>/ ' + n(D.limits.day) + '</small></div>' + meter(dayPct) + '</div>',
       '<div class="tile"><div class="k">この1時間の URL Fetch</div><div class="v">' + n(D.ufHour) + '<small>/ ' + n(D.limits.hour) + '</small></div>' + meter(hourPct) + '</div>',
       '<div class="tile"><div class="k">上限超え（期間）</div><div class="v">' + n(sum('lim')) + '<small>回</small></div><div class="s">アクセス集中で断った回数</div></div>',
+      '<div class="tile"><div class="k">開いている時間（平均）</div><div class="v">' + (A.pvAll ? (5 + A.alive * 5 / A.pvAll).toFixed(0) : '--') + '<small>分くらい</small></div><div class="s">自動更新の回数からの目安</div></div>',
       '<div class="tile"><div class="k">エラー（期間）</div><div class="v">' + n(sum('serr') + sum('cerr')) + '<small>件</small></div><div class="s">サーバー ' + n(sum('serr')) + ' / 画面 ' + n(sum('cerr')) + '</div></div>'
     ].join('');
   }
@@ -207,7 +258,8 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   function bars(svg, labels, values, opt) {
     opt = opt || {};
     var W = svg.clientWidth || 300, H = svg.clientHeight || 180, L = 36, R = 6, T = 8, B = 20;
-    var max = Math.max(opt.limit || 0, Math.max.apply(null, values.concat([1])));
+    var tot = values.map(function (v) { return Array.isArray(v) ? v[0] + v[1] : v; });
+    var max = Math.max(opt.limit || 0, Math.max.apply(null, tot.concat([1])));
     var step = Math.pow(10, Math.floor(Math.log10(max))), nice = Math.ceil(max / step) * step;
     if (nice / step > 5) step *= 2; else if (nice / step <= 2) step /= 2;
     step = Math.max(1, step);   // 回数・人数は整数
@@ -220,9 +272,12 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     }
     var every = Math.ceil(values.length / (opt.ticks || 7));
     values.forEach(function (v, i) {
-      var x = L + i * bw, w = Math.max(1, bw - 2), top = y(v);
-      if (v > 0) h += '<path d="M' + (x + 1) + ',' + y(0) + 'V' + (top + 2) + 'q0,-2 2,-2h' + Math.max(0, w - 4) + 'q2,0 2,2V' + y(0) + 'Z" fill="' + css('--bar') + '"/>';
-      h += '<rect class="hit" x="' + x + '" y="' + T + '" width="' + bw + '" height="' + (H - T - B) + '" fill="transparent" data-l="' + esc(labels[i]) + '" data-v="' + v + '"/>';
+      var x = L + i * bw, w = Math.max(1, bw - 2), sv = Array.isArray(v) ? v : [0, v], total = sv[0] + sv[1], top = y(total);
+      // 下に再訪（濃い色）、上に新規（薄い色）。間に2pxのすき間
+      if (sv[1] > 0) h += '<path d="M' + (x + 1) + ',' + y(0) + 'V' + (y(sv[1]) + (sv[0] ? 0 : 2)) + (sv[0] ? 'h' + w : 'q0,-2 2,-2h' + Math.max(0, w - 4) + 'q2,0 2,2') + 'V' + y(0) + 'Z" fill="' + css('--bar') + '"/>';
+      if (sv[0] > 0) { var b0 = sv[1] > 0 ? y(sv[1]) - 2 : y(0); h += '<path d="M' + (x + 1) + ',' + b0 + 'V' + (top + 2) + 'q0,-2 2,-2h' + Math.max(0, w - 4) + 'q2,0 2,2V' + b0 + 'Z" fill="' + css(Array.isArray(v) ? '--bar-2' : '--bar') + '"/>'; }
+      h += '<rect class="hit" x="' + x + '" y="' + T + '" width="' + bw + '" height="' + (H - T - B) + '" fill="transparent" data-l="' + esc(labels[i]) + '" data-v="' + total + '"' +
+        (Array.isArray(v) ? ' data-x="（新規 ' + sv[0] + '・再訪 ' + sv[1] + '）"' : '') + '/>';
       if (i % every === 0) h += '<text x="' + (x + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(opt.short ? opt.short(labels[i]) : labels[i]) + '</text>';
     });
     if (opt.limit) h += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(opt.limit) + '" y2="' + y(opt.limit) + '" stroke="' + css('--crit') + '" stroke-dasharray="4 3"/>';
@@ -235,7 +290,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   function tipAt(ev) {
     var el = ev.target, tip = $('tip');
     if (!el.classList || !el.classList.contains('hit')) { tip.style.display = 'none'; return; }
-    tip.innerHTML = '<b>' + esc(el.dataset.l) + '</b> ' + n(+el.dataset.v) + ' ' + esc(el.ownerSVGElement.dataset.unit);
+    tip.innerHTML = '<b>' + esc(el.dataset.l) + '</b> ' + n(+el.dataset.v) + ' ' + esc(el.ownerSVGElement.dataset.unit) + esc(el.dataset.x || '');
     tip.style.display = 'block';
     var x = Math.min(ev.clientX + 12, window.innerWidth - tip.offsetWidth - 8);
     tip.style.left = x + 'px'; tip.style.top = (ev.clientY - 34) + 'px';
@@ -264,6 +319,114 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
         return '<tr><td>' + esc(ERRS[r[1]] ? ERRS[r[1]] + 'に失敗' : r[1]) + '<small>' + esc(r[1]) + '</small></td><td>' +
           (r[0] === 'server' ? 'サーバー' : r[0] === 'client' ? '画面' : esc(r[0])) + '</td><td>' + n(r[2]) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
+  }
+  // 監視そのものの状態
+  function healthTiles() {
+    var h = D.health || {}, now = D.now, lf = h.lastFlush;
+    var ago = lf ? Math.round((now - lf.t) / 60000) : null;
+    var st = function (cls, t) { return '<div class="status ' + cls + '">' + t + '</div>'; };
+    var pend = D.pending.reduce(function (s, p) { return s + (p.bytes || 0); }, 0);
+    var cells = h.cells || 0;
+    $('health').innerHTML = [
+      '<div class="tile"><div class="k">最後の集計</div><div class="v">' + (ago == null ? '--' : ago + '<small>分前</small>') + '</div>' +
+        (ago == null ? st('warn', '⚠ まだ集計されていません') : ago <= 30 ? st('ok', '✓ 正常（15分ごと）') : st('crit', '⛔ 遅れています')) + '</div>',
+      '<div class="tile"><div class="k">集計のトリガー</div><div class="v">' + (h.trigger ? 'あり' : h.trigger === false ? 'なし' : '--') + '</div>' +
+        (h.trigger ? st('ok', '✓ 動作中') : st('crit', '⛔ setupMonitor を実行')) + '</div>',
+      '<div class="tile"><div class="k">取りこぼし（今日）</div><div class="v">' + n(h.dropToday || 0) + '<small>件</small></div>' +
+        (h.dropToday ? st('warn', '⚠ 混雑で記録できなかった') : st('ok', '✓ なし')) + '</div>',
+      '<div class="tile"><div class="k">未集計の一時保存</div><div class="v">' + (pend / 1024).toFixed(0) + '<small>KB</small></div>' +
+        (D.pending.some(function (p) { return p.bytes > 80000; }) ? st('warn', '⚠ 1時間分が上限100KBに近い') : st('ok', '✓ 余裕あり')) + '</div>',
+      '<div class="tile"><div class="k">スプレッドシート</div><div class="v">' + (cells / 10000).toFixed(1) + '<small>万セル</small></div>' +
+        (cells > 5e6 ? st('warn', '⚠ 上限1000万セルの半分') : st('ok', '✓ 上限1000万セル')) + '</div>',
+      '<div class="tile"><div class="k">メール通知</div><div class="v">' + (h.alerts ? 'オン' : 'オフ') + '</div>' +
+        (h.alerts && h.alertTo ? st('ok', '✓ ' + esc(h.alertTo)) : st('warn', '⚠ 通知されません')) + '</div>'
+    ].join('');
+    $('healthSub').textContent = '15分ごとに集計・異常を確認';
+  }
+  // データ元の失敗：サイト × 場所・状態
+  function failsTable(el, fa, si) {
+    var by = {};
+    Object.keys(fa).forEach(function (k) {
+      var p = k.split('|'), x = by[p[1]] || (by[p[1]] = { server: {}, client: {}, total: 0, real: 0 });
+      x[p[0]][p[2]] = (x[p[0]][p[2]] || 0) + fa[k]; x.total += fa[k];
+      if (p[2] !== '404' && !(p[0] === 'client' && p[2] === 'net')) x.real += fa[k];
+    });
+    var rows = Object.keys(by).sort(function (a, b) { return by[b].real - by[a].real || by[b].total - by[a].total; });
+    if (!rows.length) { el.innerHTML = '<div class="empty">取得の失敗はありません</div>'; return; }
+    var fmt = function (o) { return Object.keys(o).sort().map(function (k) { return k + '×' + n(o[k]); }).join('、') || '—'; };
+    el.innerHTML = '<div class="sites-wrap"><table class="sites errs"><thead><tr><th>サイト</th><th>サーバーから</th><th>ブラウザから</th><th>失敗の割合</th></tr></thead><tbody>' +
+      rows.map(function (h) {
+        var x = by[h], acc = si[h] ? si[h].sv + si[h].cl : 0, rate = acc ? x.real / acc : 0;
+        var cls = x.real === 0 ? ' class="muted"' : '';
+        return '<tr' + cls + '><td>' + esc(SITES[h] || h) + '<small>' + esc(h) + '</small></td><td>' + esc(fmt(x.server)) + '</td><td>' + esc(fmt(x.client)) + '</td><td>' +
+          (acc ? '<span class="' + (rate >= .05 ? 'crit' : rate >= .01 ? 'warn' : 'ok') + '">' + (rate * 100).toFixed(1) + '%</span>' : '—') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function qualityName(k) {
+    var m = /^tide_stale:(\d{6})$/.exec(k);
+    if (m) return '潮位の更新停止：' + (D.stationNames[m[1]] || m[1]);
+    m = /^river_nodata:(\d+)$/.exec(k);
+    if (m) return '河川水位の欠測：観測所 ' + m[1];
+    return k;
+  }
+  // 表示の速さ：処理ごと
+  var PERFS = { load: '起動〜表示（グラフが出るまで）', getTideData: '潮位データ', getStations: '潮位観測所の一覧', getWeather: '天気',
+    getWind: '風の推移', getRiver: '河川水位', getRiverStations: '河川の水位観測所の一覧', getWaterQuality: '水質' };
+  function perfTable(el, pf) {
+    var keys = Object.keys(pf).sort(function (a, b) {
+      var an = a.slice(2), bn = b.slice(2);
+      return (an === 'load' ? -1 : bn === 'load' ? 1 : 0) || an.localeCompare(bn) || a.localeCompare(b);
+    });
+    if (!keys.length) { el.innerHTML = '<div class="empty">まだデータがありません</div>'; return; }
+    el.innerHTML = '<div class="sites-wrap"><table class="sites"><thead><tr><th>処理</th><th>場所</th><th>回数</th><th>平均</th><th>最大</th><th>3秒以上</th></tr></thead><tbody>' +
+      keys.map(function (k) {
+        var p = pf[k], name = k.slice(2), slow = p[0] ? (p[5] + p[6]) / p[0] : 0, avg = p[0] ? p[1] / p[0] / 1000 : 0;
+        return '<tr><td>' + esc(PERFS[name] || name) + '<small>' + esc(name) + '</small></td><td>' + (k[0] === 's' ? 'サーバー' : '画面') + '</td><td>' + n(p[0]) + '</td><td><span class="' +
+          (avg >= 5 ? 'crit' : avg >= 2 ? 'warn' : 'ok') + '">' + avg.toFixed(1) + '秒</span></td><td>' + (p[2] / 1000).toFixed(1) + '秒</td><td>' + (slow * 100).toFixed(0) + '%</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  // 位置情報：新旧の画面ごとに成功率
+  function geoList(el, ge) {
+    var apps = { pages: '新しい URL（GitHub Pages）', gas: '旧URL（Apps Script）' }, res = { ok: '取得できた', denied: '許可されなかった', timeout: '時間切れ', unavailable: '取得できなかった', unsupported: '非対応' };
+    var html = '', fill = [];
+    Object.keys(apps).forEach(function (a) {
+      var o = {};
+      Object.keys(ge).forEach(function (k) { var p = k.split(':'); if (p[0] === a) o[p[1]] = ge[k]; });
+      var tot = Object.keys(o).reduce(function (s, k) { return s + o[k]; }, 0);
+      if (!tot) return;
+      html += '<h3 class="h3">' + apps[a] + '：成功 ' + Math.round((o.ok || 0) / tot * 100) + '%（' + n(tot) + ' 回）</h3>' +
+        '<div id="geo_' + a + '"></div>';
+      fill.push(function () { hlist($('geo_' + a), o, function (k) { return res[k] || k; }); });
+    });
+    el.innerHTML = html || '<div class="empty">まだデータがありません</div>';
+    fill.forEach(function (f) { f(); });
+  }
+  // 利用環境：OS・端末・起動方法・アプリ・バージョン
+  function envLists(el, en) {
+    var groups = { os: 'OS', dev: '端末', mode: '起動方法', app: '画面', ver: 'アプリのバージョン' };
+    var names = { 'os:ios': 'iPhone・iPad', 'os:android': 'Android', 'os:windows': 'Windows', 'os:mac': 'Mac', 'os:linux': 'Linux・Chromebook', 'os:other': 'その他',
+      'dev:mobile': 'スマホ', 'dev:tablet': 'タブレット', 'dev:pc': 'パソコン', 'mode:home_screen': 'ホーム画面のアイコン', 'mode:browser': 'ブラウザ',
+      'app:pages': '新しい URL（GitHub Pages）', 'app:gas': '旧URL（Apps Script）' };
+    var html = '', fill = [];
+    Object.keys(groups).forEach(function (g) {
+      var o = {};
+      Object.keys(en).forEach(function (k) { if (k.indexOf(g + ':') === 0) o[k] = en[k]; });
+      html += '<div class="card"><h4>' + groups[g] + '</h4><div id="env_' + g + '"></div></div>';
+      fill.push(function () { hlist($('env_' + g), o, function (k) { return names[k] || k.replace(/^ver:/, 'v'); }, 8); });
+    });
+    el.innerHTML = html;
+    fill.forEach(function (f) { f(); });
+  }
+  function alertsLog(el) {
+    var a = D.alerts || [];
+    el.innerHTML = a.length ? a.map(function (r) { return '<div class="alog"><span class="t">' + esc(r[0]) + '</span><b>' + esc(r[1]) + '</b>' + esc(r[2]) + '</div>'; }).join('') :
+      '<div class="empty">通知はまだありません</div>';
+  }
+  function alertForm() {
+    var h = D.health || {};
+    $('alOn').checked = !!h.alerts; $('alDaily').checked = !!h.daily;
+    if (!$('alTo').dataset.touched) $('alTo').value = '';
+    $('alTo').placeholder = '空欄なら ' + (h.alertTo || 'Apps Script の持ち主のアドレス');
   }
   // 外部サイトごと：サーバーから（URL Fetch の上限に数える）とブラウザから（上限には数えない）
   function sitesTable(el, si) {
@@ -297,7 +460,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     tiles(A);
     var short = function (d) { return +d.slice(5, 7) + '/' + +d.slice(8, 10); };
     bars($('cPv'), A.days, A.days.map(function (d) { return A.byDay[d].pv; }), { short: short, unit: '回' });
-    bars($('cUsers'), A.days, A.days.map(function (d) { return Object.keys(A.users[d]).length; }), { short: short, unit: '人' });
+    bars($('cUsers'), A.days, A.newRet, { short: short, unit: '人' });
     bars($('cHour'), A.hours.map(function (_, i) { return i + '時'; }), A.hours, { ticks: 8, unit: '回' });
     bars($('cUf'), A.days, A.days.map(function (d) { return A.byDay[d].uf; }), { short: short, unit: '回', limit: D.limits.day });
     hlist($('tStations'), A.st, function (c) { return (D.stationNames[c] || '') + '（' + c + '）'; });
@@ -305,6 +468,14 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     nameAreas($('tAreas'));
     hlist($('tFeatures'), A.fe, function (k) { return FEATURES[k] || k; }, 30);
     sitesTable($('tSites'), A.si);
+    healthTiles();
+    failsTable($('tFails'), A.fa, A.si);
+    hlist($('tQuality'), A.qa, qualityName, 15);
+    perfTable($('tPerf'), A.pf);
+    geoList($('tGeo'), A.ge);
+    envLists($('tEnv'), A.en);
+    alertsLog($('tAlerts'));
+    alertForm();
     hlist($('tRefs'), A.rf, refName, 15);
     errorsTable($('tErrors'), A.er);
     var d = new Date(D.now + 9 * 3600e3);
@@ -330,6 +501,19 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
       .then(function () { b.disabled = false; });
   };
   window.addEventListener('resize', function () { if (D) render(); });
+  $('alTo').addEventListener('input', function () { this.dataset.touched = '1'; });
+  $('alSave').onclick = function () {
+    var cfg = { alerts: $('alOn').checked, daily: $('alDaily').checked };
+    if ($('alTo').dataset.touched) cfg.to = $('alTo').value;
+    $('alMsg').textContent = '保存中…';
+    call('adminSetAlerts', KEY, cfg).then(function () { $('alMsg').textContent = '保存しました'; delete $('alTo').dataset.touched; return load(); })
+      .catch(function (e) { $('alMsg').textContent = '保存できませんでした：' + (e && e.message || e); });
+  };
+  $('alTest').onclick = function () {
+    $('alMsg').textContent = '送信中…';
+    call('adminTestMail', KEY).then(function (to) { $('alMsg').textContent = to + ' に送りました'; })
+      .catch(function (e) { $('alMsg').textContent = '送れませんでした：' + (e && e.message || e); });
+  };
   load();
 })();
 </script>

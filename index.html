@@ -767,7 +767,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     </dl>
 
     <h3>利用状況の集計について</h3>
-    <p>アプリの改善のため、利用状況（端末ごとの匿名ID、表示した潮位観測所、約10km単位の地域、使った機能、エラーの種類、どのサイトから開いたか、データを取得した外部サイトごとの回数）を集計しています。名前・メールアドレス・正確な位置など、個人を特定できる情報は集めていません。</p>
+    <p>アプリの改善のため、利用状況（端末ごとの匿名ID、表示した潮位観測所、約10km単位の地域、使った機能、エラーの種類、どのサイトから開いたか、データを取得した外部サイトごとの回数と失敗、表示にかかった時間、位置情報が使えたか、端末の種類（スマホ・PC、iPhone・Android）、開いていた時間の目安）を集計しています。名前・メールアドレス・正確な位置など、個人を特定できる情報は集めていません。</p>
 
     <h3>ご注意</h3>
     <p>実測値は速報値で、推算や天気予報は目安です。実際の海や天候の状況を必ず自分の目で確かめ、安全第一で釣りを楽しんでください。</p>
@@ -780,7 +780,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.5.1', APP_DATE = '2026-10-18';
+  var APP_VERSION = '1.6.0', APP_DATE = '2026-10-19';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var PICK_DAYS = 365;   // カレンダーで選べる範囲（今日の前後、サーバーの上限は400日）
@@ -815,7 +815,34 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   // ブラウザから外部サイトへのアクセス回数（サイトごとにまとめて、次の送信に1件として相乗り）
   var HOSTCNT = {}, TILE_SEEN = {};
   function countHost(u) { var m = /^https?:\/\/([^\/?#]+)/.exec(String(u)); if (m) HOSTCNT[m[1]] = (HOSTCNT[m[1]] || 0) + 1; }
-  function xfetch(u, o) { countHost(u); return fetch(u, o); }
+  // ① 外部サイトの取得失敗（サイト|状態：404・500・net など）
+  var HOSTFAIL = {};
+  function failHost(u, st) { var m = /^https?:\/\/([^\/?#]+)/.exec(String(u)); if (m) { var k = m[1] + '|' + st; HOSTFAIL[k] = (HOSTFAIL[k] || 0) + 1; } }
+  function xfetch(u, o) {
+    countHost(u);
+    return fetch(u, o).then(function (r) { if (!r.ok) failHost(u, r.status); return r; }, function (e) { failHost(u, 'net'); throw e; });
+  }
+  // ② 処理ごとの応答時間（回数・合計・最大・1秒未満／3秒未満／10秒未満／10秒以上の回数）
+  var PERF = {};
+  function perf(name, ms) {
+    var p = PERF[name] || (PERF[name] = [0, 0, 0, 0, 0, 0, 0]);
+    p[0]++; p[1] += ms; p[2] = Math.max(p[2], ms);
+    p[ms < 1000 ? 3 : ms < 3000 ? 4 : ms < 10000 ? 5 : 6]++;
+  }
+  // データの異常を画面で見つけた（同じものは1回の起動で1回だけ）
+  var QSEEN = {};
+  function quality(k) { if (!QSEEN[k]) { QSEEN[k] = 1; track('q', k); } }
+  // ⑦ 利用環境
+  function envInfo() {
+    var ua = navigator.userAgent || '';
+    var os = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? 'ios' : /Android/.test(ua) ? 'android' :
+      /Windows/.test(ua) ? 'windows' : /Mac OS X/.test(ua) ? 'mac' : /Linux|CrOS/.test(ua) ? 'linux' : 'other';
+    var w = Math.min(screen.width || 0, screen.height || 0);
+    var dev = /Mobi|iPhone|iPod/.test(ua) || (os === 'android' && /Mobile/.test(ua)) ? 'mobile' : (os === 'ios' || os === 'android' || (w && w < 900 && navigator.maxTouchPoints > 1)) ? 'tablet' : 'pc';
+    var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
+    var app = window.google && google.script && google.script.run ? 'gas' : 'pages';
+    return ['os:' + os, 'dev:' + dev, 'mode:' + (standalone ? 'home_screen' : 'browser'), 'app:' + app, 'ver:' + APP_VERSION];
+  }
   // 流入元：外部サイトから来たときはそのサイト名、ホーム画面のアイコン、旧URL（Apps Script の画面）、直接（ブックマーク・入力）
   function referrerName() {
     var q = /[?&]from=([A-Za-z0-9._-]{1,30})/.exec(location.search);
@@ -829,24 +856,26 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   function trackPv(code, pos) {
     if (S.pvSent || !code) return;
     S.pvSent = true;
-    track('pv', { st: code, area: pos ? pos.lat.toFixed(1) + ',' + pos.lon.toFixed(1) : '', ref: referrerName() });
+    track('pv', { st: code, area: pos ? pos.lat.toFixed(1) + ',' + pos.lon.toFixed(1) : '', ref: referrerName(), env: envInfo() });
   }
   // 次の通信を待たずに送る（キャッシュ済みの軽い呼び出しに相乗り）
   function flushEvents() { if (EVQ.length) run('getStations').catch(function () {}); }
   function takeEvents() {
     var hk = Object.keys(HOSTCNT);
     if (hk.length) { EVQ.push(['h', HOSTCNT]); HOSTCNT = {}; }
+    if (Object.keys(HOSTFAIL).length) { EVQ.push(['hf', HOSTFAIL]); HOSTFAIL = {}; }
+    if (Object.keys(PERF).length) { EVQ.push(['p', PERF]); PERF = {}; }
     return EVQ.length ? { aid: anonId(), list: EVQ.splice(0, EVQ.length) } : null;
   }
   // 閉じるときに残っている分（GitHub Pages 版のみ。Apps Script の画面では次回の通信で送る）
   window.addEventListener('pagehide', function () {
     var api = document.querySelector('meta[name="tide-api"]');
-    if (!api || (!EVQ.length && !Object.keys(HOSTCNT).length) || !navigator.sendBeacon) return;
+    if (!api || (!EVQ.length && !Object.keys(HOSTCNT).length && !Object.keys(HOSTFAIL).length && !Object.keys(PERF).length) || !navigator.sendBeacon) return;
     try { navigator.sendBeacon(api.content, new Blob([JSON.stringify({ fn: 'track', args: [takeEvents()] })], { type: 'text/plain;charset=utf-8' })); } catch (e) { /* 無視 */ }
   });
 
   function run(name) {
-    var args = Array.prototype.slice.call(arguments, 1), pre = {}, rounds = 0, ev = takeEvents();
+    var args = Array.prototype.slice.call(arguments, 1), pre = {}, rounds = 0, ev = takeEvents(), t0 = Date.now();
     var call = function () {
       var e1 = ev; ev = null;
       return rawRun('callWithPre', name, args, pre, e1).then(function (r) {
@@ -861,14 +890,15 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         })).then(call);
       });
     };
-    return call().catch(function (e) { track('e', String(name).replace(/[^a-zA-Z]/g, '').slice(0, 30)); throw e; });
+    return call().then(function (r) { perf(name, Date.now() - t0); return r; },
+      function (e) { perf(name, Date.now() - t0); track('e', String(name).replace(/[^a-zA-Z]/g, '').slice(0, 30)); throw e; });
   }
   function rawRun(name) {
     var args = Array.prototype.slice.call(arguments, 1);
     if (window.google && google.script && google.script.run) {
       countHost('https://script.google.com/');
       return new Promise(function (res, rej) {
-        var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej);
+        var r = google.script.run.withSuccessHandler(res).withFailureHandler(function (e) { failHost('https://script.google.com/', 'error'); rej(e); });
         r[name].apply(r, args);
       });
     }
@@ -877,7 +907,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (api && api.content) {
       countHost(api.content);
       return fetch(api.content, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: name, args: args }) })
-        .then(function (r) { if (!r.ok) throw new Error('通信エラー ' + r.status); return r.json(); })
+        .then(function (r) { if (!r.ok) { failHost(api.content, r.status); throw new Error('通信エラー ' + r.status); } return r.json(); },
+          function (e) { failHost(api.content, 'net'); throw e; })
         .then(function (j) { if (j.error) throw new Error(j.error); return j.result; });
     }
     // ローカル開発用
@@ -913,9 +944,12 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     return Math.sqrt(x * x + y * y) * 6371;
   }
   function locate() {
+    var app = window.google && google.script && google.script.run ? 'gas' : 'pages';
+    var once = function (r) { if (!S.geoTracked) { S.geoTracked = true; track('g', app + ':' + r); } };
     return new Promise(function (res, rej) {
-      if (!navigator.geolocation) return rej(new Error('この端末は位置情報に対応していません'));
-      navigator.geolocation.getCurrentPosition(function (p) { res(p.coords); }, rej,
+      if (!navigator.geolocation) { once('unsupported'); return rej(new Error('この端末は位置情報に対応していません')); }
+      navigator.geolocation.getCurrentPosition(function (p) { once('ok'); res(p.coords); },
+        function (e) { once(e && e.code === 1 ? 'denied' : e && e.code === 3 ? 'timeout' : 'unavailable'); rej(e); },
         { enableHighAccuracy: false, timeout: 12000, maximumAge: 5 * MIN });
     });
   }
@@ -1100,10 +1134,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var note = $('riverNote');
     renderRiverSel();
     if (!S.showRiver) { note.hidden = true; return; }
-    if (!r) { note.hidden = !S.riverTried; note.textContent = '近くに河川の水位観測所が見つかりませんでした'; return; }
+    if (!r) { note.hidden = !S.riverTried; note.textContent = S.riverPaused || '近くに河川の水位観測所が見つかりませんでした'; return; }
     var last = r.min10.length ? r.min10[r.min10.length - 1] : null;
     note.hidden = false;
     if (r.noData) {
+      quality('river_nodata:' + r.fcd);
       note.innerHTML = esc('河川水位：' + (r.river ? r.river + ' ' : '') + '「' + r.name + '」は現在欠測中のため表示できません（水位が観測できる範囲より低いときなどに欠測になります）') +
         ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">川の防災情報</a>';
       return;
@@ -1160,9 +1195,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     return run('getRiver', p.lat, p.lon, S.riverFcd || null).then(function (r) {
       var q = here();
       if (!q || q.lat.toFixed(3) + ',' + q.lon.toFixed(3) + '|' + S.riverFcd !== key) return;
-      S.river = r; S.riverFor = key; S.riverFetch = Date.now(); S.riverTried = true; S.riverGps = p.gps;
+      S.river = r; S.riverFor = key; S.riverFetch = Date.now(); S.riverTried = true; S.riverGps = p.gps; S.riverPaused = '';
       renderRiver(); drawCharts();
-    }).catch(function () { S.riverTried = true; renderRiver(); });
+    }).catch(function (e) { S.riverTried = true; S.riverPaused = /一時的に止めて/.test(String(e && e.message)) ? e.message : ''; renderRiver(); });
   }
 
   function phaseAt(t) {
@@ -1427,6 +1462,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (lo && now - lo.t < 12 * HOUR) {
       // 更新停止の判定は今日を表示しているときだけ（別の日は、その日の範囲のデータしか読み込まないため）
       var stale = !S.date && now - lo.t > 40 * MIN;
+      if (stale) quality('tide_stale:' + S.st.c);
       $('curTide').innerHTML = fmtH(lo.tide) + unit;
       // 推算は観測と同じ時刻の値で比べる。現在時刻の値は「推算＋直近の偏差」で推定
       var a = S.curve(lo.t), an = S.curve(now), dn = depAt(now), nr = S.data.near;
@@ -2212,8 +2248,10 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   function fmtRate(v) { if (v == null) return '--'; var r = Math.round(v); return (r > 0 ? '+' : r < 0 ? '−' : '±') + Math.abs(r) + ' cm/時'; }
 
   function drawCharts() { drawMain(); drawDev(); drawRate(); drawPres(); }
+  var LOAD_T0 = Date.now();
   function renderAll() {
     if (!S.data) return;
+    if (!S.loadMeasured) { S.loadMeasured = true; perf('load', Date.now() - LOAD_T0); }
     renderHeader(); renderControls(); renderHero(); renderTable(); renderRiver(); drawCharts();
     var lo = S.date ? (S.today && S.today.code === S.st.c ? (function () { var k = S.data; S.data = S.today.data; try { return latestObs(); } finally { S.data = k; } })() : null) : latestObs();
     $('updLbl').textContent = '最終取得 ' + hm(S.lastFetch) + (lo ? ' · 最新の潮位観測 ' + mdw(lo.t) + ' ' + hm(lo.t) : '');
@@ -3013,7 +3051,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   // 自動更新（今日を表示中のみ）
   setInterval(function () {
     if (S.loading || document.hidden) return;
-    if (!S.date && Date.now() - S.lastFetch >= REFRESH_MS - 5000) refresh(true);
+    if (!S.date && Date.now() - S.lastFetch >= REFRESH_MS - 5000) { track('a', 1); refresh(true); }
     else if (S.data) { loadToday(); renderHero(); drawCharts(); renderWind(); }
   }, 60e3);
   document.addEventListener('visibilitychange', function () {

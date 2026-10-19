@@ -21,6 +21,7 @@ var DAY = 24 * HOUR;
 var CACHE_VER = 'v4_';
 var JCG = 'https://www1.kaiho.mlit.go.jp/TIDE/gauge/';
 var RIVER = 'https://www.river.go.jp/kawabou/file/';
+var RIVER_TIME_TTL = 300;   // 最新の観測時刻の確認は5分ごと（URL Fetch の節約）
 var OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
 var AMEDAS = 'https://www.jma.go.jp/bosai/amedas/';
 var FORECAST = 'https://www.jma.go.jp/bosai/forecast/';
@@ -283,8 +284,10 @@ function getRiver(lat, lon, fcd) {
 function getRiverStations(lat, lon) {
   lat = +lat; lon = +lon;
   checkPos_(lat, lon);
-  var near = riverNearby_(lat, lon), cand = near.stations.slice(0, 30);
-  return cached_('rv_list2_' + lat.toFixed(2) + '_' + lon.toFixed(2), 6 * 3600, function () {
+  // 約5km単位（0.05°）に丸めた位置で一覧を作って共有する
+  var glat = Math.round(lat * 20) / 20, glon = Math.round(lon * 20) / 20;
+  var list = cached_('rv_list3_' + glat.toFixed(2) + '_' + glon.toFixed(2), 6 * 3600, function () {
+  var near = riverNearby_(glat, glon), cand = near.stations.slice(0, 30);
   prefetch_(cand.map(function (s) { return ['rv_m_' + s.fcd, RIVER + 'files/master/obs/stg/' + s.fcd + '.json', 6 * 3600]; }));
   var tops = fetchAll_(cand.map(function (s) { return RIVER + 'files/obslist/top/stg/' + s.fcd + '.json'; }), true);
   var out = [];
@@ -293,10 +296,12 @@ function getRiverStations(lat, lon) {
     try { v = tops[i] && JSON.parse(tops[i]).obsValue; } catch (e) { /* 無視 */ }
     if (!v || v.stgHght == null || out.length >= 20) return;
     var info = riverMaster_(s.fcd) || {};
-    out.push({ fcd: s.fcd, name: s.name, river: info.rvrNm || '', dist: Math.round(s.d * 10) / 10 });
+    out.push({ fcd: s.fcd, name: s.name, river: info.rvrNm || '', lat: s.lat, lon: s.lon });
   });
   return out;
   });
+  return list.map(function (x) { return { fcd: x.fcd, name: x.name, river: x.river, dist: Math.round(distKm_(lat, lon, x.lat, x.lon) * 10) / 10 }; })
+    .sort(function (a, b) { return a.dist - b.dist; });
 }
 
 /** 指定位置の近くの水位観測所（近い順、重複なし） */
@@ -306,7 +311,7 @@ function riverNearby_(lat, lon) {
     return a.filter(function (t) { return t.stgExistFlg; })
       .map(function (t) { return [t.twnCd, Math.round(t.lat * 1e4) / 1e4, Math.round(t.lon * 1e4) / 1e4]; });
   });
-  var tm = JSON.parse(cachedText_('rv_time', 60, RIVER + 'system/tmCrntTime.json')).crntObsTime; // "YYYY/MM/DD HH:mm"
+  var tm = JSON.parse(cachedText_('rv_time', RIVER_TIME_TTL, RIVER + 'system/tmCrntTime.json')).crntObsTime; // "YYYY/MM/DD HH:mm"
   var path = tm.substr(0, 10).replace(/\//g, '') + '/' + tm.substr(11, 5).replace(':', '');
   // 近い市区町村（重心）から観測所を集める
   var nearTowns = towns.map(function (t) { return [t[0], distKm_(lat, lon, t[1], t[2])]; })
@@ -402,9 +407,9 @@ function getWaterQuality(lat, lon) {
   var LAYER = /(平均|表層|上層|中層|下層|底層)$/;
   var site = stations[0], siteName = site.name.replace(LAYER, '');
   var group = stations.filter(function (s) { return s.name.replace(LAYER, '') === siteName && s.d - site.d < 0.5; });
-  var tm = JSON.parse(cachedText_('rv_time', 60, RIVER + 'system/tmCrntTime.json')).crntObsTime;
+  var tm = JSON.parse(cachedText_('rv_time', RIVER_TIME_TTL, RIVER + 'system/tmCrntTime.json')).crntObsTime;
   var path = tm.substr(0, 10).replace(/\//g, '') + '/' + tm.substr(11, 5).replace(':', '');
-  var wqItems = group.map(function (s) { return ['wq_ts_' + s.fcd + '_' + path.replace('/', ''), RIVER + 'files/tmlist/qwtr/' + path + '/' + s.fcd + '.json', 900]; });
+  var wqItems = group.map(function (s) { return ['wq_ts1h_' + s.fcd, RIVER + 'files/tmlist/qwtr/' + path + '/' + s.fcd + '.json', 3600]; });
   prefetch_(wqItems);
   var res = wqItems.map(function (it) { return cachedText_(it[0], it[2], it[1], true); });
   var order = ['表層', '上層', '中層', '下層', '底層', '平均', ''];
@@ -913,7 +918,7 @@ var PRE = null;        // ブラウザから渡された { url: 本文 | null(40
 var FROM_PRE = false;  // この処理でブラウザから渡された本文を使ったか（使ったら共有キャッシュに入れない）
 
 // サーバーからの外部取得の上限（無料アカウントの1日2万回を使い切らないよう余裕を残す）
-var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300 };
+var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300, lowShare: 0.7 };   // lowShare：河川・水質はこの割合まで
 
 /**
  * ブラウザから呼ぶ入口。必要なデータが揃っていなければ { need: [url…] } を返し、
@@ -921,6 +926,7 @@ var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300 };
  */
 function callWithPre(name, args, pre, ev) {
   if (ev) monRecord_(ev);   // 利用状況（Monitor.gs）
+  var t0 = Date.now();
   var api = { getStations: getStations, getTideData: getTideData, getWeather: getWeather, getRiver: getRiver,
     getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality };
   if (!Object.prototype.hasOwnProperty.call(api, name)) throw new Error('不正な呼び出しです: ' + name);
@@ -938,10 +944,11 @@ function callWithPre(name, args, pre, ev) {
     return { result: api[name].apply(null, args || []) };
   } catch (e) {
     if (e && e.needUrls) return { need: e.needUrls };
-    if (!/アクセスが集中/.test(String(e && e.message))) monServer_('err', name);
+    if (!/アクセスが集中/.test(String(e && e.message)) && !(e && e.paused)) monServer_('err', name);
     throw e;
   } finally {
     PRE = null; FROM_PRE = false;
+    monServerPerf_(name, Date.now() - t0);
     monFlushHosts_();
   }
 }
@@ -970,12 +977,18 @@ function checkDate_(dateStr, now) {
  * サーバーからの外部取得の回数を数え、上限を超えるなら止める。
  * 時間ごとは CacheService、日ごとは ScriptProperties で数える（厳密ではないが目安として十分）。
  */
-function spendFetch_(n, fallback) {   // fallback：そのうちブラウザで取れなかった分の代行の数
+function spendFetch_(n, fallback, low) {   // fallback：そのうちブラウザで取れなかった分の代行の数、low：優先度の低い取得（河川・水質）
   var cache = CacheService.getScriptCache(), now = Date.now();
   var hk = CACHE_VER + 'uf_h_' + Math.floor(now / HOUR), fk = CACHE_VER + 'uf_f_' + Math.floor(now / HOUR);
   var h = +(cache.get(hk) || 0), f = +(cache.get(fk) || 0);
   var props = PropertiesService.getScriptProperties(), today = ymd_(now), d = 0;
   try { var j = JSON.parse(props.getProperty('uf_day') || '{}'); d = j.d === today ? +j.n || 0 : 0; } catch (e) { d = 0; }
+  if (low && (h + n > FETCH_LIMIT.hour * FETCH_LIMIT.lowShare || d + n > FETCH_LIMIT.day * FETCH_LIMIT.lowShare)) {
+    monQuality_('river_paused');
+    var pe = new Error('アクセスが集中しているため、河川・水質の表示を一時的に止めています（潮位は表示を続けます）。');
+    pe.paused = true;
+    throw pe;
+  }
   if (h + n > FETCH_LIMIT.hour || d + n > FETCH_LIMIT.day || (fallback && f + fallback > FETCH_LIMIT.fallbackHour)) {
     monServer_('lim');
     throw new Error('アクセスが集中しているため、新しいデータを取得できません。しばらくしてからお試しください。');
@@ -1003,13 +1016,20 @@ function fetchAll_(urls, allow404) {
   });
   if (need.length) throw needError_(need);
   if (server.length) {
-    spendFetch_(server.length, fallback);
+    spendFetch_(server.length, fallback, server.every(function (i) { return /^https:\/\/www\.river\.go\.jp\//.test(urls[i]); }));
     server.forEach(function (i) { monCountHost_(urls[i]); });   // 利用状況：外部サイトごとの回数（Monitor.gs）
-    var res = UrlFetchApp.fetchAll(server.map(function (i) {
-      return { url: urls[i], muteHttpExceptions: true, followRedirects: true };
-    }));
+    var res;
+    try {
+      res = UrlFetchApp.fetchAll(server.map(function (i) {
+        return { url: urls[i], muteHttpExceptions: true, followRedirects: true };
+      }));
+    } catch (e) {
+      server.forEach(function (i) { monFailHost_(urls[i], 'ex'); });   // 通信の失敗・時間切れ（利用状況）
+      throw e;
+    }
     res.forEach(function (r, j) {
       var i = server[j], code = r.getResponseCode();
+      if (code !== 200) monFailHost_(urls[i], code);
       if (code === 200) out[i] = r.getContentText('UTF-8');
       else if (allow404 || code === 404) out[i] = null;
       else throw new Error('取得失敗 ' + code + ': ' + urls[i]);
