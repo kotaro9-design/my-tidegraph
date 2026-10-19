@@ -10,3 +10,5 @@ desktop.ini
 *.gdoc
 *.gsheet
 *.gslides
+# Google ドライブの同期で壊れた以前の .git（念のため残している）
+.git-broken-drive/

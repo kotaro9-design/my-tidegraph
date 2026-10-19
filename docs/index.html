@@ -224,6 +224,7 @@ footer a { color: var(--text-2); }
 .settings { margin: 14px 0 6px; padding-top: 10px; border-top: 1px solid var(--border); }
 .settings-h { font-size: 12px; font-weight: 600; color: var(--text-2); }
 .foot-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 8px 0; color: var(--text-2); font-size: 12px; }
+.foot-row[hidden] { display: none; }
 
 .notice { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--text-2); margin: 8px 0; display: none; }
 .notice.show { display: block; }
@@ -445,7 +446,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div class="chart-title">潮位 <span id="unitLbl">cm</span></div>
       <canvas id="main"></canvas>
       <div class="legend">
-        <span><i style="border-color:var(--pred)"></i>推算潮位（天文潮）</span>
+        <span><i style="border-color:var(--pred)"></i><span id="predLegTxt">推算潮位（天文潮）</span></span>
         <span><i style="border-color:var(--obs)"></i>実測潮位</span>
         <span><i class="dash" style="border-color:var(--obs)"></i>偏差補正予測</span>
         <span id="riverLeg" hidden><i style="border-color:var(--river)"></i><span id="riverLegTxt">河川水位</span></span>
@@ -545,6 +546,10 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         <button data-r="1" aria-pressed="true">表示</button>
         <button data-r="0" aria-pressed="false">非表示</button>
       </div>
+    </div>
+    <div class="foot-row">
+      <span>推算・満干潮の地点</span>
+      <select id="predSel" class="river-sel" aria-label="推算・満干潮の地点"></select>
     </div>
     <div class="foot-row" id="riverSelRow" hidden>
       <span>河川の水位観測所</span>
@@ -742,6 +747,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <h3 id="g-setting">表示の設定</h3>
     <p>画面の下のほう（風のカードの下）にあります。</p>
     <dl>
+      <dt>推算・満干潮の地点</dt><dd>推算潮位・満潮・干潮・潮の動きは、気象庁の潮位表の地点（全国約240）のうち、現在地から一番近い地点を自動で使います。ここで別の地点を選ぶこともできます。実測（観測潮位）は画面左上の潮位観測所の値です。潮位偏差は潮位観測所の実測と、その観測所自身の推算の差で、点線の偏差補正予測は「推算の地点の推算＋潮位観測所の偏差」です。「実測なし」の地点は潮位表だけの地点です。</dd>
       <dt>高さの基準</dt><dd>「潮位表基準面」は潮位表や釣り情報で一般的な高さ（ほぼ最低の潮位が0）。「TP」は東京湾平均海面が0の高さで、河川水位と比べるときに使います。</dd>
       <dt>河川水位・水質の表示</dt><dd>グラフに近くの川の水位を重ねるか、近くの水質観測所の水温・塩分濃度を表示するかどうか。初めて使うときは「非表示」です。河口や川の近くで釣るときは「表示」にしてください（設定は端末に保存されます）。</dd>
       <dt>河川の水位観測所</dt><dd>「自動」は現在地から一番近い（欠測中を除く）観測所。「近くの水位観測所を表示…」から別の観測所を選べます。</dd>
@@ -791,7 +797,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '1.9.2', APP_DATE = '2026-10-20';
+  var APP_VERSION = '2.0.0', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -816,6 +822,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     datum: load('datum') || 'table',
     stFilter: load('stfilter') || 'all',
     showRiver: riverDefault(), river: null,
+    predSel: load('pred') || '', predPoints: [],   // 推算の地点（潮位表の地点）。空なら自動（現在地から一番近い地点）
     riverFcd: load('river_fcd') || '',   // 空なら自動（一番近い観測所）   // 'all' | 'jcg'（海上保安庁サイトの観測所のみ）
     curve: null, ext: [], hover: null, loading: false, lastFetch: 0
   };
@@ -1075,7 +1082,26 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     };
   }
 
+  // 推算の地点が潮位観測所と別のとき、推算・満干潮はその地点の潮位表から作る。
+  // 高さは TP にそろえる（その地点の基準面と TP の差がわかればそれ、わからなければ潮位観測所の差で近似）。
+  // 表示の「潮位表基準面」は推算の地点の基準面。偏差（実測−推算）は潮位観測所自身の推算で求める（d._obsCurve）
   function buildModel(d) {
+    var m = buildModelRaw(d);
+    if (!d.pred) { d._obsCurve = m.curve; return m; }
+    if (d._predConv === undefined) {
+      d._offsetObs = d.offset;
+      d._predConv = d.pred.offset != null ? d.pred.offset : d.offset;
+      d.offset = d._predConv;
+    }
+    var conv = d._predConv || 0;
+    var p = buildModelRaw({
+      astro: { start: d.pred.hr.start, step: d.pred.hr.step, v: d.pred.hr.v.map(function (v) { return v == null ? null : v - conv; }) },
+      ext: d.pred.ext.map(function (e) { return { t: e.t, h: e.h - conv, k: e.k }; })
+    });
+    d._obsCurve = m.curve;
+    return { curve: p.curve, ext: p.ext, official: true };
+  }
+  function buildModelRaw(d) {
     var hx = [], hy = [];
     d.astro.v.forEach(function (v, i) { if (v != null) { hx.push(d.astro.start + i * HOUR); hy.push(v); } });
     if (hx.length < 4) return { curve: function () { return null; }, ext: [], official: false };
@@ -1149,6 +1175,37 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     return null;
   }
   // 海上保安庁の速報（5分毎）を実測の1分値の後ろにつなぐ。間は表示用に直線でつなぎ、偏差は推算曲線との差
+  /* ---------- 推算の地点（潮位表の地点）：実測は潮位観測所、推算・満干潮は現在地に近い潮位表の地点 ---------- */
+  // 使う推算の地点。手動で選んでいればそれ、なければ現在地（GPS が無ければ潮位観測所の位置）から一番近い潮位表の地点
+  function predPoint() {
+    var list = S.predPoints || [];
+    if (!list.length) return null;
+    if (S.predSel) { var sel = list.filter(function (p) { return p.c === S.predSel; })[0]; if (sel) return sel; }
+    var p = here();
+    if (!p) return null;
+    var best = null, bd = Infinity;
+    list.forEach(function (x) { var d = distKm(p.lat, p.lon, x.lat, x.lon); if (d < bd) { bd = d; best = x; } });
+    return best;
+  }
+  // サーバーに渡す推算の地点（潮位観測所の潮位表と同じなら渡さない＝これまでどおり）
+  function predArg() {
+    var pp = predPoint();
+    return pp && S.st && pp.c !== S.st.sc ? pp.c : null;
+  }
+  function renderPredSel() {
+    var sel = $('predSel'), p = here();
+    if (!sel) return;
+    var list = (S.predPoints || []).map(function (x) { return { x: x, d: p ? distKm(p.lat, p.lon, x.lat, x.lon) : 0 }; })
+      .sort(function (a, b) { return a.d - b.d; }).slice(0, 25);
+    var auto = predPoint();
+    if (S.predSel && !list.some(function (o) { return o.x.c === S.predSel; }) && auto) list.unshift({ x: auto, d: p ? distKm(p.lat, p.lon, auto.lat, auto.lon) : 0 });
+    sel.innerHTML = '<option value="">自動（' + (p && p.gps ? '現在地' : '潮位観測所') + 'から一番近い地点' + (!S.predSel && auto ? '：' + esc(auto.n) : '') + '）</option>' +
+      list.map(function (o) {
+        return '<option value="' + esc(o.x.c) + '">' + esc(o.x.n) + '（' + fmtKm(o.d) + (o.x.obs ? '' : '・実測なし') + '）</option>';
+      }).join('');
+    sel.value = S.predSel || '';
+  }
+
   function mergeRt(d) {
     S.rtFrom = null;
     var rt = d.rt, o = d.obs;
@@ -1162,7 +1219,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       pi = i; pv = p[1];
     });
     for (var k = first; k < o.tide.length; k++) {
-      var a = S.curve(o.start + k * o.step);
+      var a = (d._obsCurve || S.curve)(o.start + k * o.step);
       o.dep[k] = o.tide[k] != null && a != null ? Math.round((o.tide[k] - a) * 10) / 10 : null;
     }
     S.rtFrom = o.start + first * o.step;
@@ -1509,7 +1566,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var code = S.st && S.st.c;
     if (!code || !S.date || todayFresh() || S.todayLoading === code) return;
     S.todayLoading = code;
-    run('getTideData', code, null).then(function (d) {
+    run('getTideData', code, null, predArg()).then(function (d) {
       if (S.st && S.st.c === code) { S.today = makeToday(d, code); if (S.data) renderHero(); }
     }).catch(function () { /* 次の更新で再度 */ }).then(function () { if (S.todayLoading === code) S.todayLoading = null; });
   }
@@ -1536,14 +1593,14 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       if (stale) quality('tide_stale:' + S.st.c);
       $('curTide').innerHTML = fmtH(lo.tide) + unit;
       // 推算は観測と同じ時刻の値で比べる。現在時刻の値は「推算＋直近の偏差」で推定
-      var a = S.curve(lo.t), an = S.curve(now), dn = depAt(now), nr = S.data.near;
+      var a = (S.data._obsCurve || S.curve)(lo.t), an = S.curve(now), dn = depAt(now), nr = S.data.near;
       var isRt = S.rtFrom != null && lo.t >= S.rtFrom;
       $('curTideSub').innerHTML = esc(hm(lo.t) + ' 観測') + '<br>' + esc(dur(now - lo.t) + '前') +
         '<br>' + (stale ? '<span class="tag warn">⚠ 更新停止</span>' : '<span class="tag">' + (useTable() ? '基準面' : 'TP') + '</span>');
       var alt = S.data.near && S.data.near.fallback ? '近くの「' + S.data.near.src + '」など、' : '';
       var staleMsg = stale ? '⚠ この潮位観測所の観測データは ' + hm(lo.t) + ' から更新されていません（配信元の停止または欠測）。' +
         alt + '他の潮位観測所に変更してください（画面左上の潮位観測所名をタップすると選べます）。' : '';
-      note.push(hm(lo.t) + ' 観測' + (isRt ? '（海上保安庁 速報）' : '（気象庁）') + '・同時刻の推算 ' + fmtH(a) + 'cm');
+      note.push(hm(lo.t) + ' 観測' + (isRt ? '（海上保安庁 速報）' : '（気象庁）') + '・同時刻の推算 ' + fmtH(a) + 'cm' + (S.data.pred ? '（潮位観測所「' + S.st.n + '」）' : ''));
       if (an != null && dn != null) note.push('現在 ' + hm(now) + ' の推定 ' + fmtH(an + dn) + 'cm' +
         (nr && nr.t > lo.t ? '（' + nr.src + (nr.fallback ? '（' + fmtKm(nr.dist) + '）' : '') + ' ' + hm(nr.t) + (nr.fallback ? ' の偏差 ' : ' の速報偏差 ') + fmtDev(nr.dep) + ' を使用）' : ''));
       $('curDev').innerHTML = fmtDev(lo.dep) + unit;
@@ -1557,7 +1614,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       $('curDev').innerHTML = '--' + unit;
       $('curDevSub').textContent = '';
     }
-    note.push('高さ：' + datumName);
+    if (S.data.pred) note.push('推算・満干潮：潮位表の地点「' + S.data.pred.n + '」' + (S.data.pred.obs ? '' : '（実測なし。基準面は潮位観測所から近似）'));
+    note.push('高さ：' + datumName + (S.data.pred ? '（推算の地点）' : ''));
     // 更新停止の注意は赤字で先頭に出す
     $('tideNote').innerHTML = (typeof staleMsg === 'string' && staleMsg ? '<span class="warn-text">' + esc(staleMsg) + '</span><br>' : '') + esc(note.join(' / '));
 
@@ -1692,7 +1750,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       }
     });
     $('tt').innerHTML = html;
-    $('extSrc').textContent = S.data.ext ? '満潮・干潮：気象庁 潮位表（' + S.st.sc + '）' :
+    $('extSrc').textContent = S.data.pred ? '満潮・干潮：気象庁 潮位表（' + S.data.pred.n + '・' + S.data.pred.c + '）' : S.data.ext ? '満潮・干潮：気象庁 潮位表（' + S.st.sc + '）' :
       '満潮・干潮：この潮位観測所は潮位表が無いため、毎時の推算潮位から算出した目安です';
   }
 
@@ -2322,6 +2380,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   var LOAD_T0 = Date.now();
   function renderAll() {
     if (!S.data) return;
+    $('predLegTxt').textContent = S.data.pred ? '推算潮位（' + S.data.pred.n + '）' : '推算潮位（天文潮）';
+    renderPredSel();
     if (!S.loadMeasured) { S.loadMeasured = true; perf('load', Date.now() - LOAD_T0); }
     renderHeader(); renderControls(); renderHero(); renderTable(); renderRiver(); drawCharts();
     var lo = S.date ? (S.today && S.today.code === S.st.c ? (function () { var k = S.data; S.data = S.today.data; try { return latestObs(); } finally { S.data = k; } })() : null) : latestObs();
@@ -2341,7 +2401,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
   // 位置（GPS）で変わるものだけ読み直す（天気・風・河川・水質・海面水温・気圧）。まとめて1回の呼び出しになる
   function refreshPlace() {
+    if (S.st && predArg() !== S.predUsed) return refresh();   // 自動の推算の地点が変わった
     loadWeather(); loadRiver(); loadWind(); loadWQ(); loadSST(); loadPressure();
+    renderPredSel();
     return Promise.resolve();
   }
   function refresh(silent) {
@@ -2359,7 +2421,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       loadPressure();
     }
     loadToday();
-    return run('getTideData', code, S.date).then(function (d) {
+    var pa = predArg();
+    S.predUsed = pa;
+    return run('getTideData', code, S.date, pa).then(function (d) {
       if (!S.st || S.st.c !== code) return;
       S.data = d;
       var m = buildModel(d);
@@ -3083,6 +3147,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     $('moved').hidden = false;
     $('moved').addEventListener('click', function () { if (S.st) this.href = 'https://kotaro9-design.github.io/my-tidegraph/?st=' + encodeURIComponent(S.st.c); });
   }
+  $('predSel').onchange = function () {
+    S.predSel = this.value; save('pred', S.predSel);
+    track('f', S.predSel ? 'pred_sel' : 'pred_auto');
+    refresh();
+  };
   $('riverSel').onchange = function () {
     var sel = this;
     if (sel.value === '__more') {
@@ -3140,8 +3209,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   });
 
   /* ---------- boot ---------- */
+  var predPointsReady = run('getPredPoints').then(function (pts) { S.predPoints = pts || []; }, function () { S.predPoints = []; });
   run('getStations').then(function (list) {
     S.stations = list;
+    return predPointsReady.then(function () { return list; });
+  }).then(function (list) {
     var byCode = function (c) { return list.filter(function (s) { return s.c === c; })[0]; };
     var init = byCode(document.body.dataset.st || (/[?&]st=([^&]+)/.exec(location.search) || [])[1] || '');
     if (init) { trackPv(init.c, here() || { lat: init.lat, lon: init.lon }); return selectStation(init); }

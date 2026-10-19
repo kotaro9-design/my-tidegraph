@@ -136,8 +136,48 @@ function getStations() {
  * @param {string} code 観測地点コード（6桁）
  * @param {string=} dateStr 'YYYY-MM-DD'（JST）。省略時は今日
  */
-function getTideData(code, dateStr) {
+/**
+ * 推算（満潮・干潮）に使える地点：気象庁の潮位表の掲載地点（約240）。
+ * obs は同じ地点の潮位観測所のコード（毎時の推算〔TP〕があり、潮位表の基準面と TP の関係がわかる）。無ければ ''（潮位表だけの地点）
+ */
+function getPredPoints() {
+  return cached_('pred_points', 6 * 3600, function () {
+    var year = jstParts_(Date.now()).y;
+    var pts = parseSuisanStations_(fetchAll_([SUISAN_PAGE + 'station' + year + '.php'])[0] || '');
+    var bySc = {};
+    getStations().forEach(function (st) { if (st.sc && !bySc[st.sc]) bySc[st.sc] = st.c; });
+    return pts.map(function (p) { return { c: p.code, n: p.name, lat: p.lat, lon: p.lon, obs: bySc[p.code] || '' }; });
+  });
+}
+
+/** 推算の地点の潮位表（毎時の値と満干潮。潮位表の基準面、cm）。同じ地点に潮位観測所があれば基準面と TP の差（offset）も */
+function predData_(sc, days, years) {
+  var pt = getPredPoints().filter(function (p) { return p.c === sc; })[0];
+  if (!pt) throw new Error('推算の地点が見つかりません: ' + sc);
+  prefetch_(years.map(function (y) { return ['suisan_' + y + '_' + sc, SUISAN_TXT + y + '/' + sc + '.txt', 24 * 3600]; })
+    .concat(pt.obs ? years.map(function (y) { return ['astro_' + y + '_' + pt.obs, BOSAI + 'const/tide_astro/tide_astro_' + y + '_' + pt.obs + '.json', 24 * 3600]; }) : []));
+  var rows = {};
+  years.forEach(function (y) {
+    var txt = cachedText_('suisan_' + y + '_' + sc, 24 * 3600, SUISAN_TXT + y + '/' + sc + '.txt');
+    if (txt) parseSuisanTxt_(txt, rows);
+  });
+  var v = [], ext = [];
+  days.forEach(function (d) {
+    var r = rows[ymd_(d)];
+    for (var h = 0; h < 24; h++) v.push(r ? r.hr[h] : null);
+    if (!r) return;
+    r.hi.forEach(function (e) { ext.push({ t: d + e[0], h: e[1], k: 'H' }); });
+    r.lo.forEach(function (e) { ext.push({ t: d + e[0], h: e[1], k: 'L' }); });
+  });
+  ext.sort(function (a, b) { return a.t - b.t; });
+  var offset = null;
+  if (pt.obs) { try { offset = datumOffset_(days, rows, loadAstro_(pt.obs, days)); } catch (e) { rethrowNeed_(e); } }
+  return { c: sc, n: pt.n, lat: pt.lat, lon: pt.lon, obs: pt.obs, offset: offset, hr: { start: days[0], step: HOUR, v: v }, ext: ext };
+}
+
+function getTideData(code, dateStr, predSc) {
   if (!/^\d{6}$/.test(code)) throw new Error('潮位観測所のコードが不正です');
+  if (predSc != null && predSc !== '' && !/^[A-Z0-9]{2}$/.test(String(predSc))) throw new Error('推算の地点の指定が不正です');
   var station = getStations().filter(function (s) { return s.c === code; })[0];
   if (!station) throw new Error('潮位観測所が見つかりません: ' + code);
 
@@ -198,10 +238,14 @@ function getTideData(code, dateStr) {
     }
   }
 
+  // 推算の地点が潮位観測所と別のとき：その地点の潮位表
+  var pred = predSc && predSc !== station.sc ? predData_(String(predSc), days, years) : null;
+
   return {
     station: station,
     base: base,
     now: now,
+    pred: pred,
     astro: { start: start, step: HOUR, v: astro },
     ext: ext,
     offset: offset,
@@ -943,7 +987,7 @@ var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300, lowShare: 0.7 }; 
 // 画面から呼べる処理
 function api_() {
   return { getStations: getStations, getTideData: getTideData, getWeather: getWeather, getRiver: getRiver,
-    getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality };
+    getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality, getPredPoints: getPredPoints };
 }
 function callWithPre(name, args, pre, ev) {
   if (ev) monRecord_(ev);   // 利用状況（Monitor.gs。書き込みは最後にまとめて）
