@@ -327,6 +327,25 @@ footer a { color: var(--text-2); }
 .guide-tbl th, .guide-tbl td { border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: left; vertical-align: top; }
 .guide-tbl th { white-space: nowrap; padding-right: 10px; }
 .guide-foot { color: var(--text-3); font-size: 12px; margin-top: 18px !important; }
+/* ホーム画面に追加する手順の図（画面のイメージ） */
+.guide h4.gh-os { font-size: 14px; margin: 14px 0 4px; }
+.gh-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 6px 0; }
+.gh-steps figure { margin: 0; }
+.gh-steps svg { display: block; width: 100%; max-width: 150px; height: auto; margin: 0 auto; }
+.gh-steps figcaption { font-size: 12px; line-height: 1.45; margin-top: 4px; }
+.gh-note { font-size: 12px; color: var(--text-2); }
+.gh-ic { width: 14px; height: 14px; vertical-align: -2px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.ph-f { fill: var(--surface); stroke: var(--text-3); stroke-width: 1.5; }
+.ph-s { fill: var(--bg); }
+.ph-l { fill: var(--border); }
+.ph-p { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+.ph-dim { fill: rgba(0, 0, 0, .25); }
+.ph-t { fill: var(--text-2); font-family: var(--font); font-size: 8px; }
+.ph-t.b { fill: var(--text); font-weight: 700; }
+.ph-t.s { font-size: 7px; }
+.ph-i { fill: none; stroke: var(--text); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+.ph-i2 { fill: none; stroke: var(--text); stroke-width: 1.2; }
+.ph-hl { fill: none; stroke: var(--warn); stroke-width: 2.5; }
 dialog { border: 0; padding: 0; width: 100%; max-width: 720px; height: 100%; max-height: 100%; margin: 0 auto; background: var(--bg); color: var(--text); }
 dialog::backdrop { background: rgba(0,0,0,.4); }
 .pk-head { position: sticky; top: 0; background: var(--bg); padding: calc(10px + env(safe-area-inset-top)) 16px 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border); }
@@ -805,10 +824,24 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     </dl>
 
     <h3 id="g-home">ホーム画面に追加する</h3>
-    <ul>
-      <li><b>iPhone</b>：Safari で開き、共有ボタン →「ホーム画面に追加」。</li>
-      <li><b>Android</b>：Chrome で開き、メニュー（︙）→「ホーム画面に追加」または「アプリをインストール」。</li>
-    </ul>
+    <p>ホーム画面に追加すると、アイコン（my tide-graph）から1回のタップで開けます。アドレスバーのない、アプリのような画面で表示されます。</p>
+    <p class="gh-note">X・LINE・Instagram などのアプリの中で開いている場合は、先に右上・右下のメニューから「Safari で開く」（Android は「Chrome で開く」「ブラウザで開く」）を選んでください。アプリの中の画面からは追加できません。</p>
+
+    <h4 class="gh-os">iPhone（Safari）</h4>
+    <div class="gh-steps">
+      <figure><svg viewBox="0 0 120 220" role="img" aria-hidden="true"><rect class="ph-f" x="2" y="2" width="116" height="216" rx="14"/><rect class="ph-s" x="8" y="12" width="104" height="196" rx="6"/><rect class="ph-l" x="16" y="22" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="34" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="46" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="58" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="70" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="82" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="94" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="106" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="118" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="130" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="142" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="154" width="60" height="5" rx="2.5"/><rect class="ph-p" x="14" y="180" width="92" height="20" rx="10"/><text class="ph-t" x="52" y="193" text-anchor="middle">github.io</text><text class="ph-t b" x="96" y="193" text-anchor="middle">…</text><circle class="ph-hl" cx="96" cy="190" r="9"/></svg><figcaption>① 画面下のアドレスバーの「…」をタップ</figcaption></figure>
+      <figure><svg viewBox="0 0 120 220" role="img" aria-hidden="true"><rect class="ph-f" x="2" y="2" width="116" height="216" rx="14"/><rect class="ph-s" x="8" y="12" width="104" height="196" rx="6"/><rect class="ph-l" x="16" y="22" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="34" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="46" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="58" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="70" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="82" width="60" height="5" rx="2.5"/><rect class="ph-p" x="34" y="84" width="74" height="94" rx="8"/><rect class="ph-l" x="42" y="94" width="50" height="5" rx="2.5"/><text class="ph-t b" x="44" y="117">共有</text><path class="ph-i" d="M95 120v-9m-3 3 3-3 3 3M91 115h-2v7h12v-7h-2"/><rect class="ph-l" x="42" y="132" width="44" height="5" rx="2.5"/><rect class="ph-l" x="42" y="148" width="54" height="5" rx="2.5"/><rect class="ph-l" x="42" y="164" width="40" height="5" rx="2.5"/><rect class="ph-hl" x="38" y="105" width="66" height="19" rx="5"/><rect class="ph-p" x="14" y="186" width="92" height="16" rx="8"/></svg><figcaption>②「共有」をタップ</figcaption></figure>
+      <figure><svg viewBox="0 0 120 220" role="img" aria-hidden="true"><rect class="ph-f" x="2" y="2" width="116" height="216" rx="14"/><rect class="ph-s" x="8" y="12" width="104" height="196" rx="6"/><rect class="ph-l" x="16" y="22" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="34" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="46" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="58" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="70" width="84" height="5" rx="2.5"/><rect class="ph-p" x="8" y="92" width="104" height="116" rx="10"/><rect class="ph-l" x="16" y="102" width="40" height="5" rx="2.5"/><rect class="ph-l" x="16" y="120" width="88" height="5" rx="2.5"/><rect class="ph-l" x="16" y="138" width="70" height="5" rx="2.5"/><text class="ph-t b" x="18" y="163">ホーム画面に追加</text><rect class="ph-i2" x="94" y="155" width="10" height="10" rx="2"/><path class="ph-i" d="M99 157v6m-3-3h6"/><rect class="ph-hl" x="12" y="150" width="96" height="19" rx="5"/><rect class="ph-l" x="16" y="182" width="60" height="5" rx="2.5"/></svg><figcaption>③「ホーム画面に追加」→ 右上の「追加」</figcaption></figure>
+    </div>
+    <p class="gh-note">画面の下に共有ボタン（<svg class="gh-ic" viewBox="0 0 16 16" aria-label="共有ボタン"><path d="M8 10V2M5 5l3-3 3 3M5 7H3v7h10V7h-2"/></svg>）が出ている場合は、それをタップすると③の画面になります。「ホーム画面に追加」が見当たらないときは、一覧を上にスクロールするか「さらに表示」を開いてください。</p>
+
+    <h4 class="gh-os">Android（Chrome）</h4>
+    <div class="gh-steps">
+      <figure><svg viewBox="0 0 120 220" role="img" aria-hidden="true"><rect class="ph-f" x="2" y="2" width="116" height="216" rx="14"/><rect class="ph-s" x="8" y="12" width="104" height="196" rx="6"/><rect class="ph-p" x="14" y="18" width="78" height="16" rx="8"/><text class="ph-t" x="53" y="29" text-anchor="middle">github.io</text><text class="ph-t b" x="104" y="30" text-anchor="middle">⋮</text><circle class="ph-hl" cx="104" cy="26" r="9"/><rect class="ph-l" x="16" y="46" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="58" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="70" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="82" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="94" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="106" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="118" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="130" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="142" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="154" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="166" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="178" width="60" height="5" rx="2.5"/></svg><figcaption>① 右上のメニュー（⋮）をタップ</figcaption></figure>
+      <figure><svg viewBox="0 0 120 220" role="img" aria-hidden="true"><rect class="ph-f" x="2" y="2" width="116" height="216" rx="14"/><rect class="ph-s" x="8" y="12" width="104" height="196" rx="6"/><rect class="ph-p" x="14" y="18" width="78" height="16" rx="8"/><rect class="ph-l" x="16" y="46" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="58" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="70" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="82" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="94" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="106" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="118" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="130" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="142" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="154" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="166" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="178" width="60" height="5" rx="2.5"/><rect class="ph-p" x="30" y="16" width="80" height="132" rx="6"/><rect class="ph-l" x="38" y="28" width="46" height="5" rx="2.5"/><rect class="ph-l" x="38" y="44" width="38" height="5" rx="2.5"/><rect class="ph-l" x="38" y="60" width="50" height="5" rx="2.5"/><rect class="ph-l" x="38" y="76" width="42" height="5" rx="2.5"/><text class="ph-t b" x="38" y="101">ホーム画面に追加</text><rect class="ph-hl" x="33" y="89" width="74" height="18" rx="5"/><rect class="ph-l" x="38" y="118" width="44" height="5" rx="2.5"/><rect class="ph-l" x="38" y="134" width="36" height="5" rx="2.5"/></svg><figcaption>②「ホーム画面に追加」（または「アプリをインストール」）</figcaption></figure>
+      <figure><svg viewBox="0 0 120 220" role="img" aria-hidden="true"><rect class="ph-f" x="2" y="2" width="116" height="216" rx="14"/><rect class="ph-s" x="8" y="12" width="104" height="196" rx="6"/><rect class="ph-l" x="16" y="22" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="34" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="46" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="58" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="70" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="82" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="94" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="106" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="118" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="130" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="142" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="154" width="60" height="5" rx="2.5"/><rect class="ph-l" x="16" y="166" width="84" height="5" rx="2.5"/><rect class="ph-l" x="16" y="178" width="60" height="5" rx="2.5"/><rect class="ph-dim" x="8" y="12" width="104" height="196" rx="6"/><rect class="ph-p" x="14" y="72" width="92" height="76" rx="10"/><text class="ph-t b s" x="60" y="90" text-anchor="middle">アプリをインストール</text><rect class="ph-i2" x="22" y="100" width="16" height="16" rx="4"/><text class="ph-t" x="44" y="112">my tide-graph</text><text class="ph-t s" x="37" y="138" text-anchor="middle">キャンセル</text><text class="ph-t b s" x="82" y="138" text-anchor="middle">インストール</text><rect class="ph-hl" x="60" y="127" width="44" height="17" rx="5"/></svg><figcaption>③「インストール」（または「追加」）をタップ</figcaption></figure>
+    </div>
+    <p class="gh-note">図は画面のイメージです。実際の表示は、機種・OS・ブラウザのバージョンによって少し異なります。</p>
 
     <h3 id="g-trouble">困ったときは</h3>
     <dl>
@@ -832,7 +865,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.3.0', APP_DATE = '2026-10-20';
+  var APP_VERSION = '2.3.1', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
