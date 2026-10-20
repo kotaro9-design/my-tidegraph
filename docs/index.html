@@ -303,6 +303,12 @@ footer a { color: var(--text-2); }
 .cf-check input { width: auto; }
 .cf-hint.left { text-align: left; }
 #catchDlg .catch-btn { margin-top: 2px; }
+.cf-safe { font-size: 12px; line-height: 1.6; color: var(--text-2); background: var(--surface-2); border-radius: 10px; padding: 8px 10px; }
+.guide .g-safe { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; margin: 10px 0; scroll-margin-top: 70px; }
+/* ボタンなどの display の指定より hidden を優先する（写真が無いのに「写真フォルダに保存」が出ていた） */
+#catchDlg [hidden] { display: none !important; }
+.guide .g-safe h4 { font-size: 14px; margin: 0 0 4px; }
+.guide .g-safe p, .guide .g-safe ul { margin: 4px 0; }
 /* picker */
 .guide-btn { flex: none; height: 40px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .guide-link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline; }
@@ -619,6 +625,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 <dialog id="catchDlg">
   <form class="cf" id="catchForm" method="dialog">
     <div class="cf-head"><b>釣果を記録</b><button type="button" id="catchClose">閉じる</button></div>
+    <div class="cf-safe">写真と入力した内容は、このアプリのサーバーには<b>送られず、保存もされません</b>。写真の読み取りや文章づくりは、すべてこのスマホの中で行います。<button type="button" class="guide-link" id="cfSafeLink">くわしく</button></div>
 
     <div class="cf-sec">写真（最大3枚）</div>
     <div class="cf-row">
@@ -785,18 +792,42 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     </ul>
 
     <h3 id="g-catch">釣果を記録する</h3>
+    <p>釣った魚の写真と内容に、そのときの潮・天気・風・月齢などを自動で添えて、SNS への投稿文や Google カレンダーの予定にできます。</p>
     <ol>
       <li>日付の行の右の<b>「釣果を記録」</b>を押します。</li>
-      <li>写真を最大3枚、カメラで撮るか写真フォルダから選びます。写真の撮影日時と位置から、釣った時刻・場所・潮位観測所が自動で入ります。カメラで撮った写真は「写真フォルダに保存」で端末に保存できます。</li>
-      <li>魚種・サイズ・ルアー・タックルなどを入力します。ルアーやロッドなどは<b>過去の入力から選べます</b>（× で候補から削除）。</li>
-      <li>潮・天気・風・月齢などは自動で添えられます。次のどれかで記録・共有します。
+      <li><b>写真</b>（最大3枚）を「カメラで撮影」か「写真フォルダから選ぶ」で選びます。写真がなくても記録できます。
         <ul>
-          <li><b>写真と文章を共有</b>：SNS やメッセージアプリへ</li>
-          <li><b>アングラーズ投稿用の文章をコピー</b>：アングラーズのアプリに貼り付け</li>
-          <li><b>Googleカレンダーで予定を作成</b>：釣果を予定として保存（写真はファイル名と Google フォトへのリンクを記載）</li>
+          <li>写真の<b>撮影日時</b>（なければファイルの日時）を、釣った日時に入れます。</li>
+          <li>写真に<b>撮影場所の位置情報</b>があれば、その近くの潮位観測所とその日のグラフに切り替えて、釣ったときの潮位・潮の動きを添えます（「写真の位置・日時に合わせて…」のチェックを外すと切り替えません）。</li>
+          <li><b>カメラで撮った写真は、自動では写真フォルダに保存されません。</b>残したいときは「撮影した写真を写真フォルダに保存」を押してください（iPhone は「画像を保存」、うまくいかないときは表示された写真を長押しして保存）。</li>
+        </ul>
+      </li>
+      <li>魚種・サイズ・重さ・匹数、場所、釣り方・ルアー・タックル、メモを入力します。魚種・場所・ルアー・ロッドなどは<b>過去の入力から選べます</b>（候補の × で削除）。</li>
+      <li>下の「投稿文」で内容を確かめて、次のどれかを押します。
+        <ul>
+          <li><b>写真と文章を共有</b>：スマホの共有画面が開き、X・LINE・Instagram などのアプリに写真と文章を渡します。</li>
+          <li><b>アングラーズ投稿用の文章をコピー</b>：文章をコピーします。写真はアングラーズのアプリで選び、文章を貼り付けてください。</li>
+          <li><b>Googleカレンダーで予定を作成</b>：Google カレンダーの予定の作成画面が開きます。内容を確かめて「保存」を押すと、ご自身のカレンダーに釣果の記録が残ります。写真はカレンダーには付かないので、写真のファイル名と、Google フォトでその日の写真を探すリンクを書き添えます。</li>
         </ul>
       </li>
     </ol>
+
+    <div class="g-safe" id="g-catch-data">
+      <h4>釣果・写真のデータの扱い（安全性について）</h4>
+      <p><b>写真と入力した内容は、このアプリのサーバーには送られず、保存もされません。</b>開発者が見ることもできません。写真から日時・位置を読み取る処理や、投稿文・予定の文章をつくる処理は、すべてお使いのスマホの中（ブラウザ）で行っています。</p>
+      <ul>
+        <li><b>写真</b>：スマホの写真を読み込んで、画面に表示しているだけです。アップロードはしません。元の写真は写真フォルダにそのまま残り、このアプリが変更・削除することはありません。次に釣果記録の画面を開いたときか、アプリを閉じたときに、アプリの中からは消えます。</li>
+        <li><b>スマホに残るもの</b>：次回の入力を楽にするため、入力した魚種・場所・釣り方・ルアー・タックルなどの履歴を、<b>このスマホのブラウザの中だけ</b>に保存します（共有・コピー・カレンダーのボタンを押したとき）。サイズ・重さ・メモ・写真は保存しません。候補の × で1件ずつ消せます。ブラウザの「サイトのデータ（Cookie とサイトデータ）を削除」ですべて消えます。</li>
+        <li><b>外に出るのは、ご自身がボタンを押したときだけ</b>です。「共有」は選んだアプリへ、「コピー」はスマホのクリップボードへ、「Googleカレンダー」はご自身の Google アカウントへ渡ります。渡したあとは、それぞれのアプリ・サービスの決まりで扱われます。</li>
+        <li><b>潮の情報</b>：写真の位置に合わせて潮位観測所を切り替えたときは、その潮位観測所の潮位データを取りに行きます（潮位観測所を一覧から選んだときと同じです）。写真や緯度・経度は送りません。</li>
+        <li><b>利用状況の集計</b>：釣果記録については「画面を開いた」「共有・コピー・カレンダーのボタンを押した」といった回数だけを数えます。写真・魚種・場所・メモなどの内容は含みません。</li>
+      </ul>
+      <p><b>位置情報についてのご注意</b></p>
+      <ul>
+        <li>「写真と文章を共有」では、<b>写真のファイルをそのまま</b>渡します。写真に撮影場所の位置情報が付いていると、共有先によってはそれが残ります（SNS では投稿時に取り除かれることが多いですが、メッセージアプリやメールでは残ることがあります）。釣り場を知られたくないときは、位置情報を付けずに撮影するか、写真を位置情報なしで書き出してから選んでください。</li>
+        <li>Google カレンダーの予定の「場所」には、「場所」の欄が空のとき、写真の位置（なければ現在地または潮位観測所の位置）の緯度・経度が入ります。入れたくないときは「場所」の欄に「東京湾」などの地名を入れてください。投稿文には緯度・経度は入りません（場所の欄が空なら潮位観測所の名前）。</li>
+      </ul>
+    </div>
 
     <h3 id="g-setting">表示の設定</h3>
     <p>画面の下のほう（風のカードの下）にあります。</p>
@@ -865,7 +896,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.3.1', APP_DATE = '2026-10-20';
+  var APP_VERSION = '2.3.2', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -3307,6 +3338,12 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   /* ---------- events ---------- */
   $('catchBtn').onclick = openCatch;
   $('catchClose').onclick = closeCatch;
+  $('cfSafeLink').onclick = function () {
+    track('f', 'catch_safe');
+    closeCatch(); openGuide();
+    var t = $('g-catch-data');
+    if (t) setTimeout(function () { t.scrollIntoView({ block: 'start' }); }, 50);
+  };
   $('catchForm').addEventListener('click', onChip);
   $('catchForm').oninput = function (ev) { if (ev.target.id !== 'cfPhotos' && ev.target.id !== 'cfCamera') renderCatch(); };
   $('catchForm').onchange = function (ev) {
