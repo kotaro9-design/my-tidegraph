@@ -797,7 +797,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.1.2', APP_DATE = '2026-10-20';
+  var APP_VERSION = '2.2.0', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -2272,61 +2272,20 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     }
   }
   /* ---------- 気圧（海面気圧）：実測は近くの気象台など（アメダスの気圧観測地点）、推移・予報は Open-Meteo（GPS の位置） ---------- */
-  var PRES_BLOCKS = {};   // アメダスの3時間ごとのファイル（過去の分は変わらないので残す）
+  // 気圧：最寄りのアメダスの実測（直近48時間）と推移・予報。サーバーで取得して利用者どうしで共有する（10分ごと）
   function loadPressure(force) {
     var p = here();
     if (!p) return Promise.resolve();
     var key = p.lat.toFixed(2) + ',' + p.lon.toFixed(2);
-    var jobs = [];
-    // 推移・予報（30分ごと）
-    if (force || !S.presFc || S.presFcKey !== key || Date.now() - S.presFcAt > 30 * MIN) {
-      jobs.push(xfetch('https://api.open-meteo.com/v1/forecast?latitude=' + p.lat.toFixed(4) + '&longitude=' + p.lon.toFixed(4) +
-        '&hourly=pressure_msl&past_days=3&forecast_days=3&models=jma_seamless&timeformat=unixtime&timezone=GMT')
-        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) {
-          var h = j.hourly || {};
-          S.presFc = (h.time || []).map(function (t, i) { return [t * 1000, h.pressure_msl[i]]; }).filter(function (x) { return x[1] != null; });
-          S.presFcKey = key; S.presFcAt = Date.now();
-        }).catch(function () { if (S.presFcKey !== key) S.presFc = null; }));
-    }
-    // 実測（10分ごと、直近48時間）
-    jobs.push(presStation(p).then(function (st) {
-      S.presSt = st;
-      if (!st) { S.presObs = null; return; }
-      var now = Date.now(), b0 = Math.floor((now + JST) / (3 * HOUR)) * 3 * HOUR - JST, list = [];
-      for (var t = b0 - 15 * 3 * HOUR; t <= b0; t += 3 * HOUR) list.push(t);
-      return Promise.all(list.map(function (t) {
-        var d = jd(t), name = st.code + '/' + d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()) + '_' + pad(d.getUTCHours());
-        var cur = t >= b0 - 3 * HOUR;   // 新しい2つは更新中の可能性
-        if (PRES_BLOCKS[name] && !(cur && (force || now - PRES_BLOCKS[name].at > 9 * MIN))) return PRES_BLOCKS[name].pts;
-        return xfetch('https://www.jma.go.jp/bosai/amedas/data/point/' + name + '.json').then(function (r) { return r.ok ? r.json() : {}; }).then(function (j) {
-          var pts = Object.keys(j).map(function (k) {
-            var v = j[k].normalPressure;
-            var ms = Date.UTC(+k.slice(0, 4), +k.slice(4, 6) - 1, +k.slice(6, 8), +k.slice(8, 10), +k.slice(10, 12)) - JST;
-            return [ms, v && v[1] === 0 ? v[0] : null];   // 2つ目は品質（0 が正常）
-          }).filter(function (x) { return x[1] != null; });
-          PRES_BLOCKS[name] = { pts: pts, at: Date.now() };
-          return pts;
-        }).catch(function () { return PRES_BLOCKS[name] ? PRES_BLOCKS[name].pts : []; });
-      })).then(function (all) {
-        S.presObs = [].concat.apply([], all).sort(function (a, b) { return a[0] - b[0]; });
-      });
-    }).catch(function () { S.presObs = null; }));
-    return Promise.all(jobs).then(function () { renderPressure(); drawPres(); });
-  }
-  // 一番近い気圧観測地点（アメダス観測所一覧の8番目の印が気圧。山頂の富士山は除く）
-  function presStation(p) {
-    var tbl = S.amedasTbl ? Promise.resolve(S.amedasTbl) :
-      xfetch('https://www.jma.go.jp/bosai/amedas/const/amedastable.json').then(function (r) { return r.json(); }).then(function (j) { S.amedasTbl = j; return j; });
-    return tbl.then(function (j) {
-      var best = null;
-      Object.keys(j).forEach(function (code) {
-        var a = j[code];
-        if (!a.elems || a.elems.charAt(7) !== '1' || a.type === 'F') return;
-        var la = a.lat[0] + a.lat[1] / 60, lo = a.lon[0] + a.lon[1] / 60, d = distKm(p.lat, p.lon, la, lo);
-        if (!best || d < best.dist) best = { code: code, name: a.kjName, dist: d };
-      });
-      return best && best.dist < 80 ? best : null;
-    });
+    if (!force && S.presKey === key && Date.now() - S.presAt < 9 * MIN) return Promise.resolve();
+    return run('getPressure', p.lat, p.lon).then(function (r) {
+      S.presSt = r.station;
+      S.presObs = r.obs && r.obs.length ? r.obs : null;
+      S.presFc = r.fc && r.fc.length ? r.fc : null;
+      S.presKey = key; S.presAt = Date.now();
+    }, function () {
+      if (S.presKey !== key) { S.presSt = null; S.presObs = null; S.presFc = null; }
+    }).then(function () { renderPressure(); drawPres(); });
   }
   function presNear(arr, t, tol) {
     var best = null, bd = tol;
