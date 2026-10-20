@@ -33,6 +33,9 @@ function __ttlFor(u) {
   if (/www1\.kaiho\.mlit\.go\.jp\/TIDE\/gauge\/index\.php/.test(u)) return { ttl: 86400, kv: true };
   if (/\/const\/|\/suisan\/(txt|station)/.test(u)) return { ttl: 86400, kv: true };
   if (/tidelevel\/data\/tide\/tide_obs_/.test(u)) return { ttl: 60, kv: false };
+  // アメダスの3時間ごとのファイル：終わってから1時間以上たった分は変わらないので全国で共有して長く持つ
+  const am = /amedas\/data\/point\/\d+\/(\d{4})(\d{2})(\d{2})_(\d{2})\.json/.exec(u);
+  if (am && Date.UTC(+am[1], +am[2] - 1, +am[3], +am[4]) - JST + 4 * HOUR < Date.now()) return { ttl: 86400, kv: true };
   if (/amedas\/data\//.test(u)) return { ttl: 60, kv: false };
   if (/forecast\/data\//.test(u)) return { ttl: 600, kv: false };
   if (/msearch\.gsi\.go\.jp|mreversegeocoder/.test(u)) return { ttl: 86400, kv: true };
@@ -47,13 +50,15 @@ async function __get(u, env, stat) {
       if (hit != null) { stat.kv++; return hit === '__404__' ? null : hit; }
     } catch (e) { /* KV が使えなくても続ける */ }
   }
-  stat.up++;
   const host = (/^https?:\/\/([^/?#]+)/.exec(u) || [])[1] || '';
-  monInc_(monPend_().sv, host);
   const res = await fetch(u, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; my-tide-graph; +https://kotaro9-design.github.io/my-tidegraph/)' },
     cf: { cacheTtl: c.ttl, cacheEverything: true }
   });
+  // Cloudflare の配信網に一時保存されていた分（HIT など）は相手サイトに届いていないので数えない
+  const cs = String(res.headers.get('cf-cache-status') || '').toUpperCase();
+  if (cs === 'HIT' || cs === 'STALE' || cs === 'UPDATING' || cs === 'REVALIDATED') stat.edge++;
+  else { stat.up++; monInc_(monPend_().sv, host); }
   if (res.status === 404) {
     if (c.kv && env.CACHE) stat.waits.push(env.CACHE.put(kvKey, '__404__', { expirationTtl: Math.max(60, Math.min(c.ttl, 300)) }).catch(() => {}));
     return null;
@@ -195,7 +200,7 @@ async function __compact(env, maxHours) {
 
 /** 潮位観測所の名前（共有キャッシュ経由。取れなければ空） */
 async function __stationNames(env) {
-  const stat = { kv: 0, up: 0, waits: [] }, names = {};
+  const stat = { kv: 0, up: 0, edge: 0, waits: [] }, names = {};
   try {
     const out = await __runBatch([['s', 'getStations', []]], null, env, stat);
     const list = out.done.s && out.done.s.result;
@@ -318,7 +323,7 @@ export default {
     if (request.method !== 'POST') return __json({ error: 'not found' }, 404, cors);
     if (!okOrigin) return __json({ error: 'forbidden' }, 403, cors);
 
-    const stat = { kv: 0, up: 0, waits: [] };
+    const stat = { kv: 0, up: 0, edge: 0, waits: [] };
     let out;
     try {
       const req = await request.json();
@@ -337,7 +342,7 @@ export default {
     }
     monCommit_();
     ctx.waitUntil(Promise.all(stat.waits).then(() => __writeMon(env)));
-    return __json(out, 200, Object.assign({ 'x-upstream': String(stat.up), 'x-kv': String(stat.kv) }, cors));
+    return __json(out, 200, Object.assign({ 'x-upstream': String(stat.up), 'x-edge': String(stat.edge), 'x-kv': String(stat.kv) }, cors));
   },
   // Cron トリガー（任意。設定すれば終わった時間帯を定期的にまとめる）
   async scheduled(event, env, ctx) {

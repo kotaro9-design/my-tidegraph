@@ -731,6 +731,62 @@ function getWind(lat, lon, dateStr) {
   return out;
 }
 
+/**
+ * 指定位置の気圧：最寄りの気圧を観測しているアメダス（80km 以内、山頂は除く）の直近48時間の海面気圧（10分ごと）と、
+ * Open-Meteo（気象庁モデル）の推移・予報（1時間ごと、前後3日）。
+ * 利用者ごとに気象庁から取らず、サーバーのキャッシュで共有する（過去の3時間ごとのファイルは変わらないので長く持つ）
+ */
+function getPressure(lat, lon) {
+  lat = +lat; lon = +lon;
+  checkPos_(lat, lon);
+  var now = Date.now(), out = { station: null, obs: [], fc: [] };
+  try {
+    var st = null;
+    presTable_().forEach(function (s) {
+      var d = distKm_(lat, lon, s[2], s[3]);
+      if (d < 80 && (!st || d < st.dist)) st = { code: s[0], name: s[1], dist: Math.round(d * 10) / 10 };
+    });
+    if (st) {
+      out.station = st;
+      var b0 = Math.floor((now + JST) / (3 * HOUR)) * 3 * HOUR - JST, items = [];
+      for (var t = b0 - 15 * 3 * HOUR; t <= b0; t += 3 * HOUR) {
+        var b = ymd_(t).replace(/-/g, '') + '_' + pad2_(jstParts_(t).h);
+        // 新しい2つは更新中の可能性があるので短く、それより前は変わらない
+        items.push(['amedas_pt_' + st.code + '_' + b, AMEDAS + 'data/point/' + st.code + '/' + b + '.json', t >= b0 - 3 * HOUR ? 120 : 6 * 3600]);
+      }
+      prefetch_(items);
+      items.forEach(function (it) {
+        var txt = cachedText_(it[0], it[2], it[1], true);
+        if (!txt) return;
+        var o = JSON.parse(txt);
+        Object.keys(o).forEach(function (k) {
+          var v = o[k].normalPressure;
+          if (v && v[0] != null && v[1] === 0) out.obs.push([keyMs_(k), v[0]]);   // 2つ目は品質（0 が正常）
+        });
+      });
+      out.obs.sort(function (a, b) { return a[0] - b[0]; });
+    }
+  } catch (e) { rethrowNeed_(e); out.obsError = String(e.message || e); }
+  try {
+    // 約1km単位に丸めて、近くの利用者と共有する
+    var la = lat.toFixed(2), lo = lon.toFixed(2);
+    var j = JSON.parse(cachedText_('om_p_' + la + '_' + lo, 1800, OPEN_METEO + '?latitude=' + la + '&longitude=' + lo +
+      '&hourly=pressure_msl&past_days=3&forecast_days=3&models=jma_seamless&timeformat=unixtime&timezone=GMT'));
+    var h = j.hourly || {};
+    (h.time || []).forEach(function (t, i) { if (h.pressure_msl[i] != null) out.fc.push([t * 1000, h.pressure_msl[i]]); });
+  } catch (e) { rethrowNeed_(e); out.fcError = String(e.message || e); }
+  return out;
+}
+
+/** 気圧を観測しているアメダス（観測所一覧の8番目の印が気圧。山頂の富士山〔type F〕は除く） */
+function presTable_() {
+  return cached_('amedas_ptable', 24 * 3600, function () {
+    var t = JSON.parse(fetchAll_([AMEDAS + 'const/amedastable.json'])[0]);
+    return Object.keys(t).filter(function (k) { return t[k].elems && t[k].elems.charAt(7) === '1' && t[k].type !== 'F'; })
+      .map(function (k) { var s = t[k]; return [k, s.kjName, s.lat[0] + s.lat[1] / 60, s.lon[0] + s.lon[1] / 60]; });
+  });
+}
+
 function amedasTable_() {
   return cached_('amedas_table', 24 * 3600, function () {
     var t = JSON.parse(fetchAll_([AMEDAS + 'const/amedastable.json'])[0]);
@@ -979,7 +1035,7 @@ var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300, lowShare: 0.7 }; 
 // 画面から呼べる処理
 function api_() {
   return { getStations: getStations, getTideData: getTideData, getWeather: getWeather, getRiver: getRiver,
-    getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality, getPredPoints: getPredPoints };
+    getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality, getPredPoints: getPredPoints, getPressure: getPressure };
 }
 function callWithPre(name, args, pre, ev) {
   if (ev) monRecord_(ev);   // 利用状況（Monitor.gs。書き込みは最後にまとめて）

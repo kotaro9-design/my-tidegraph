@@ -157,7 +157,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   </div>
   <p class="note" id="cfNote" hidden>
     この画面は Cloudflare（v2.1.0 以降の記録）です。記録は利用者の呼び出しごとに保存し、終わった時間帯は1時間1行にまとめます（この画面を開いたときにも実行）。
-    「外部サイトからの取得」は Cloudflare Workers が気象庁・海上保安庁などから取得した回数です（Google の URL Fetch のような1日の上限はありません。川の防災情報などは全国共有のキャッシュから返した分は数えません）。
+    「外部サイトからの取得」は Cloudflare Workers が気象庁・海上保安庁などから取得した回数です（Google の URL Fetch のような1日の上限はありません。全国共有のキャッシュや Cloudflare の配信網に一時保存されていた分から返したものは、相手サイトに届いていないので数えません。2026/10/20 午前までの記録は配信網から返した分も含みます）。
     記録は v2.1.0（2026/10/20 朝）からです。それより前の Apps Script での記録は引き継いでいないため、以前からの利用者も最初の日は「新規」として数えます。
     利用者数は端末ごとの匿名IDの数です（ブラウザのデータを消すと別の人として数えます）。地域は約10km単位に丸めた位置で、名前は国土地理院の逆ジオコーダで求めた目安です。
     エラーの「画面」は利用者の端末でデータを受け取れなかった回数（通信の切れ目なども含む）、「サーバー」は Workers での処理の失敗です。データ元の異常の「net」はブラウザの通信の失敗です（利用者側の電波の弱さでも起きます）。
@@ -349,6 +349,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   }
   // エラー：種類（画面／サーバー）・内容・件数。内容は折り返して全文を出す
   var ERRS = {
+    getPressure: '気圧', getPredPoints: '推算の地点の一覧',
     getTideData: '潮位データの取得', getStations: '潮位観測所の一覧', getWeather: '天気・気温', getWind: '風の推移・予報',
     getRiver: '河川水位', getRiverStations: '河川の水位観測所の一覧', getWaterQuality: '水質'
   };
@@ -434,7 +435,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     return k;
   }
   // 表示の速さ：処理ごと
-  var PERFS = { load: '起動〜表示（グラフが出るまで）', getTideData: '潮位データ', getStations: '潮位観測所の一覧', getWeather: '天気',
+  var PERFS = { load: '起動〜表示（グラフが出るまで）', getPressure: '気圧', getPredPoints: '推算の地点の一覧', getTideData: '潮位データ', getStations: '潮位観測所の一覧', getWeather: '天気',
     getWind: '風の推移', getRiver: '河川水位', getRiverStations: '河川の水位観測所の一覧', getWaterQuality: '水質' };
   function perfTable(el, pf) {
     var keys = Object.keys(pf).sort(function (a, b) {
