@@ -885,7 +885,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.3.2', APP_DATE = '2026-10-20';
+  var APP_VERSION = '2.3.3', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -2672,11 +2672,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var b = $('mpRiverOn');
     if (b) b.onclick = function () { track('f', 'map_river_on'); setRiverOn(true); loadMapLists(); };
   }
-  // 河川・水質の観測所の一覧（基準の位置の近く。約5km単位でサーバーが共有するので、少し動かしただけでは取り直さない）
+  // 河川・水質の観測所の一覧（基準の位置の近く。サーバーと同じ約10km単位なので、少し動かしただけでは取り直さない）
   function loadMapLists() {
     var p = here();
     if (!MAPV || !p || !S.showRiver) return;
-    var key = (Math.round(p.lat * 20) / 20).toFixed(2) + ',' + (Math.round(p.lon * 20) / 20).toFixed(2);
+    var key = (Math.round(p.lat * 10) / 10).toFixed(1) + ',' + (Math.round(p.lon * 10) / 10).toFixed(1);
     if (MAPV.lists.key === key) return;
     MAPV.lists.key = key;
     Promise.all([run('getRiverStations', p.lat, p.lon).catch(function () { return []; }),

@@ -373,33 +373,29 @@ function getRiver(lat, lon, fcd) {
   };
 }
 
-/** 選択用：指定位置の近く（40km 以内）の水位観測所のうち、TP 換算値のあるもの（近い順、最大20）。
- *  取得回数を抑えるため現在水位は載せず、位置（約1km）ごとに6時間キャッシュする */
+/** 選択用・地図用：指定位置の近くの水位観測所（近い順、最大30）。
+ *  川の防災情報への取得を増やさないよう、河川水位の表示でも使う町ごとの観測所一覧（gjson、全国で共有）だけから作る。
+ *  観測所ごとの最新値・情報は取りに行かないので、潮位と同じ目盛りに重ねられない観測所（標高の高い所）も含む */
 function getRiverStations(lat, lon) {
   lat = +lat; lon = +lon;
   checkPos_(lat, lon);
-  // 約5km単位（0.05°）に丸めた位置で一覧を作って共有する
-  var glat = Math.round(lat * 20) / 20, glon = Math.round(lon * 20) / 20;
-  var list = cached_('rv_list3_' + glat.toFixed(2) + '_' + glon.toFixed(2), 6 * 3600, function () {
-  var near = riverNearby_(glat, glon), cand = near.stations.slice(0, 30);
-  prefetch_(cand.map(function (s) { return ['rv_m_' + s.fcd, RIVER + 'files/master/obs/stg/' + s.fcd + '.json', 6 * 3600]; }));
-  var tops = fetchAll_(cand.map(function (s) { return RIVER + 'files/obslist/top/stg/' + s.fcd + '.json'; }), true);
-  var out = [];
-  cand.forEach(function (s, i) {
-    var v = null;
-    try { v = tops[i] && JSON.parse(tops[i]).obsValue; } catch (e) { /* 無視 */ }
-    if (!v || v.stgHght == null || out.length >= 20) return;
-    var info = riverMaster_(s.fcd) || {};
-    out.push({ fcd: s.fcd, name: s.name, river: info.rvrNm || '', lat: s.lat, lon: s.lon });
+  var g = listGrid_(lat, lon);
+  var list = cached_('rv_list4_' + g.key, 6 * 3600, function () {
+    // 一覧は約10km単位で共有するので、端の人の近くも入るよう多めの市区町村から集める
+    return riverNearby_(g.lat, g.lon, 9).stations.slice(0, 60).map(function (s) { return { fcd: s.fcd, name: s.name, lat: s.lat, lon: s.lon }; });
   });
-  return out;
-  });
-  return list.map(function (x) { return { fcd: x.fcd, name: x.name, river: x.river, lat: x.lat, lon: x.lon, dist: Math.round(distKm_(lat, lon, x.lat, x.lon) * 10) / 10 }; })
-    .sort(function (a, b) { return a.dist - b.dist; });
+  return list.map(function (x) { return { fcd: x.fcd, name: x.name, river: '', lat: x.lat, lon: x.lon, dist: Math.round(distKm_(lat, lon, x.lat, x.lon) * 10) / 10 }; })
+    .sort(function (a, b) { return a.dist - b.dist; }).slice(0, 30);
 }
 
-/** 指定位置の近くの水位観測所（近い順、重複なし） */
-function riverNearby_(lat, lon) {
+/** 観測所の一覧を共有する単位（約10km＝0.1°に丸めた位置）。河川・水質の一覧と、水質観測所の選択で同じものを使う */
+function listGrid_(lat, lon) {
+  var glat = Math.round(lat * 10) / 10, glon = Math.round(lon * 10) / 10;
+  return { lat: glat, lon: glon, key: glat.toFixed(1) + '_' + glon.toFixed(1) };
+}
+
+/** 指定位置の近くの水位観測所（近い順、重複なし）。nTowns：観測所を集める市区町村の数（既定5） */
+function riverNearby_(lat, lon, nTowns) {
   var towns = cached_('rv_towns', 24 * 3600, function () {
     var a = JSON.parse(fetchAll_([RIVER + 'files/map/twn/twnarea.json'])[0]).towns || [];
     return a.filter(function (t) { return t.stgExistFlg; })
@@ -410,7 +406,7 @@ function riverNearby_(lat, lon) {
   // 近い市区町村（重心）から観測所を集める
   var nearTowns = towns.map(function (t) { return [t[0], distKm_(lat, lon, t[1], t[2])]; })
     .filter(function (t) { return t[1] < 40; })
-    .sort(function (a, b) { return a[1] - b[1]; }).slice(0, 5);
+    .sort(function (a, b) { return a[1] - b[1]; }).slice(0, nTowns || 5);
   var stations = [], seen = {};
   prefetch_(nearTowns.map(function (t) { return ['rv_twn_' + t[0], RIVER + 'gjson/obs/' + path + '/stg/' + t[0] + '.json', 6 * 3600]; }));
   nearTowns.forEach(function (t) {
@@ -472,8 +468,9 @@ function getWaterQuality(lat, lon, fcd) {
   var cache = CacheService.getScriptCache(), noneKey = CACHE_VER + 'wq_none_' + (Math.round(lat * 20) / 20).toFixed(2) + '_' + (Math.round(lon * 20) / 20).toFixed(2);
   if (!fcd && cache.get(noneKey)) return null;
   var none = function () { if (!fcd) cache.put(noneKey, '1', 21600); return null; };
-  // 選んだ観測所は、地図の一覧（getWQStations）と同じ約5km単位の位置の近くから探す
-  var stations = fcd ? wqNearby_(Math.round(lat * 20) / 20, Math.round(lon * 20) / 20) : wqNearby_(lat, lon);
+  // 選んだ観測所は、地図の一覧（getWQStations）と同じ単位の位置の近くから探す
+  var gq = listGrid_(lat, lon);
+  var stations = fcd ? wqNearby_(gq.lat, gq.lon) : wqNearby_(lat, lon);
   var site = fcd ? stations.filter(function (s) { return s.fcd === fcd; })[0] : stations[0];
   if (!site || (!fcd && site.d > LIMIT_KM)) return none();
   if (fcd) site.d = distKm_(lat, lon, site.lat, site.lon);
@@ -487,14 +484,14 @@ function getWaterQuality(lat, lon, fcd) {
 // 水深別の観測所の名前の末尾（「波崎上流上層（自動）」のように括弧書きが付くこともある）
 var WQ_LAYER = /(平均|表層|上層|中層|下層|底層)(（[^）]*）)?$/;
 
-/** 地図用：指定位置の近くの水質観測所（水深別は1地点にまとめる、近い順）。約5km単位で6時間共有 */
+/** 地図用：指定位置の近くの水質観測所（水深別は1地点にまとめる、近い順）。約10km単位で6時間共有 */
 function getWQStations(lat, lon) {
   lat = +lat; lon = +lon;
   checkPos_(lat, lon);
-  var glat = Math.round(lat * 20) / 20, glon = Math.round(lon * 20) / 20;
-  var list = cached_('wq_list_' + glat.toFixed(2) + '_' + glon.toFixed(2), 6 * 3600, function () {
+  var g = listGrid_(lat, lon);
+  var list = cached_('wq_list2_' + g.key, 6 * 3600, function () {
     var out = [];
-    wqNearby_(glat, glon).forEach(function (s) {
+    wqNearby_(g.lat, g.lon).forEach(function (s) {
       var name = s.name.replace(WQ_LAYER, '');
       if (out.some(function (x) { return x.name === name && distKm_(x.lat, x.lon, s.lat, s.lon) < 0.5; })) return;
       out.push({ fcd: s.fcd, name: name, river: s.river, lat: s.lat, lon: s.lon });
