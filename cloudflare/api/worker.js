@@ -948,11 +948,12 @@ function forecastAt_(lat, lon, c20) {
     return m;
   });
 
-  // 位置 → 市区町村コード（国土地理院 逆ジオコーダ）。海上などで引けなければ観測地点の市区町村
+  // 位置 → 市区町村コード（国土地理院 逆ジオコーダ）。海上などで引けなければ観測地点の市区町村。
+  // 天気の地域を決めるだけなので、約1km単位に丸めて引き、利用者どうしで共有する
   var code = null, src = 'station';
   try {
-    var rg = cachedText_('rg_' + lat.toFixed(3) + '_' + lon.toFixed(3), 24 * 3600,
-      GSI_REVGEO + '?lat=' + lat.toFixed(5) + '&lon=' + lon.toFixed(5), true);
+    var rlat = lat.toFixed(2), rlon = lon.toFixed(2);
+    var rg = cachedText_('rg2_' + rlat + '_' + rlon, 24 * 3600, GSI_REVGEO + '?lat=' + rlat + '&lon=' + rlon, true);
     var muni = rg && JSON.parse(rg).results && JSON.parse(rg).results.muniCd;
     if (muni) {
       muni = ('00000' + muni).slice(-5);
@@ -1692,24 +1693,29 @@ const __ORIGINS = [
 // key：共有キャッシュの見出し（省略時は URL）。川の防災情報の URL には最新の観測時刻（10分ごと）が入るので、
 // 中身が変わらない・毎時の値のものは時刻を外して共有する（Apps Script では名前で6時間・1時間持っていたのと同じ）
 const __RV = /^https:\/\/www\.river\.go\.jp\/kawabou\/file\//, __RV_TIME = /\/\d{8}\/\d{4}\//;
+// ほとんど変わらないもの（観測所の位置・情報、年ごとの潮位表、地域の一覧など）は長く共有する
+const DAY_S = 86400, WEEK_S = 7 * DAY_S, MONTH_S = 30 * DAY_S;
 function __ttlFor(u) {
   if (/www\.river\.go\.jp\/kawabou\/file\/system\/tmCrntTime/.test(u)) return { ttl: 300, kv: true };
   if (/www\.river\.go\.jp\/kawabou\/file\/files\/tmlist\/qwtr\//.test(u)) return { ttl: 3600, kv: true, key: u.replace(__RV_TIME, '/') };
   if (/www\.river\.go\.jp\/kawabou\/file\/files\/tmlist\//.test(u)) return { ttl: 600, kv: true };
-  if (/www\.river\.go\.jp\/kawabou\/file\/files\/obslist\//.test(u)) return { ttl: 21600, kv: true };
-  if (/www\.river\.go\.jp\/kawabou\/file\/gjson\//.test(u)) return { ttl: 21600, kv: true, key: u.replace(__RV_TIME, '/') };
-  if (/www\.river\.go\.jp\/kawabou\/file\/files\/master\//.test(u)) return { ttl: 21600, kv: true };
-  if (/www\.river\.go\.jp\/kawabou\/file\/files\/map\//.test(u)) return { ttl: 86400, kv: true };
+  if (/www\.river\.go\.jp\/kawabou\/file\/files\/obslist\/top\//.test(u)) return { ttl: 21600, kv: true };
+  if (/www\.river\.go\.jp\/kawabou\/file\/files\/obslist\//.test(u)) return { ttl: WEEK_S, kv: true };     // 町ごとの水質観測所の一覧
+  if (/www\.river\.go\.jp\/kawabou\/file\/gjson\//.test(u)) return { ttl: WEEK_S, kv: true, key: u.replace(__RV_TIME, '/') };   // 町ごとの水位観測所（位置・名前）
+  if (/www\.river\.go\.jp\/kawabou\/file\/files\/master\//.test(u)) return { ttl: MONTH_S, kv: true };     // 観測所の情報
+  if (/www\.river\.go\.jp\/kawabou\/file\/files\/map\//.test(u)) return { ttl: WEEK_S, kv: true };         // 市区町村の一覧
   if (/www1\.kaiho\.mlit\.go\.jp\/TIDE\/gauge\/gauge\.php/.test(u)) return { ttl: 120, kv: true };
-  if (/www1\.kaiho\.mlit\.go\.jp\/TIDE\/gauge\/index\.php/.test(u)) return { ttl: 86400, kv: true };
-  if (/\/const\/|\/suisan\/(txt|station)/.test(u)) return { ttl: 86400, kv: true };
+  if (/www1\.kaiho\.mlit\.go\.jp\/TIDE\/gauge\/index\.php/.test(u)) return { ttl: WEEK_S, kv: true };      // 海保の観測所の一覧
+  if (/\/const\/tide_astro\/|\/suisan\/txt\//.test(u)) return { ttl: MONTH_S, kv: true };                   // 年ごとの推算・潮位表
+  if (/\/const\/tide_area\.json/.test(u)) return { ttl: DAY_S, kv: true };                                 // 潮位観測所（欠測の情報を含む）
+  if (/\/const\/|\/suisan\/station/.test(u)) return { ttl: WEEK_S, kv: true };                             // アメダス・予報区・潮位表の地点の一覧
   if (/tidelevel\/data\/tide\/tide_obs_/.test(u)) return { ttl: 60, kv: false };
   // アメダスの3時間ごとのファイル：終わってから1時間以上たった分は変わらないので全国で共有して長く持つ
   const am = /amedas\/data\/point\/\d+\/(\d{4})(\d{2})(\d{2})_(\d{2})\.json/.exec(u);
   if (am && Date.UTC(+am[1], +am[2] - 1, +am[3], +am[4]) - JST + 4 * HOUR < Date.now()) return { ttl: 86400, kv: true };
   if (/amedas\/data\//.test(u)) return { ttl: 60, kv: false };
   if (/forecast\/data\//.test(u)) return { ttl: 600, kv: false };
-  if (/msearch\.gsi\.go\.jp|mreversegeocoder/.test(u)) return { ttl: 86400, kv: true };
+  if (/msearch\.gsi\.go\.jp|mreversegeocoder/.test(u)) return { ttl: MONTH_S, kv: true };                 // 住所 ⇔ 位置
   return { ttl: 300, kv: false };
 }
 // 利用状況での外部サイトの名前。川の防災情報は種類ごとに分けて数える（どれが多いかを見るため）

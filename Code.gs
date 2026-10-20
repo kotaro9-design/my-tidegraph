@@ -896,11 +896,12 @@ function forecastAt_(lat, lon, c20) {
     return m;
   });
 
-  // 位置 → 市区町村コード（国土地理院 逆ジオコーダ）。海上などで引けなければ観測地点の市区町村
+  // 位置 → 市区町村コード（国土地理院 逆ジオコーダ）。海上などで引けなければ観測地点の市区町村。
+  // 天気の地域を決めるだけなので、約1km単位に丸めて引き、利用者どうしで共有する
   var code = null, src = 'station';
   try {
-    var rg = cachedText_('rg_' + lat.toFixed(3) + '_' + lon.toFixed(3), 24 * 3600,
-      GSI_REVGEO + '?lat=' + lat.toFixed(5) + '&lon=' + lon.toFixed(5), true);
+    var rlat = lat.toFixed(2), rlon = lon.toFixed(2);
+    var rg = cachedText_('rg2_' + rlat + '_' + rlon, 24 * 3600, GSI_REVGEO + '?lat=' + rlat + '&lon=' + rlon, true);
     var muni = rg && JSON.parse(rg).results && JSON.parse(rg).results.muniCd;
     if (muni) {
       muni = ('00000' + muni).slice(-5);

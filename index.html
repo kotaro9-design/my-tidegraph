@@ -919,7 +919,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.3.6', APP_DATE = '2026-10-21';
+  var APP_VERSION = '2.3.7', APP_DATE = '2026-10-21';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -1014,7 +1014,12 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     track('pv', { st: code, area: pos ? pos.lat.toFixed(1) + ',' + pos.lon.toFixed(1) : '', ref: referrerName(), env: envInfo() });
   }
   // 次の通信を待たずに送る（キャッシュ済みの軽い呼び出しに相乗り）
-  function flushEvents() { if (EVQ.length) run('getStations').catch(function () {}); }
+  // 記録だけを送る（以前は潮位観測所の一覧の呼び出しに相乗りさせていたため、毎回一覧を受け取っていた）
+  function flushEvents() {
+    var ev = takeEvents();
+    if (!ev) return;
+    workerRun('track', [ev]).catch(function () { EVQ = ev.list.concat(EVQ).slice(0, 50); });   // 送れなければ次の通信で
+  }
   function takeEvents() {
     var hk = Object.keys(HOSTCNT);
     if (hk.length) { EVQ.push(['h', HOSTCNT]); HOSTCNT = {}; }
@@ -3578,8 +3583,32 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   checkVersion('start');   // 古ければ、データを読み込む前に開き直す
 
   /* ---------- boot ---------- */
-  var predPointsReady = run('getPredPoints').then(function (pts) { S.predPoints = pts || []; }, function () { S.predPoints = []; });
-  run('getStations').then(function (list) {
+  // 潮位観測所・潮位表の地点の一覧は、ほとんど変わらないので端末に保存して使い回す。
+  // 12時間たったら裏で取り直す（欠測の情報などを新しくするため）。保存が無いとき（初めて・形が変わったとき）だけ待つ
+  var LIST_CACHE_V = 1, LIST_MAX_AGE = 12 * HOUR;
+  function cachedList(name, apply) {
+    var c = null;
+    try { c = JSON.parse(load('list_' + name) || 'null'); } catch (e) { c = null; }
+    if (!c || c.v !== LIST_CACHE_V || !Array.isArray(c.data) || !c.data.length) c = null;
+    var fresh = function () {
+      return run(name).then(function (d) {
+        if (Array.isArray(d) && d.length) { save('list_' + name, JSON.stringify({ v: LIST_CACHE_V, at: Date.now(), data: d })); apply(d); }
+        return d;
+      });
+    };
+    if (!c) return fresh();
+    if (!(Date.now() - c.at < LIST_MAX_AGE)) setTimeout(function () { fresh().catch(function () { /* 次の起動で */ }); }, 8000);
+    return Promise.resolve(c.data);
+  }
+  function applyStations(list) {
+    S.stations = list;
+    if (S.st) { var n = list.filter(function (s) { return s.c === S.st.c; })[0]; if (n) S.st = n; }
+    if ($('picker').hasAttribute('open')) renderPicker();
+    syncMapSoon();
+  }
+  var predPointsReady = cachedList('getPredPoints', function (pts) { S.predPoints = pts; syncMapSoon(); })
+    .then(function (pts) { S.predPoints = pts || []; }, function () { S.predPoints = []; });
+  cachedList('getStations', applyStations).then(function (list) {
     S.stations = list;
     return predPointsReady.then(function () { return list; });
   }).then(function (list) {
