@@ -786,7 +786,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.0.0', APP_DATE = '2026-10-20';
+  var APP_VERSION = '2.1.0', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -890,8 +890,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   // 閉じるときに残っている分（GitHub Pages 版のみ。Apps Script の画面では次回の通信で送る）
   window.addEventListener('pagehide', function () {
     var api = document.querySelector('meta[name="tide-api"]');
-    if (!api || (!EVQ.length && !Object.keys(HOSTCNT).length && !Object.keys(HOSTFAIL).length && !Object.keys(PERF).length) || !navigator.sendBeacon) return;
-    try { navigator.sendBeacon(api.content, new Blob([JSON.stringify({ fn: 'track', args: [takeEvents()] })], { type: 'text/plain;charset=utf-8' })); } catch (e) { /* 無視 */ }
+    if ((!EVQ.length && !Object.keys(HOSTCNT).length && !Object.keys(HOSTFAIL).length && !Object.keys(PERF).length) || !navigator.sendBeacon) return;
+    try { navigator.sendBeacon(API_WORKER, new Blob([JSON.stringify({ fn: 'track', args: [takeEvents()] })], { type: 'text/plain;charset=utf-8' })); } catch (e) { /* 無視 */ }
   });
 
   // サーバーの呼び出しは、ほぼ同時に出たもの（起動時の潮位・天気・風など）を20ミリ秒待って1回にまとめる（callBatch）。
@@ -955,8 +955,30 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       }).then(function (t) { pre[u] = t; }, function () { pre[u] = { err: 1 }; });
     }));
   }
+  // サーバー：Cloudflare Workers（tide-api）を先に使い、つながらないときだけ Apps Script に切り替える
+  var API_WORKER = 'https://tide-api.kotaro9.workers.dev/api';
+  var workerDownUntil = 0;   // Workers が失敗したら、しばらく Apps Script だけを使う
+  function workerRun(name, args) {
+    countHost(API_WORKER);
+    return fetch(API_WORKER, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: name, args: args }) })
+      .then(function (r) { if (!r.ok) { failHost(API_WORKER, r.status); throw new Error('通信エラー ' + r.status); } return r.json(); },
+        function (e) { failHost(API_WORKER, 'net'); throw e; })
+      .then(function (j) { if (j.error) { var er = new Error(j.error); er.fromServer = true; throw er; } return j.result; });
+  }
   function rawRun(name) {
     var args = Array.prototype.slice.call(arguments, 1);
+    // まとめた呼び出しは Workers へ。通信の失敗のときだけ Apps Script へ（処理のエラーはそのまま返す）
+    if (name === 'callBatch' && Date.now() > workerDownUntil) {
+      return workerRun(name, args).catch(function (e) {
+        if (e && e.fromServer) throw e;
+        workerDownUntil = Date.now() + 2 * MIN;
+        track('q', 'worker_fallback');
+        return gasRun(name, args);
+      });
+    }
+    return gasRun(name, args);
+  }
+  function gasRun(name, args) {
     if (window.google && google.script && google.script.run) {
       countHost('https://script.google.com/');
       return new Promise(function (res, rej) {
