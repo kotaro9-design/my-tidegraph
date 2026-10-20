@@ -95,6 +95,25 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
 .live .v small { font-size: 14px; font-weight: 500; color: var(--text-2); margin-left: 2px; }
 .live .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
 .live .s { font-size: 12px; color: var(--text-3); }
+/* いま使っている人の推移（オシロスコープ風。画面は明るい・暗い表示どちらでも暗い計器の見た目） */
+.scope-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 12px 0 8px; }
+.scope-read { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.scope { --sc-bg: #07120d; --sc-grid: rgba(90, 255, 170, .10); --sc-axis: rgba(90, 255, 170, .26); --sc-trace: #57ffa8; --sc-text: rgba(170, 255, 210, .72);
+  position: relative; height: 210px; border-radius: 10px; overflow: hidden; background: radial-gradient(ellipse at center, #0c1f16 0%, var(--sc-bg) 75%);
+  box-shadow: inset 0 0 0 1px rgba(90, 255, 170, .18), inset 0 0 24px rgba(0, 0, 0, .7); touch-action: pan-y; }
+.scope svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.scope .g { stroke: var(--sc-grid); stroke-width: 1; }
+.scope .a { stroke: var(--sc-axis); stroke-width: 1; stroke-dasharray: 2 3; }
+.scope .tr { fill: none; stroke: var(--sc-trace); stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+.scope .lb { fill: var(--sc-text); font: 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.scope .hd { fill: var(--sc-trace); }
+.scope .pulse { fill: var(--sc-trace); opacity: .35; animation: sc-pulse 1.6s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.scope .cur { stroke: rgba(170, 255, 210, .5); stroke-width: 1; }
+.scope .scan { position: absolute; top: 0; bottom: 0; width: 60px; left: -60px; background: linear-gradient(90deg, transparent, rgba(90, 255, 170, .07)); animation: sc-scan 6s linear infinite; pointer-events: none; }
+.scope .empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--sc-text); font-size: 12px; }
+@keyframes sc-pulse { from { transform: scale(1); opacity: .5; } to { transform: scale(3.2); opacity: 0; } }
+@keyframes sc-scan { to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) { .scope .pulse, .scope .scan { animation: none; display: none; } }
 </style>
 </head>
 <body data-key="<?= adminKey ?>">
@@ -118,7 +137,17 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   <div class="msg" id="msg" hidden></div>
 
   <div class="card" id="liveCard" hidden><h2>いま使っている人 <span id="liveSub"></span></h2>
-    <div class="live"><span class="dot" aria-hidden="true"></span><div class="v" id="liveN">--<small>人</small></div><div class="s" id="liveNote"></div></div></div>
+    <div class="live"><span class="dot" aria-hidden="true"></span><div class="v" id="liveN">--<small>人</small></div><div class="s" id="liveNote"></div></div>
+    <div class="scope-bar">
+      <div class="seg" id="scopeSeg" role="group" aria-label="グラフの範囲">
+        <button data-m="30" aria-pressed="false">30分</button>
+        <button data-m="180" aria-pressed="true">3時間</button>
+        <button data-m="1440" aria-pressed="false">24時間</button>
+      </div>
+      <div class="scope-read" id="scopeRead"></div>
+    </div>
+    <div class="scope" id="scope" role="img" aria-label="いま使っている人の数の推移"><svg id="scopeSvg"></svg><div class="scan" aria-hidden="true"></div></div>
+  </div>
   <div class="card"><h2>監視の状態 <span id="healthSub"></span></h2><div class="tiles mini" id="health"></div></div>
   <div class="card"><h2>データ元の異常 <span>回（404 は普段から起きるため薄く表示）</span></h2><div id="tFails"></div>
     <h3 class="h3">画面で見つかったデータの異常</h3><div id="tQuality"></div></div>
@@ -561,6 +590,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     var d = new Date(D.now + 9 * 3600e3);
     $('upd').textContent = (byHour() ? '直近' + D.hours + '時間（' + D.sinceKey.slice(5).replace('-', '/') + '時〜）' : '直近' + DAYS + '日（' + D.since + '〜）') + '・' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' 時点';
     if (D.live) showLive(D.live);
+    if (CF && !SC.loaded) { SC.loaded = true; loadScope(); }
     $('sheetLink').hidden = !D.sheetUrl; if (D.sheetUrl) $('sheetLink').href = D.sheetUrl;
     if (D.version) $('ver').textContent = 'monitor v' + D.version + '（' + String(D.versionDate || '').replace(/-/g, '/') + '）' + (D.source === 'cloudflare' ? '・Cloudflare' : '・Apps Script');
   }
@@ -591,12 +621,100 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
       .then(function () { b.disabled = false; });
   };
   window.addEventListener('resize', function () { if (D) render(); });
+  /* いま使っている人の推移（1分ごとの記録＋開いている間の30秒ごとの値）。オシロスコープ風の折れ線 */
+  var SC = { pts: [], win: 180 };
+  try { SC.win = +localStorage.getItem('mon_scope_win') || 180; } catch (e) { /* 使えない環境 */ }
+  function scopeAdd(t, v) {
+    // 同じ分の記録と30秒ごとの値が近すぎるときは新しい方だけ
+    SC.pts = SC.pts.filter(function (p) { return Math.abs(p[0] - t) > 20000; });
+    SC.pts.push([t, v]);
+    SC.pts.sort(function (a, b) { return a[0] - b[0]; });
+    var old = Date.now() - 2 * 864e5;
+    while (SC.pts.length && SC.pts[0][0] < old) SC.pts.shift();
+  }
+  function loadScope() {
+    return call('getLiveHist', KEY, 1440).then(function (r) {
+      (r.pts || []).forEach(function (p) { scopeAdd(p[0], p[1]); });
+      if (r.live) { scopeAdd(r.live.at, r.live.n); showLive(r.live); }
+      drawScope();
+    }).catch(function () { drawScope(); });
+  }
+  function hm(t) { var d = new Date(t + 9 * 3600e3); return d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2); }
+  function drawScope(hoverX) {
+    var box = $('scope'), svg = $('scopeSvg');
+    if (!box || box.offsetParent === null) return;
+    var W = box.clientWidth, H = box.clientHeight, now = Date.now(), span = SC.win * 60000, t0 = now - span;
+    var pts = SC.pts.filter(function (p) { return p[0] >= t0 - 60000; });
+    var mx = pts.reduce(function (m, p) { return Math.max(m, p[1]); }, 0);
+    // 縦は6目盛り。1目盛りの人数を切りのよい数に
+    var step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000].filter(function (s) { return s * 6 >= mx * 1.15; })[0] || 2000, top = step * 6;
+    // 右端の最新の点が切れないよう、右に少し余白を取る
+    var PW = W - 10, X = function (t) { return (t - t0) / span * PW; }, Y = function (v) { return H - 8 - v / top * (H - 20); };
+    var s = '<defs><filter id="scGlow" x="-5%" y="-20%" width="110%" height="140%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>';
+    for (var i = 1; i <= 10; i++) s += '<line class="' + (i === 5 ? 'a' : 'g') + '" x1="' + (PW * i / 10).toFixed(1) + '" y1="0" x2="' + (PW * i / 10).toFixed(1) + '" y2="' + H + '"/>';
+    for (var j = 0; j <= 6; j++) {
+      var y = Y(step * j).toFixed(1);
+      s += '<line class="' + (j === 0 ? 'a' : 'g') + '" x1="0" y1="' + y + '" x2="' + W + '" y2="' + y + '"/>';
+      if (j > 0 && j % 2 === 0) s += '<text class="lb" x="6" y="' + (+y - 3) + '">' + step * j + '人</text>';
+    }
+    for (var k = 2; k < 10; k += 2) s += '<text class="lb" x="' + (PW * k / 10 + 3).toFixed(1) + '" y="' + (H - 12) + '">' + hm(t0 + span * k / 10) + '</text>';
+    s += '<text class="lb" x="' + (W - 6) + '" y="14" text-anchor="end">' + (SC.win >= 1440 ? '24時間' : SC.win >= 60 ? SC.win / 60 + '時間' : SC.win + '分') + ' / 1目盛 ' + step + '人</text>';
+    // 折れ線（記録が途切れた所は線を切る）
+    var gap = Math.max(4 * 60000, span / 120), d = '', prev = null;
+    pts.forEach(function (p) {
+      var c = X(p[0]).toFixed(1) + ',' + Y(p[1]).toFixed(1);
+      d += (prev && p[0] - prev[0] <= gap ? 'L' : 'M') + c;
+      prev = p;
+    });
+    if (d) s += '<path class="tr" filter="url(#scGlow)" d="' + d + '"/>';
+    var last = pts[pts.length - 1];
+    if (last) {
+      var lx = X(last[0]).toFixed(1), ly = Y(last[1]).toFixed(1);
+      s += '<circle class="pulse" cx="' + lx + '" cy="' + ly + '" r="3"/><circle class="hd" cx="' + lx + '" cy="' + ly + '" r="3" filter="url(#scGlow)"/>';
+    }
+    // 指でなぞった・マウスを乗せた所の値
+    var read = last ? '最新 ' + hm(last[0]) + ' ' + last[1] + '人' : '';
+    if (hoverX != null && pts.length) {
+      var ht = t0 + hoverX / PW * span, best = pts[0];
+      pts.forEach(function (p) { if (Math.abs(p[0] - ht) < Math.abs(best[0] - ht)) best = p; });
+      var bx = X(best[0]).toFixed(1);
+      s += '<line class="cur" x1="' + bx + '" y1="0" x2="' + bx + '" y2="' + H + '"/><circle class="hd" cx="' + bx + '" cy="' + Y(best[1]).toFixed(1) + '" r="3.5"/>';
+      read = hm(best[0]) + ' ' + best[1] + '人';
+    }
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.innerHTML = s;
+    var em = box.querySelector('.empty');
+    if (!pts.length && !em) box.insertAdjacentHTML('beforeend', '<div class="empty">記録を集めています（1分ごとに記録します）</div>');
+    if (pts.length && em) em.remove();
+    $('scopeRead').textContent = read;
+  }
+  (function () {
+    var seg = $('scopeSeg'), box = $('scope');
+    if (!seg) return;
+    Array.prototype.forEach.call(seg.children, function (b) { b.setAttribute('aria-pressed', String(+b.dataset.m === SC.win)); });
+    seg.onclick = function (ev) {
+      var b = ev.target.closest('button'); if (!b) return;
+      SC.win = +b.dataset.m;
+      try { localStorage.setItem('mon_scope_win', String(SC.win)); } catch (e) { /* 使えない環境 */ }
+      Array.prototype.forEach.call(seg.children, function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      drawScope();
+    };
+    var at = function (ev) { var r = box.getBoundingClientRect(); return Math.min(Math.max(ev.clientX - r.left, 0), r.width); };
+    box.addEventListener('pointermove', function (ev) { drawScope(at(ev)); });
+    box.addEventListener('pointerdown', function (ev) { drawScope(at(ev)); });
+    box.addEventListener('pointerleave', function () { drawScope(); });
+    window.addEventListener('resize', function () { drawScope(); });
+    // 裏に回っていた間の記録を取り直す
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && CF) loadScope(); });
+  })();
   function showLive(l) {
     $('liveCard').hidden = false;
     $('liveN').innerHTML = n(l.n) + '<small>人</small>';
     var d = new Date(l.at + 9 * 3600e3);
     $('liveNote').textContent = '直近' + l.windowMin + '分に画面を表示していた端末の数（' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ':' + ('0' + d.getUTCSeconds()).slice(-2) + ' 時点）';
     $('liveSub').textContent = '30秒ごとに更新';
+    scopeAdd(l.at, l.n);
+    drawScope();
   }
   if (CF) setInterval(function () {
     if (document.hidden) return;

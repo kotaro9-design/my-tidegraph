@@ -139,6 +139,7 @@ function __json(obj, status, cors) {
  *   seen     … 匿名IDが初めて現れた日（新規・再訪の判定）
  *   mon_lock … まとめ処理が同時に2つ動かないようにする
  *   live     … 匿名IDごとの最後の通信時刻（いま使っている人の数）
+ *   live_hist … いま使っている人の数の1分ごとの記録（Cron で記録、2日分。管理画面の折れ線グラフ）
  */
 // 画面を表示している間は5分ごとに自動更新の通信がある。それより少し長い時間で数える
 const LIVE_MS = 7 * 60000;
@@ -156,7 +157,8 @@ async function __schema(env) {
     'CREATE TABLE IF NOT EXISTS mon_lock (name TEXT PRIMARY KEY, until INTEGER NOT NULL)',
     'CREATE TABLE IF NOT EXISTS mon_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)',
     'CREATE TABLE IF NOT EXISTS live (id TEXT PRIMARY KEY, t INTEGER NOT NULL)',
-    'CREATE INDEX IF NOT EXISTS live_t ON live(t)'
+    'CREATE INDEX IF NOT EXISTS live_t ON live(t)',
+    'CREATE TABLE IF NOT EXISTS live_hist (t INTEGER PRIMARY KEY, n INTEGER NOT NULL)'
   ].map(s => env.DB.prepare(s)));
   __schemaOk = true;
 }
@@ -241,6 +243,22 @@ async function __live(env) {
   await __schema(env);
   const now = Date.now(), r = await env.DB.prepare('SELECT count(*) AS n FROM live WHERE t > ?').bind(now - LIVE_MS).first();
   return { n: r ? r.n : 0, windowMin: LIVE_MS / 60000, at: now };
+}
+
+/** いま使っている人の数を記録する（Cron から1分ごと。時刻は分の頭にそろえる） */
+async function __liveSample(env, at) {
+  const l = await __live(env), t = Math.floor((at || l.at) / 60000) * 60000;
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO live_hist (t, n) VALUES (?, ?) ON CONFLICT(t) DO UPDATE SET n = excluded.n').bind(t, l.n),
+    env.DB.prepare('DELETE FROM live_hist WHERE t < ?').bind(t - 2 * DAY)
+  ]);
+}
+/** いま使っている人の数の推移（直近 minutes 分、最大2日） */
+async function __liveHist(env, minutes) {
+  await __schema(env);
+  const m = Math.min(Math.max(Math.round(+minutes) || 180, 10), 2880), now = Date.now();
+  const r = await env.DB.prepare('SELECT t, n FROM live_hist WHERE t >= ? ORDER BY t').bind(now - m * 60000).all();
+  return { pts: (r.results || []).map(x => [x.t, x.n]), now: now, live: await __live(env) };
 }
 
 /**
@@ -340,6 +358,7 @@ export default {
         // 文章の要約は日単位（時間単位の期間では1日ぶん）
         if (req.fn === 'getMonitorSummaryText') return __json({ result: monSummaryText_(monSummaryFrom_(await __monData(env, a[2] ? 1 : a[1]))) });
         if (req.fn === 'getLive') return __json({ result: await __live(env) });
+        if (req.fn === 'getLiveHist') return __json({ result: await __liveHist(env, a[1]) });
         if (req.fn === 'adminFlush') return __json({ result: await __compact(env, 48) });
         return __json({ error: '不正な呼び出しです' }, 400);
       } catch (e) { return __json({ error: String((e && e.message) || e) }, 500); }
@@ -369,8 +388,11 @@ export default {
     ctx.waitUntil(Promise.all(stat.waits).then(() => __writeMon(env)));
     return __json(out, 200, Object.assign({ 'x-upstream': String(stat.up), 'x-edge': String(stat.edge), 'x-kv': String(stat.kv) }, cors));
   },
-  // Cron トリガー（任意。設定すれば終わった時間帯を定期的にまとめる）
+  // Cron トリガー（1分ごと）：いま使っている人の数を記録。終わった時間帯のまとめは5分に1回
   async scheduled(event, env, ctx) {
-    if (env.DB) ctx.waitUntil(__compact(env, 48).catch(e => console.log('compact failed: ' + e)));
+    if (!env.DB) return;
+    const at = event.scheduledTime || Date.now();
+    ctx.waitUntil(__liveSample(env, at).catch(e => console.log('live sample failed: ' + e)));
+    if (Math.floor(at / 60000) % 5 === 0) ctx.waitUntil(__compact(env, 48).catch(e => console.log('compact failed: ' + e)));
   }
 };
