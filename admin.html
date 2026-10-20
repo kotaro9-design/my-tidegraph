@@ -90,6 +90,11 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
 .alog b { margin-right: 6px; }
 .alog .t { color: var(--text-3); margin-right: 6px; font-variant-numeric: tabular-nums; }
 .note { font-size: 11px; color: var(--text-3); line-height: 1.6; margin-top: 14px; }
+.live { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.live .v { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.live .v small { font-size: 14px; font-weight: 500; color: var(--text-2); margin-left: 2px; }
+.live .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
+.live .s { font-size: 12px; color: var(--text-3); }
 </style>
 </head>
 <body data-key="<?= adminKey ?>">
@@ -98,6 +103,9 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   <div class="sub" id="upd">読み込み中…</div>
   <div class="bar-row">
     <div class="seg" id="daysSeg" role="group" aria-label="期間">
+      <button data-h="6" aria-pressed="false">6時間</button>
+      <button data-h="12" aria-pressed="false">12時間</button>
+      <button data-h="24" aria-pressed="false">1日</button>
       <button data-d="7" aria-pressed="false">7日</button>
       <button data-d="30" aria-pressed="true">30日</button>
       <button data-d="90" aria-pressed="false">90日</button>
@@ -109,6 +117,8 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   </div>
   <div class="msg" id="msg" hidden></div>
 
+  <div class="card" id="liveCard" hidden><h2>いま使っている人 <span id="liveSub"></span></h2>
+    <div class="live"><span class="dot" aria-hidden="true"></span><div class="v" id="liveN">--<small>人</small></div><div class="s" id="liveNote"></div></div></div>
   <div class="card"><h2>監視の状態 <span id="healthSub"></span></h2><div class="tiles mini" id="health"></div></div>
   <div class="card"><h2>データ元の異常 <span>回（404 は普段から起きるため薄く表示）</span></h2><div id="tFails"></div>
     <h3 class="h3">画面で見つかったデータの異常</h3><div id="tQuality"></div></div>
@@ -116,9 +126,9 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   <div class="tiles" id="tiles"></div>
 
   <div class="grid2">
-    <div class="card"><h2>日ごとの表示回数 <span>回</span></h2><svg class="chart" id="cPv"></svg></div>
-    <div class="card"><h2>日ごとの利用者数 <span class="lg"><i style="background:var(--bar)"></i>再訪 <i style="background:var(--bar-2)"></i>新規</span></h2><svg class="chart" id="cUsers"></svg></div>
-    <div class="card"><h2>時間帯別の表示回数（期間合計） <span>回</span></h2><svg class="chart" id="cHour"></svg></div>
+    <div class="card"><h2 id="pvTitle">日ごとの表示回数 <span>回</span></h2><svg class="chart" id="cPv"></svg></div>
+    <div class="card"><h2><span id="usersTitle" style="font-size:14px;font-weight:700;color:var(--text)">日ごとの利用者数</span> <span class="lg"><i style="background:var(--bar)"></i>再訪 <i style="background:var(--bar-2)"></i>新規</span></h2><svg class="chart" id="cUsers"></svg></div>
+    <div class="card" id="hourCard"><h2>時間帯別の表示回数（期間合計） <span>回</span></h2><svg class="chart" id="cHour"></svg></div>
     <div class="card"><h2 id="ufTitle">日ごとの URL Fetch 回数 <span>回（点線は1日の上限）</span></h2><svg class="chart" id="cUf"></svg></div>
   </div>
   <div class="grid2">
@@ -168,7 +178,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
 <script>
 (function () {
   'use strict';
-  var KEY = document.body.dataset.key, DAYS = 30, D = null;
+  var KEY = document.body.dataset.key, DAYS = 30, HOURS = 0, D = null;   // HOURS：時間単位の期間（0 なら日単位）
   var FEATURES = {
     guide_open: '利用ガイドを開く', catch_open: '釣果の記録を開く', catch_share: '釣果：写真と文章を共有', catch_copy: '釣果：投稿文をコピー',
     catch_cal: '釣果：Googleカレンダー', catch_savephoto: '釣果：写真を保存', today_btn: '今日に戻る', prev_day: '前日へ', next_day: '翌日へ',
@@ -208,13 +218,18 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
 
   function ymd(ms) { var d = new Date(ms + 9 * 3600e3); return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2); }
   function dayList() { var out = [], now = D.now; for (var i = DAYS - 1; i >= 0; i--) out.push(ymd(now - i * 86400e3)); return out; }
+  // 時間単位の期間：'YYYY-MM-DD HH'（JST）の並び
+  function hk(ms) { var d = new Date(ms + 9 * 3600e3); return ymd(ms) + ' ' + ('0' + d.getUTCHours()).slice(-2); }
+  function hourList() { var out = [], now = D.now; for (var i = D.hours - 1; i >= 0; i--) out.push(hk(now - i * 3600e3)); return out; }
+  function byHour() { return !!(D && D.hours); }
 
   // 集計済み（スプレッドシート）と未集計（今の1時間など）を合わせる
   function aggregate() {
-    var days = dayList(), byDay = {}, hours = new Array(24).fill(0), users = {}, all = {};
+    var hm = byHour(), days = hm ? hourList() : dayList(), byDay = {}, hours = new Array(24).fill(0), users = {}, all = {};
+    var key = function (h) { return hm ? h.slice(0, 13) : h.slice(0, 10); };
     days.forEach(function (d) { byDay[d] = { pv: 0, uf: 0, lim: 0, serr: 0, cerr: 0 }; users[d] = {}; });
     D.hourly.forEach(function (r) {
-      var d = r[0].slice(0, 10), h = +r[0].slice(11, 13);
+      var d = key(r[0]), h = +r[0].slice(11, 13);
       if (!byDay[d]) return;
       byDay[d].pv += r[1]; byDay[d].uf += r[3]; byDay[d].lim += r[4]; byDay[d].serr += r[5]; byDay[d].cerr += r[6];
       hours[h] += r[1];
@@ -226,11 +241,11 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     var pf = {}, alive = 0, pvAll = 0;
     var addPerf = function (src) { Object.keys(src || {}).forEach(function (k) { var x = pf[k] || (pf[k] = [0, 0, 0, 0, 0, 0, 0]), p = src[k]; x[0] += p[0]; x[1] += p[1]; x[2] = Math.max(x[2], p[2]); for (var i = 3; i < 7; i++) x[i] += p[i]; }); };
     addPerf(D.perf);
-    D.hourly.forEach(function (r) { if (byDay[r[0].slice(0, 10)]) { alive += r[7] || 0; pvAll += r[1]; } });
+    D.hourly.forEach(function (r) { if (byDay[key(r[0])]) { alive += r[7] || 0; pvAll += r[1]; } });
     Object.keys(D.sites || {}).forEach(function (k) { si[k] = { sv: D.sites[k].sv, cl: D.sites[k].cl }; });
     var add = function (o, src, pre) { Object.keys(src || {}).forEach(function (k) { var kk = (pre || '') + k; o[kk] = (o[kk] || 0) + src[k]; }); };
     D.pending.forEach(function (p) {
-      var d = p.hour.slice(0, 10), h = +p.hour.slice(11, 13);
+      var d = key(p.hour), h = +p.hour.slice(11, 13);
       if (!byDay[d]) return;
       byDay[d].pv += p.pv; byDay[d].lim += p.lim; byDay[d].serr += p.serr; byDay[d].cerr += p.cerr;
       hours[h] += p.pv;
@@ -249,21 +264,28 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     if (byDay[today]) byDay[today].uf = Math.max(byDay[today].uf, D.ufToday);
     // 新規・再訪（匿名IDが初めて現れた日がその日なら新規）
     var newRet = days.map(function (d) {
-      var ids = Object.keys(users[d]), nw = ids.filter(function (a) { return (D.firstSeen[a] || d) >= d; }).length;
+      var dd = d.slice(0, 10), ids = Object.keys(users[d]), nw = ids.filter(function (a) { return (D.firstSeen[a] || dd) >= dd; }).length;
       return [nw, ids.length - nw];
     });
     return { days: days, byDay: byDay, hours: hours, users: users, allUsers: Object.keys(all).length, st: st, ar: ar, fe: fe, er: er, si: si, rf: rf,
       fa: fa, qa: qa, en: en, ge: ge, pf: pf, alive: alive, pvAll: pvAll, newRet: newRet };
   }
 
+  // 時間単位の期間で、今日初めて現れた人（重複なし）
+  function newToday(A) {
+    var today = ymd(D.now), seen = {};
+    A.days.forEach(function (d) { Object.keys(A.users[d] || {}).forEach(function (a) { if ((D.firstSeen[a] || today) >= today) seen[a] = 1; }); });
+    return Object.keys(seen).length;
+  }
   function tiles(A) {
-    var today = ymd(D.now), t = A.byDay[today], sum = function (k) { return A.days.reduce(function (s, d) { return s + A.byDay[d][k]; }, 0); };
+    var today = ymd(D.now), hm = byHour(), sum = function (k) { return A.days.reduce(function (s, d) { return s + A.byDay[d][k]; }, 0); };
+    var t = hm ? { pv: sum('pv') } : A.byDay[today], tUsers = hm ? A.allUsers : Object.keys(A.users[today]).length, per = hm ? '直近' + D.hours + '時間の' : '今日の';
     var dayPct = D.limits ? D.ufToday / D.limits.day : 0, hourPct = D.limits ? D.ufHour / D.limits.hour : 0;
     var level = function (p) { return p >= .9 ? ['--crit', '⛔ 上限間近'] : p >= .6 ? ['--warn', '⚠ 注意'] : ['--good', '✓ 余裕あり']; };
     var meter = function (p) { var l = level(p); return '<div class="meter"><i style="width:' + Math.min(100, p * 100).toFixed(1) + '%;background:var(' + l[0] + ')"></i></div><div class="status" style="color:var(' + l[0] + ')">' + l[1] + '</div>'; };
     $('tiles').innerHTML = [
-      '<div class="tile"><div class="k">今日の表示回数</div><div class="v">' + n(t.pv) + '<small>回</small></div><div class="s">期間合計 ' + n(sum('pv')) + ' 回</div></div>',
-      '<div class="tile"><div class="k">今日の利用者数</div><div class="v">' + n(Object.keys(A.users[today]).length) + '<small>人</small></div><div class="s">期間の延べ ' + n(A.allUsers) + ' 人</div></div>',
+      '<div class="tile"><div class="k">' + per + '表示回数</div><div class="v">' + n(t.pv) + '<small>回</small></div><div class="s">' + (hm ? '1時間あたり ' + (sum('pv') / D.hours).toFixed(1) + ' 回' : '期間合計 ' + n(sum('pv')) + ' 回') + '</div></div>',
+      '<div class="tile"><div class="k">' + per + '利用者数</div><div class="v">' + n(tUsers) + '<small>人</small></div><div class="s">' + (hm ? 'うち今日初めて ' + n(newToday(A)) + ' 人' : '期間の延べ ' + n(A.allUsers) + ' 人') + '</div></div>',
       D.limits ? '<div class="tile"><div class="k">今日の URL Fetch</div><div class="v">' + n(D.ufToday) + '<small>/ ' + n(D.limits.day) + '</small></div>' + meter(dayPct) + '</div>' :
         '<div class="tile"><div class="k">今日の外部サイトからの取得</div><div class="v">' + n(D.ufToday) + '<small>回</small></div><div class="s">Cloudflare Workers から（上限なし）</div></div>',
       D.limits ? '<div class="tile"><div class="k">この1時間の URL Fetch</div><div class="v">' + n(D.ufHour) + '<small>/ ' + n(D.limits.hour) + '</small></div>' + meter(hourPct) + '</div>' :
@@ -298,7 +320,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
       if (sv[0] > 0) { var b0 = sv[1] > 0 ? y(sv[1]) - 2 : y(0); h += '<path d="M' + (x + 1) + ',' + b0 + 'V' + (top + 2) + 'q0,-2 2,-2h' + Math.max(0, w - 4) + 'q2,0 2,2V' + b0 + 'Z" fill="' + css(Array.isArray(v) ? '--bar-2' : '--bar') + '"/>'; }
       h += '<rect class="hit" x="' + x + '" y="' + T + '" width="' + bw + '" height="' + (H - T - B) + '" fill="transparent" data-l="' + esc(labels[i]) + '" data-v="' + total + '"' +
         (Array.isArray(v) ? ' data-x="（新規 ' + sv[0] + '・再訪 ' + sv[1] + '）"' : '') + '/>';
-      if (i % every === 0) h += '<text x="' + (x + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(opt.short ? opt.short(labels[i]) : labels[i]) + '</text>';
+      if (i % every === 0) h += '<text x="' + (x + bw / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(opt.short ? opt.short(labels[i], i) : labels[i]) + '</text>';
     });
     if (opt.limit) h += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(opt.limit) + '" y2="' + y(opt.limit) + '" stroke="' + css('--crit') + '" stroke-dasharray="4 3"/>';
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
@@ -500,13 +522,19 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   function render() {
     var A = aggregate();
     tiles(A);
-    var short = function (d) { return +d.slice(5, 7) + '/' + +d.slice(8, 10); };
-    bars($('cPv'), A.days, A.days.map(function (d) { return A.byDay[d].pv; }), { short: short, unit: '回' });
-    bars($('cUsers'), A.days, A.newRet, { short: short, unit: '人' });
+    var hm = byHour();
+    var short = hm ? function (d) { return +d.slice(11, 13) + '時'; } : function (d) { return +d.slice(5, 7) + '/' + +d.slice(8, 10); };
+    var unitName = hm ? '時間ごと' : '日ごと';
+    $('pvTitle').innerHTML = unitName + 'の表示回数 <span>回</span>';
+    $('usersTitle').textContent = unitName + 'の利用者数';
+    $('hourCard').hidden = hm;
+    var lab = hm ? A.days.map(function (d) { return d.slice(5, 10).replace('-', '/') + ' ' + +d.slice(11, 13) + '時'; }) : A.days;
+    bars($('cPv'), lab, A.days.map(function (d) { return A.byDay[d].pv; }), { short: function (l, i) { return short(A.days[i]); }, unit: '回' });
+    bars($('cUsers'), lab, A.newRet, { short: function (l, i) { return short(A.days[i]); }, unit: '人' });
     bars($('cHour'), A.hours.map(function (_, i) { return i + '時'; }), A.hours, { ticks: 8, unit: '回' });
-    bars($('cUf'), A.days, A.days.map(function (d) { return A.byDay[d].uf; }), { short: short, unit: '回', limit: D.limits ? D.limits.day : 0 });
+    bars($('cUf'), lab, A.days.map(function (d) { return A.byDay[d].uf; }), { short: function (l, i) { return short(A.days[i]); }, unit: '回', limit: D.limits && !hm ? D.limits.day : 0 });
     var cf = D.source === 'cloudflare';
-    $('ufTitle').innerHTML = cf ? '日ごとの外部サイトからの取得 <span>回（Cloudflare Workers から）</span>' : '日ごとの URL Fetch 回数 <span>回（点線は1日の上限）</span>';
+    $('ufTitle').innerHTML = cf ? unitName + 'の外部サイトからの取得 <span>回（Cloudflare Workers から）</span>' : unitName + 'の URL Fetch 回数 <span>回（点線は1日の上限）</span>';
     $('perfSub').textContent = '利用者の端末で計測（サーバーは ' + (cf ? 'Cloudflare Workers' : 'Apps Script') + ' の処理時間）';
     $('alertsArea').hidden = cf; $('cfNote').hidden = !cf; $('gasNote').hidden = cf;
     hlist($('tStations'), A.st, function (c) { return (D.stationNames[c] || '') + '（' + c + '）'; });
@@ -525,7 +553,8 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     hlist($('tRefs'), A.rf, refName, 15);
     errorsTable($('tErrors'), A.er);
     var d = new Date(D.now + 9 * 3600e3);
-    $('upd').textContent = '直近' + DAYS + '日（' + D.since + '〜）・' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' 時点';
+    $('upd').textContent = (byHour() ? '直近' + D.hours + '時間（' + D.sinceKey.slice(5).replace('-', '/') + '時〜）' : '直近' + DAYS + '日（' + D.since + '〜）') + '・' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' 時点';
+    if (D.live) showLive(D.live);
     $('sheetLink').hidden = !D.sheetUrl; if (D.sheetUrl) $('sheetLink').href = D.sheetUrl;
     if (D.version) $('ver').textContent = 'monitor v' + D.version + '（' + String(D.versionDate || '').replace(/-/g, '/') + '）' + (D.source === 'cloudflare' ? '・Cloudflare' : '・Apps Script');
   }
@@ -533,11 +562,11 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   function load() {
     msg('');
     $('upd').textContent = '読み込み中…';
-    return call('getMonitorData', KEY, DAYS).then(function (d) { D = d; render(); }).catch(function (e) { msg('読み込めませんでした：' + (e && e.message || e)); });
+    return call('getMonitorData', KEY, DAYS, HOURS).then(function (d) { D = d; render(); }).catch(function (e) { msg('読み込めませんでした：' + (e && e.message || e)); });
   }
   $('daysSeg').onclick = function (ev) {
     var b = ev.target.closest('button'); if (!b) return;
-    DAYS = +b.dataset.d;
+    if (b.dataset.h) { HOURS = +b.dataset.h; DAYS = 1; } else { HOURS = 0; DAYS = +b.dataset.d; }
     Array.prototype.forEach.call(this.children, function (x) { x.setAttribute('aria-pressed', String(x === b)); });
     load();
   };
@@ -545,7 +574,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   // 要約を文章でコピー（ほかの人やアシスタントに状況を伝えるとき用）
   $('copyBtn').onclick = function () {
     var b = this; b.disabled = true; msg('');
-    call('getMonitorSummaryText', KEY, DAYS).then(function (t) {
+    call('getMonitorSummaryText', KEY, DAYS, HOURS).then(function (t) {
       return navigator.clipboard.writeText(t).then(function () { b.textContent = 'コピーしました'; setTimeout(function () { b.textContent = '要約をコピー'; }, 2000); },
         function () { msg('コピーできませんでした。要約は ' + (CF ? location.href.split('#')[0].replace('/admin?', '/monitor?') + '&days=' + DAYS + '&format=text' : location.href.split('#')[0] + '&format=text') + ' でも見られます'); });
     }).catch(function (e) { msg('要約を作れませんでした：' + (e && e.message || e)); }).then(function () { b.disabled = false; });
@@ -556,6 +585,17 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
       .then(function () { b.disabled = false; });
   };
   window.addEventListener('resize', function () { if (D) render(); });
+  function showLive(l) {
+    $('liveCard').hidden = false;
+    $('liveN').innerHTML = n(l.n) + '<small>人</small>';
+    var d = new Date(l.at + 9 * 3600e3);
+    $('liveNote').textContent = '直近' + l.windowMin + '分に画面を表示していた端末の数（' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ':' + ('0' + d.getUTCSeconds()).slice(-2) + ' 時点）';
+    $('liveSub').textContent = '30秒ごとに更新';
+  }
+  if (CF) setInterval(function () {
+    if (document.hidden) return;
+    call('getLive', KEY).then(showLive).catch(function () { /* 次の回に */ });
+  }, 30000);
   $('alTo').addEventListener('input', function () { this.dataset.touched = '1'; });
   $('alSave').onclick = function () {
     var cfg = { alerts: $('alOn').checked, daily: $('alDaily').checked };

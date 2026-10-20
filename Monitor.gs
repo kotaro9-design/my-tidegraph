@@ -10,7 +10,7 @@
  */
 
 // 利用状況アプリ（Monitor.gs と admin.html）のバージョン。更新したら CHANGELOG-monitor.md にも書き、monitor-vX.Y.Z のタグを付ける
-var MONITOR_VERSION = '2.0.0', MONITOR_DATE = '2026-10-20';
+var MONITOR_VERSION = '2.1.0', MONITOR_DATE = '2026-10-20';
 
 var MON_HOST_RE = /^[a-z0-9.\-]{3,80}$/;
 // 機能名・エラー名などに使える文字（送られてきた値はこれで絞る）
@@ -189,6 +189,7 @@ function monSummaryFrom_(d) {
   for (var h = 47; h >= 0; h--) { var hk = monHourKey_(now - h * HOUR); hours48.push({ hour: hk, pv: hourly[hk] || 0 }); }
   return {
     generatedAt: new Date(now).toISOString(), monitor: d.version, source: d.source || 'apps-script', period: { days: d.days, since: d.since },
+    live: d.live ? { n: d.live.n, windowMin: d.live.windowMin } : null,
     limits: d.limits,
     today: { day: today, pv: byDay[today] ? byDay[today].pv : 0, users: byDay[today] ? byDay[today].users : 0, urlFetch: d.ufToday, urlFetchThisHour: d.ufHour },
     totals: { pv: sum('pv'), users: Object.keys(all).length, limitHits: sum('lim'), serverErrors: sum('serr'), clientErrors: sum('cerr') },
@@ -223,6 +224,7 @@ function monSummaryText_(s) {
   var cf = s.source === 'cloudflare';
   L.push('my tide-graph 利用状況の要約（monitor v' + s.monitor + '、' + (cf ? 'Cloudflare' : 'Apps Script') + '、' + s.generatedAt.replace('T', ' ').slice(0, 16) + ' UTC 時点、直近' + s.period.days + '日）');
   L.push('');
+  if (s.live) L.push('■ いま使っている人：' + s.live.n + ' 人（直近' + s.live.windowMin + '分に画面を表示中）');
   L.push('■ 今日（' + s.today.day + '）');
   L.push('表示 ' + s.today.pv + ' 回／利用者 ' + s.today.users + ' 人／' + (cf ? '外部サイトからの取得 ' + s.today.urlFetch + ' 回／この1時間 ' + s.today.urlFetchThisHour + ' 回' :
     'URL Fetch ' + s.today.urlFetch + ' 回（上限 ' + s.limits.day + ' の ' + pct(s.today.urlFetch, s.limits.day) + '）／この1時間 ' + s.today.urlFetchThisHour + ' 回'));

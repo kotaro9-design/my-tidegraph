@@ -797,7 +797,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.1.1', APP_DATE = '2026-10-20';
+  var APP_VERSION = '2.1.2', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -900,7 +900,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   }
   // 閉じるときに残っている分（GitHub Pages 版のみ。Apps Script の画面では次回の通信で送る）
   window.addEventListener('pagehide', function () {
-    var api = document.querySelector('meta[name="tide-api"]');
+    if (navigator.sendBeacon) EVQ.push(['bye', 1]);   // いま使っている人の数から外す（管理画面）
     if ((!EVQ.length && !Object.keys(HOSTCNT).length && !Object.keys(HOSTFAIL).length && !Object.keys(PERF).length) || !navigator.sendBeacon) return;
     try { navigator.sendBeacon(API_WORKER, new Blob([JSON.stringify({ fn: 'track', args: [takeEvents()] })], { type: 'text/plain;charset=utf-8' })); } catch (e) { /* 無視 */ }
   });

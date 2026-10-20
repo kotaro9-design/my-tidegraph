@@ -4,6 +4,10 @@
 「monitor v大きな変更.機能追加.修正」でバージョンを付けます。管理画面の見出しに表示しているのは `Monitor.gs` の `MONITOR_VERSION` / `MONITOR_DATE` です。
 GitHub のタグは `monitor-vX.Y.Z` です。本体の更新履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
+## monitor v2.1.0（2026/10/20）— 本体 v2.1.2
+- いま使っている人（直近7分に画面を表示していた端末の数）を管理画面の先頭に表示。30秒ごとに更新。画面を閉じたら外す。要約（文章・JSON）にも記載、/monitor?key=…&format=live で人数だけ
+- 集計期間に 6時間・12時間・1日（時間ごとのグラフ）を追加
+
 ## monitor v2.0.0（2026/10/20）— 本体 v2.1.1
 - Apps Script での利用状況の監視を廃止（15分ごとのトリガー・スプレッドシートへの書き込み・メール通知・`/exec?admin=` の管理画面と要約）。トリガーと設定値は削除し、Apps Script の権限からスプレッドシートとトリガーを外した
 - 記録と管理画面は Cloudflare 版（`https://tide-api.kotaro9.workers.dev/admin?key=…`）だけに。Monitor.gs は記録の形と要約だけを残し、Workers に組み込む

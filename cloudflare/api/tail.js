@@ -108,7 +108,11 @@ function __json(obj, status, cors) {
  *   mon_hourly … 1時間ごとにまとめた記録（同じ時間帯に複数行あってもよい。読むときに足し合わせる）
  *   seen     … 匿名IDが初めて現れた日（新規・再訪の判定）
  *   mon_lock … まとめ処理が同時に2つ動かないようにする
+ *   live     … 匿名IDごとの最後の通信時刻（いま使っている人の数）
  */
+// 画面を表示している間は5分ごとに自動更新の通信がある。それより少し長い時間で数える
+const LIVE_MS = 7 * 60000;
+let __LIVE_BYE = [];   // 閉じた画面の匿名ID（いま使っている人から外す）
 let __schemaOk = false;
 async function __schema(env) {
   if (__schemaOk) return;
@@ -120,7 +124,9 @@ async function __schema(env) {
     'CREATE TABLE IF NOT EXISTS seen (id TEXT PRIMARY KEY, first TEXT NOT NULL)',
     'CREATE INDEX IF NOT EXISTS seen_first ON seen(first)',
     'CREATE TABLE IF NOT EXISTS mon_lock (name TEXT PRIMARY KEY, until INTEGER NOT NULL)',
-    'CREATE TABLE IF NOT EXISTS mon_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)'
+    'CREATE TABLE IF NOT EXISTS mon_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)',
+    'CREATE TABLE IF NOT EXISTS live (id TEXT PRIMARY KEY, t INTEGER NOT NULL)',
+    'CREATE INDEX IF NOT EXISTS live_t ON live(t)'
   ].map(s => env.DB.prepare(s)));
   __schemaOk = true;
 }
@@ -129,15 +135,19 @@ function __seenStmt(env, id, day) {
 }
 
 async function __writeMon(env) {
-  const rows = __MON_ROWS; __MON_ROWS = [];
-  if (!rows.length || !env.DB) return;
+  const rows = __MON_ROWS, bye = __LIVE_BYE; __MON_ROWS = []; __LIVE_BYE = [];
+  if ((!rows.length && !bye.length) || !env.DB) return;
   try {
     await __schema(env);
-    const stmts = [];
+    const stmts = [], now = Date.now();
     rows.forEach(r => {
       stmts.push(env.DB.prepare('INSERT INTO mon (hour, data) VALUES (?, ?)').bind(r[0], r[1]));
-      r[2].forEach(id => stmts.push(__seenStmt(env, id, r[0].slice(0, 10))));
+      r[2].forEach(id => {
+        stmts.push(__seenStmt(env, id, r[0].slice(0, 10)));
+        if (bye.indexOf(id) < 0) stmts.push(env.DB.prepare('INSERT INTO live (id, t) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET t = excluded.t').bind(id, now));
+      });
     });
+    bye.forEach(id => stmts.push(env.DB.prepare('DELETE FROM live WHERE id = ?').bind(id)));
     await env.DB.batch(stmts);
   } catch (e) { console.log('mon write failed: ' + e); return; }
   // ときどき、終わった時間帯をまとめる（Cron が無くても溜まりすぎないように）
@@ -175,6 +185,7 @@ async function __compact(env, maxHours) {
     }
     // 古い記録（400日より前）は消す
     await env.DB.prepare('DELETE FROM mon_hourly WHERE hour < ?').bind(monHourKey_(now - 400 * DAY)).run();
+    await env.DB.prepare('DELETE FROM live WHERE t < ?').bind(now - DAY).run();
     await env.DB.prepare('INSERT INTO mon_meta (k, v) VALUES (\'last_compact\', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(String(now)).run();
   } finally {
     await env.DB.prepare('UPDATE mon_lock SET until = 0 WHERE name = \'compact\'').run();
@@ -195,17 +206,30 @@ async function __stationNames(env) {
   return names;
 }
 
-/** 管理画面のデータ（Apps Script の getMonitorData と同じ形） */
-async function __monData(env, days) {
+/** いま使っている人の数（直近 LIVE_MS に通信した端末） */
+async function __live(env) {
   await __schema(env);
-  days = Math.min(Math.max(+days || 30, 1), 365);
-  const now = Date.now(), since = ymd_(now - (days - 1) * DAY), today = ymd_(now), curHour = monHourKey_(now);
-  const [a, b, cnt, meta, names] = await Promise.all([
-    env.DB.prepare('SELECT hour, data FROM mon_hourly WHERE hour >= ?').bind(since).all(),
-    env.DB.prepare('SELECT hour, data FROM mon WHERE hour >= ?').bind(since).all(),
+  const now = Date.now(), r = await env.DB.prepare('SELECT count(*) AS n FROM live WHERE t > ?').bind(now - LIVE_MS).first();
+  return { n: r ? r.n : 0, windowMin: LIVE_MS / 60000, at: now };
+}
+
+/**
+ * 管理画面のデータ。days 日ぶん（日ごと）、または hours を指定すると直近 hours 時間ぶん（時間ごと）。
+ * 時間ごとのときは users が [時間帯, 匿名ID] になる
+ */
+async function __monData(env, days, hoursArg) {
+  await __schema(env);
+  const nHours = hoursArg ? Math.min(Math.max(Math.round(+hoursArg) || 0, 1), 72) : 0;
+  days = nHours ? Math.ceil(nHours / 24) : Math.min(Math.max(+days || 30, 1), 365);
+  const now = Date.now(), today = ymd_(now), curHour = monHourKey_(now);
+  const sinceKey = nHours ? monHourKey_(now - (nHours - 1) * HOUR) : ymd_(now - (days - 1) * DAY), since = sinceKey.slice(0, 10);
+  const [a, b, cnt, meta, names, live] = await Promise.all([
+    env.DB.prepare('SELECT hour, data FROM mon_hourly WHERE hour >= ?').bind(sinceKey).all(),
+    env.DB.prepare('SELECT hour, data FROM mon WHERE hour >= ?').bind(sinceKey).all(),
     env.DB.prepare('SELECT count(*) AS n FROM mon').first(),
     env.DB.prepare('SELECT v FROM mon_meta WHERE k = \'last_compact\'').first(),
-    __stationNames(env)
+    __stationNames(env),
+    __live(env)
   ]);
   const hours = {};
   [a, b].forEach(r => (r.results || []).forEach(row => {
@@ -216,7 +240,7 @@ async function __monData(env, days) {
   Object.keys(hours).sort().forEach(hk => {
     const h = hours[hk], up = Object.keys(h.sv).reduce((s, k) => s + h.sv[k], 0), d = hk.slice(0, 10);
     hourly.push([hk, h.pv, Object.keys(h.ids).length, up, h.lim, h.serr, h.cerr, h.alive]);
-    Object.keys(h.ids).forEach(id => { users[d + '|' + id] = 1; });
+    Object.keys(h.ids).forEach(id => { users[(nHours ? hk : d) + '|' + id] = 1; });
     monMerge_(all, h);
   });
   // 初めて現れた日（期間内に初めて現れた人だけ記録にある。ほかは期間より前からの利用者）
@@ -232,7 +256,7 @@ async function __monData(env, days) {
   const ufToday = hourly.filter(r => r[0].slice(0, 10) === today).reduce((s, r) => s + r[3], 0);
   const lc = meta ? +meta.v : null;
   return {
-    source: 'cloudflare', days: days, since: since, now: now,
+    source: 'cloudflare', days: days, hours: nHours || null, since: since, sinceKey: sinceKey, now: now, live: live,
     hourly: hourly,
     users: Object.keys(users).map(k => k.split('|')),
     firstSeen: firstSeen,
@@ -261,6 +285,7 @@ export default {
       if (!keyOk(url.searchParams.get('key'))) return __json({ error: '合言葉が違います' }, 403);
       if (!env.DB) return __json({ error: 'D1 がありません' }, 500);
       const days = Math.min(Math.max(+url.searchParams.get('days') || 2, 1), 365);
+      if (url.searchParams.get('format') === 'live') return __json(await __live(env));
       await __compact(env, 24).catch(e => console.log('compact failed: ' + e));
       const s = monSummaryFrom_(await __monData(env, days));
       if (url.searchParams.get('format') === 'text') return new Response(monSummaryText_(s), { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -281,8 +306,10 @@ export default {
       if (!keyOk(a[0])) return __json({ error: '合言葉が違います' }, 403);
       if (!env.DB) return __json({ error: 'D1 がありません' }, 500);
       try {
-        if (req.fn === 'getMonitorData') { await __compact(env, 24).catch(e => console.log('compact failed: ' + e)); return __json({ result: await __monData(env, a[1]) }); }
-        if (req.fn === 'getMonitorSummaryText') return __json({ result: monSummaryText_(monSummaryFrom_(await __monData(env, a[1]))) });
+        if (req.fn === 'getMonitorData') { await __compact(env, 24).catch(e => console.log('compact failed: ' + e)); return __json({ result: await __monData(env, a[1], a[2]) }); }
+        // 文章の要約は日単位（時間単位の期間では1日ぶん）
+        if (req.fn === 'getMonitorSummaryText') return __json({ result: monSummaryText_(monSummaryFrom_(await __monData(env, a[2] ? 1 : a[1]))) });
+        if (req.fn === 'getLive') return __json({ result: await __live(env) });
         if (req.fn === 'adminFlush') return __json({ result: await __compact(env, 48) });
         return __json({ error: '不正な呼び出しです' }, 400);
       } catch (e) { return __json({ error: String((e && e.message) || e) }, 500); }
@@ -297,7 +324,13 @@ export default {
       const req = await request.json();
       const a = req.args || [];
       if (req.fn === 'callBatch') out = { result: await __runBatch(a[0], a[2], env, stat) };
-      else if (req.fn === 'track') { monRecord_(a[0]); out = { result: true }; }
+      else if (req.fn === 'track') {
+        monRecord_(a[0]);
+        // 画面を閉じたときの送信（bye）：いま使っている人から外す
+        const ev = a[0];
+        if (ev && Array.isArray(ev.list) && ev.list.some(x => Array.isArray(x) && x[0] === 'bye') && /^[A-Za-z0-9]{6,16}$/.test(String(ev.aid || ''))) __LIVE_BYE.push(String(ev.aid));
+        out = { result: true };
+      }
       else throw new Error('不正な呼び出しです');
     } catch (e) {
       out = { error: String((e && e.message) || e) };
