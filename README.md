@@ -135,7 +135,9 @@ Apps Script の Web アプリは独自のページ枠の中で動くため、ホ
 - 画面は `https://tide-api.kotaro9.workers.dev/api` にまとめた呼び出し（`callBatch`）を送ります。Workers につながらないときは2分間、従来の Apps Script に切り替えます
 - [cloudflare/api/worker.js](cloudflare/api/worker.js) は `node tools/build-worker.js` で組み立てます（[head.js](cloudflare/api/head.js)＋Code.gs＋Monitor.gs＋[tail.js](cloudflare/api/tail.js)）。Code.gs・Monitor.gs を直したら組み立て直して Workers にも貼り付けます
 - 外部データは Workers 自身が取得し、川の防災情報・海上保安庁・潮位表などは KV（バインディング `CACHE`）で全国の拠点と共有します
-- 利用状況は D1（バインディング `DB`、テーブル `mon`）に記録します。要約：`GET /monitor?key=合言葉&days=2`（合言葉は Workers のシークレット `ADMIN_KEY`）
+- 利用状況は D1（バインディング `DB`）に記録します。呼び出しごとの行（`mon`）を、終わった時間帯ごとに1行（`mon_hourly`）にまとめます（テーブルは自動で作成）
+- 管理画面：`/admin?key=合言葉`。要約：`/monitor?key=合言葉&days=2`（`&format=text` で文章）。合言葉は Workers のシークレット `ADMIN_KEY`
+- Cron トリガー（任意）を設定すると、まとめを定期的にも実行します
 
 ### 中継（Cloudflare Workers）
 

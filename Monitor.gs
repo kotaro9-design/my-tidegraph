@@ -12,7 +12,7 @@
  */
 
 // 利用状況アプリ（Monitor.gs と admin.html）のバージョン。更新したら CHANGELOG-monitor.md にも書き、monitor-vX.Y.Z のタグを付ける
-var MONITOR_VERSION = '1.5.1', MONITOR_DATE = '2026-10-20';
+var MONITOR_VERSION = '1.6.0', MONITOR_DATE = '2026-10-20';
 
 var MON_SHEETS = {
   hourly: ['日時', '表示回数', '利用者数', 'URL Fetch回数', '上限超え', 'サーバーエラー', '画面エラー', '使用中（5分単位）'],
@@ -365,7 +365,7 @@ function monCheckAlerts_(ss, now, hs) {
   // 集計が止まっていた（前回の集計から1時間以上）
   try {
     var lf = JSON.parse(props.getProperty('mon_last_flush_prev') || 'null');
-    if (lf && now - lf.t > HOUR + 20 * MIN) add('flush_gap', '集計の遅れ', '前回の集計から ' + Math.round((now - lf.t) / MIN) + ' 分たっていました。トリガーが止まっていた可能性があります。');
+    if (lf && now - lf.t > HOUR + 20 * 60000) add('flush_gap', '集計の遅れ', '前回の集計から ' + Math.round((now - lf.t) / 60000) + ' 分たっていました。トリガーが止まっていた可能性があります。');
   } catch (e) { /* 無視 */ }
   props.setProperty('mon_last_flush_prev', JSON.stringify({ t: now }));
   if (!items.length) return;
@@ -557,8 +557,10 @@ function adminTestMail(key) {
  * 直近 days 日の要約。集計済み（スプレッドシート）と未集計（一時保存）を合わせて、
  * 判断に必要な数字だけを並べる（匿名IDの一覧などの細かいデータは含めない）。
  */
-function getMonitorSummary(key, days) {
-  var d = getMonitorData(key, days || 7), now = d.now, today = ymd_(now);
+function getMonitorSummary(key, days) { return monSummaryFrom_(getMonitorData(key, days || 7)); }
+/** 管理画面のデータ（getMonitorData の形。Cloudflare 版も同じ形）から要約を作る */
+function monSummaryFrom_(d) {
+  var now = d.now, today = ymd_(now);
   var dayList = [];
   for (var i = d.days - 1; i >= 0; i--) dayList.push(ymd_(now - i * DAY));
   var byDay = {}, hourly = {}, users = {}, all = {};
@@ -603,12 +605,13 @@ function getMonitorSummary(key, days) {
   var hours48 = [];
   for (var h = 47; h >= 0; h--) { var hk = monHourKey_(now - h * HOUR); hours48.push({ hour: hk, pv: hourly[hk] || 0 }); }
   return {
-    generatedAt: new Date(now).toISOString(), monitor: d.version, period: { days: d.days, since: d.since },
+    generatedAt: new Date(now).toISOString(), monitor: d.version, source: d.source || 'apps-script', period: { days: d.days, since: d.since },
     limits: d.limits,
     today: { day: today, pv: byDay[today] ? byDay[today].pv : 0, users: byDay[today] ? byDay[today].users : 0, urlFetch: d.ufToday, urlFetchThisHour: d.ufHour },
     totals: { pv: sum('pv'), users: Object.keys(all).length, limitHits: sum('lim'), serverErrors: sum('serr'), clientErrors: sum('cerr') },
     health: { lastFlushMinAgo: d.health.lastFlush ? Math.round((now - d.health.lastFlush.t) / 60000) : null, trigger: d.health.trigger,
-      dropsToday: d.health.dropToday, sheetCells: d.health.cells, mailAlerts: d.health.alerts, alertTo: !!d.health.alertTo },
+      dropsToday: d.health.dropToday, sheetCells: d.health.cells, mailAlerts: d.health.alerts, alertTo: !!d.health.alertTo,
+      rawRows: d.health.rawRows, dbBytes: d.health.dbBytes },
     byDay: dayList.map(function (x) { return byDay[x]; }),
     hourly48: hours48,
     failures: Object.keys(fa).map(function (k) { var p = k.split('|'); return { place: p[0], host: p[1], status: p[2], n: fa[k] }; })
@@ -634,15 +637,18 @@ function getMonitorSummary(key, days) {
 function monSummaryText_(s) {
   var L = [];
   var pct = function (a, b) { return b ? Math.round(a / b * 100) + '%' : '-'; };
-  L.push('my tide-graph 利用状況の要約（monitor v' + s.monitor + '、' + s.generatedAt.replace('T', ' ').slice(0, 16) + ' UTC 時点、直近' + s.period.days + '日）');
+  var cf = s.source === 'cloudflare';
+  L.push('my tide-graph 利用状況の要約（monitor v' + s.monitor + '、' + (cf ? 'Cloudflare' : 'Apps Script') + '、' + s.generatedAt.replace('T', ' ').slice(0, 16) + ' UTC 時点、直近' + s.period.days + '日）');
   L.push('');
   L.push('■ 今日（' + s.today.day + '）');
-  L.push('表示 ' + s.today.pv + ' 回／利用者 ' + s.today.users + ' 人／URL Fetch ' + s.today.urlFetch + ' 回（上限 ' + s.limits.day + ' の ' + pct(s.today.urlFetch, s.limits.day) + '）／この1時間 ' + s.today.urlFetchThisHour + ' 回');
+  L.push('表示 ' + s.today.pv + ' 回／利用者 ' + s.today.users + ' 人／' + (cf ? '外部サイトからの取得 ' + s.today.urlFetch + ' 回／この1時間 ' + s.today.urlFetchThisHour + ' 回' :
+    'URL Fetch ' + s.today.urlFetch + ' 回（上限 ' + s.limits.day + ' の ' + pct(s.today.urlFetch, s.limits.day) + '）／この1時間 ' + s.today.urlFetchThisHour + ' 回'));
   L.push('■ 監視の状態');
-  L.push('最後の集計 ' + s.health.lastFlushMinAgo + ' 分前／トリガー ' + (s.health.trigger ? 'あり' : 'なし') + '／取りこぼし（今日） ' + s.health.dropsToday + ' 件／スプレッドシート ' + s.health.sheetCells + ' セル／メール通知 ' + (s.health.mailAlerts && s.health.alertTo ? 'オン' : '無効'));
+  L.push(cf ? '最後のまとめ ' + s.health.lastFlushMinAgo + ' 分前／未まとめの記録 ' + s.health.rawRows + ' 行／D1 ' + Math.round((s.health.dbBytes || 0) / 1048576) + ' MB' :
+    '最後の集計 ' + s.health.lastFlushMinAgo + ' 分前／トリガー ' + (s.health.trigger ? 'あり' : 'なし') + '／取りこぼし（今日） ' + s.health.dropsToday + ' 件／スプレッドシート ' + s.health.sheetCells + ' セル／メール通知 ' + (s.health.mailAlerts && s.health.alertTo ? 'オン' : '無効'));
   L.push('■ 期間の合計');
   L.push('表示 ' + s.totals.pv + ' 回／利用者 ' + s.totals.users + ' 人／上限超え ' + s.totals.limitHits + ' 回／エラー サーバー ' + s.totals.serverErrors + '・画面 ' + s.totals.clientErrors);
-  L.push('■ 日ごと（日付 表示 利用者[新規] URLFetch 上限超え エラー(サーバー/画面)）');
+  L.push('■ 日ごと（日付 表示 利用者[新規] ' + (cf ? '外部取得' : 'URLFetch') + ' 上限超え エラー(サーバー/画面)）');
   s.byDay.forEach(function (b) { if (b.pv || b.uf) L.push(b.day + ' ' + b.pv + ' ' + b.users + '[' + b.newUsers + '] ' + b.uf + ' ' + b.lim + ' ' + b.serr + '/' + b.cerr); });
   L.push('■ データ元の失敗（場所 サイト 状態 回数）');
   s.failures.slice(0, 15).forEach(function (f) { L.push(f.place + ' ' + f.host + ' ' + f.status + ' ' + f.n); });

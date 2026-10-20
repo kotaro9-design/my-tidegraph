@@ -4,6 +4,15 @@
 「monitor v大きな変更.機能追加.修正」でバージョンを付けます。管理画面の見出しに表示しているのは `Monitor.gs` の `MONITOR_VERSION` / `MONITOR_DATE` です。
 GitHub のタグは `monitor-vX.Y.Z` です。本体の更新履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
+## monitor v1.6.0（2026/10/20）— 本体 v2.1.1
+- Cloudflare 版の管理画面：`https://tide-api.kotaro9.workers.dev/admin?key=合言葉`（Workers のシークレット `ADMIN_KEY`）。D1 の記録から、Apps Script 版と同じ表・グラフを表示
+- D1 の記録は呼び出しごとの行（mon）を、終わった時間帯ごとに1行（mon_hourly）にまとめる。管理画面を開いたとき・要約を読んだとき・記録のついで（約2%）に実行。Cron トリガーを設定すれば定期的にも
+- 新規・再訪の判定用に、匿名IDが初めて現れた日（seen）を記録
+- Cloudflare 版では URL Fetch の代わりに「外部サイトからの取得」、監視の状態は D1 の使用量・未まとめの行数。メール通知の欄は出さない
+- 要約（`/monitor?key=…&days=…`、`&format=text` で文章）は Apps Script 版と同じ形に
+- データの異常に「近くの地点の偏差が異常」「観測値が30分以上同じ値」「Cloudflare につながらず Apps Script に切り替えた」を追加
+- 修正：通知の確認（集計の遅れ）で MIN 未定義の不具合
+
 ## monitor v1.5.1（2026/10/20）— 本体 v2.0.1
 - データの異常に「古い画面からの河川・海保の取得を止めた」
 - 要約の不具合（MIN 未定義）を修正

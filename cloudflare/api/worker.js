@@ -1340,7 +1340,7 @@ function distKm_(la1, lo1, la2, lo2) {
  */
 
 // 利用状況アプリ（Monitor.gs と admin.html）のバージョン。更新したら CHANGELOG-monitor.md にも書き、monitor-vX.Y.Z のタグを付ける
-var MONITOR_VERSION = '1.5.1', MONITOR_DATE = '2026-10-20';
+var MONITOR_VERSION = '1.6.0', MONITOR_DATE = '2026-10-20';
 
 var MON_SHEETS = {
   hourly: ['日時', '表示回数', '利用者数', 'URL Fetch回数', '上限超え', 'サーバーエラー', '画面エラー', '使用中（5分単位）'],
@@ -1693,7 +1693,7 @@ function monCheckAlerts_(ss, now, hs) {
   // 集計が止まっていた（前回の集計から1時間以上）
   try {
     var lf = JSON.parse(props.getProperty('mon_last_flush_prev') || 'null');
-    if (lf && now - lf.t > HOUR + 20 * MIN) add('flush_gap', '集計の遅れ', '前回の集計から ' + Math.round((now - lf.t) / MIN) + ' 分たっていました。トリガーが止まっていた可能性があります。');
+    if (lf && now - lf.t > HOUR + 20 * 60000) add('flush_gap', '集計の遅れ', '前回の集計から ' + Math.round((now - lf.t) / 60000) + ' 分たっていました。トリガーが止まっていた可能性があります。');
   } catch (e) { /* 無視 */ }
   props.setProperty('mon_last_flush_prev', JSON.stringify({ t: now }));
   if (!items.length) return;
@@ -1885,8 +1885,10 @@ function adminTestMail(key) {
  * 直近 days 日の要約。集計済み（スプレッドシート）と未集計（一時保存）を合わせて、
  * 判断に必要な数字だけを並べる（匿名IDの一覧などの細かいデータは含めない）。
  */
-function getMonitorSummary(key, days) {
-  var d = getMonitorData(key, days || 7), now = d.now, today = ymd_(now);
+function getMonitorSummary(key, days) { return monSummaryFrom_(getMonitorData(key, days || 7)); }
+/** 管理画面のデータ（getMonitorData の形。Cloudflare 版も同じ形）から要約を作る */
+function monSummaryFrom_(d) {
+  var now = d.now, today = ymd_(now);
   var dayList = [];
   for (var i = d.days - 1; i >= 0; i--) dayList.push(ymd_(now - i * DAY));
   var byDay = {}, hourly = {}, users = {}, all = {};
@@ -1931,12 +1933,13 @@ function getMonitorSummary(key, days) {
   var hours48 = [];
   for (var h = 47; h >= 0; h--) { var hk = monHourKey_(now - h * HOUR); hours48.push({ hour: hk, pv: hourly[hk] || 0 }); }
   return {
-    generatedAt: new Date(now).toISOString(), monitor: d.version, period: { days: d.days, since: d.since },
+    generatedAt: new Date(now).toISOString(), monitor: d.version, source: d.source || 'apps-script', period: { days: d.days, since: d.since },
     limits: d.limits,
     today: { day: today, pv: byDay[today] ? byDay[today].pv : 0, users: byDay[today] ? byDay[today].users : 0, urlFetch: d.ufToday, urlFetchThisHour: d.ufHour },
     totals: { pv: sum('pv'), users: Object.keys(all).length, limitHits: sum('lim'), serverErrors: sum('serr'), clientErrors: sum('cerr') },
     health: { lastFlushMinAgo: d.health.lastFlush ? Math.round((now - d.health.lastFlush.t) / 60000) : null, trigger: d.health.trigger,
-      dropsToday: d.health.dropToday, sheetCells: d.health.cells, mailAlerts: d.health.alerts, alertTo: !!d.health.alertTo },
+      dropsToday: d.health.dropToday, sheetCells: d.health.cells, mailAlerts: d.health.alerts, alertTo: !!d.health.alertTo,
+      rawRows: d.health.rawRows, dbBytes: d.health.dbBytes },
     byDay: dayList.map(function (x) { return byDay[x]; }),
     hourly48: hours48,
     failures: Object.keys(fa).map(function (k) { var p = k.split('|'); return { place: p[0], host: p[1], status: p[2], n: fa[k] }; })
@@ -1962,15 +1965,18 @@ function getMonitorSummary(key, days) {
 function monSummaryText_(s) {
   var L = [];
   var pct = function (a, b) { return b ? Math.round(a / b * 100) + '%' : '-'; };
-  L.push('my tide-graph 利用状況の要約（monitor v' + s.monitor + '、' + s.generatedAt.replace('T', ' ').slice(0, 16) + ' UTC 時点、直近' + s.period.days + '日）');
+  var cf = s.source === 'cloudflare';
+  L.push('my tide-graph 利用状況の要約（monitor v' + s.monitor + '、' + (cf ? 'Cloudflare' : 'Apps Script') + '、' + s.generatedAt.replace('T', ' ').slice(0, 16) + ' UTC 時点、直近' + s.period.days + '日）');
   L.push('');
   L.push('■ 今日（' + s.today.day + '）');
-  L.push('表示 ' + s.today.pv + ' 回／利用者 ' + s.today.users + ' 人／URL Fetch ' + s.today.urlFetch + ' 回（上限 ' + s.limits.day + ' の ' + pct(s.today.urlFetch, s.limits.day) + '）／この1時間 ' + s.today.urlFetchThisHour + ' 回');
+  L.push('表示 ' + s.today.pv + ' 回／利用者 ' + s.today.users + ' 人／' + (cf ? '外部サイトからの取得 ' + s.today.urlFetch + ' 回／この1時間 ' + s.today.urlFetchThisHour + ' 回' :
+    'URL Fetch ' + s.today.urlFetch + ' 回（上限 ' + s.limits.day + ' の ' + pct(s.today.urlFetch, s.limits.day) + '）／この1時間 ' + s.today.urlFetchThisHour + ' 回'));
   L.push('■ 監視の状態');
-  L.push('最後の集計 ' + s.health.lastFlushMinAgo + ' 分前／トリガー ' + (s.health.trigger ? 'あり' : 'なし') + '／取りこぼし（今日） ' + s.health.dropsToday + ' 件／スプレッドシート ' + s.health.sheetCells + ' セル／メール通知 ' + (s.health.mailAlerts && s.health.alertTo ? 'オン' : '無効'));
+  L.push(cf ? '最後のまとめ ' + s.health.lastFlushMinAgo + ' 分前／未まとめの記録 ' + s.health.rawRows + ' 行／D1 ' + Math.round((s.health.dbBytes || 0) / 1048576) + ' MB' :
+    '最後の集計 ' + s.health.lastFlushMinAgo + ' 分前／トリガー ' + (s.health.trigger ? 'あり' : 'なし') + '／取りこぼし（今日） ' + s.health.dropsToday + ' 件／スプレッドシート ' + s.health.sheetCells + ' セル／メール通知 ' + (s.health.mailAlerts && s.health.alertTo ? 'オン' : '無効'));
   L.push('■ 期間の合計');
   L.push('表示 ' + s.totals.pv + ' 回／利用者 ' + s.totals.users + ' 人／上限超え ' + s.totals.limitHits + ' 回／エラー サーバー ' + s.totals.serverErrors + '・画面 ' + s.totals.clientErrors);
-  L.push('■ 日ごと（日付 表示 利用者[新規] URLFetch 上限超え エラー(サーバー/画面)）');
+  L.push('■ 日ごと（日付 表示 利用者[新規] ' + (cf ? '外部取得' : 'URLFetch') + ' 上限超え エラー(サーバー/画面)）');
   s.byDay.forEach(function (b) { if (b.pv || b.uf) L.push(b.day + ' ' + b.pv + ' ' + b.users + '[' + b.newUsers + '] ' + b.uf + ' ' + b.lim + ' ' + b.serr + '/' + b.cerr); });
   L.push('■ データ元の失敗（場所 サイト 状態 回数）');
   s.failures.slice(0, 15).forEach(function (f) { L.push(f.place + ' ' + f.host + ' ' + f.status + ' ' + f.n); });
@@ -1993,6 +1999,9 @@ function monSummaryText_(s) {
 function getMonitorSummaryText(key, days) { return monSummaryText_(getMonitorSummary(key, days)); }
 
 
+/* ==================== 管理画面（admin.html） ==================== */
+const __ADMIN_HTML = "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<base target=\"_top\">\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>my tide-graph 利用状況</title>\n<style>\n:root {\n  color-scheme: light;\n  --bg: #f4f4f2; --surface: #fcfcfb; --surface-2: #efeeea; --border: #e2e1dc;\n  --text: #0b0b0b; --text-2: #52514d; --text-3: #8a8984;\n  --bar: #2a78d6; --bar-2: #9ec1ec; --grid: #e7e6e1;\n  --good: #1f8a4c; --warn: #b7791f; --crit: #c53030;\n  --font: system-ui, -apple-system, \"Hiragino Sans\", \"Noto Sans JP\", sans-serif;\n}\n@media (prefers-color-scheme: dark) {\n  :root:not([data-theme=\"light\"]) {\n    color-scheme: dark;\n    --bg: #111110; --surface: #1a1a19; --surface-2: #242422; --border: #2e2e2b;\n    --text: #f0efec; --text-2: #b5b4ae; --text-3: #7d7c77;\n    --bar: #3987e5; --bar-2: #2c5a93; --grid: #2a2a28;\n    --good: #48bb78; --warn: #ecc94b; --crit: #fc8181;\n  }\n}\n:root[data-theme=\"dark\"] {\n  color-scheme: dark;\n  --bg: #111110; --surface: #1a1a19; --surface-2: #242422; --border: #2e2e2b;\n  --text: #f0efec; --text-2: #b5b4ae; --text-3: #7d7c77;\n  --bar: #3987e5; --bar-2: #2c5a93; --grid: #2a2a28;\n  --good: #48bb78; --warn: #ecc94b; --crit: #fc8181;\n}\n* { box-sizing: border-box; }\n[hidden] { display: none !important; }\nbody { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }\n.wrap { max-width: 960px; margin: 0 auto; padding: 12px 16px 40px; }\nh1 { font-size: 18px; margin: 4px 0 2px; }\nh1 .ver { font-size: 12px; font-weight: 400; color: var(--text-3); margin-left: 6px; font-variant-numeric: tabular-nums; }\n.sub { color: var(--text-2); font-size: 12px; }\n.bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }\n.seg { display: inline-flex; background: var(--surface-2); border-radius: 10px; padding: 2px; }\n.seg button { border: 0; background: none; padding: 6px 10px; border-radius: 8px; font: inherit; font-size: 13px; color: var(--text-2); cursor: pointer; }\n.seg button[aria-pressed=\"true\"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }\n.btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 10px; padding: 7px 12px; font: inherit; font-size: 13px; cursor: pointer; text-decoration: none; }\n.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 8px 0 14px; }\n.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 12px; }\n.tile .k { font-size: 12px; color: var(--text-2); }\n.tile .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }\n.tile .v small { font-size: 13px; font-weight: 500; color: var(--text-2); margin-left: 2px; }\n.tile .s { font-size: 11px; color: var(--text-3); margin-top: 2px; }\n.meter { height: 6px; border-radius: 3px; background: var(--surface-2); margin-top: 6px; overflow: hidden; }\n.meter i { display: block; height: 100%; border-radius: 3px; background: var(--good); }\n.status { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; margin-top: 4px; }\n.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }\n.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin-bottom: 10px; min-width: 0; }\n.card h2 { font-size: 14px; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: baseline; }\n.card h2 span { font-size: 11px; font-weight: 400; color: var(--text-3); }\nsvg.chart { width: 100%; height: 180px; display: block; }\nsvg.chart text { font-size: 10px; fill: var(--text-3); font-family: var(--font); }\n.hbar { display: grid; grid-template-columns: minmax(0, 1fr) 2fr auto; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; }\n.hbar .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n.hbar .t { height: 10px; background: var(--surface-2); border-radius: 0 4px 4px 0; }\n.hbar .t i { display: block; height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }\n.hbar .c { font-variant-numeric: tabular-nums; color: var(--text-2); min-width: 3em; text-align: right; }\n.empty { color: var(--text-3); font-size: 13px; padding: 8px 0; }\ntable.sites { width: 100%; border-collapse: collapse; font-size: 13px; }\ntable.sites th, table.sites td { padding: 6px 6px; border-bottom: 1px solid var(--border); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }\ntable.sites th { font-size: 11px; font-weight: 600; color: var(--text-2); }\ntable.sites th:first-child, table.sites td:first-child { text-align: left; white-space: normal; }\ntable.sites td small { display: block; color: var(--text-3); font-size: 11px; }\ntable.sites .bar { width: 30%; }\ntable.sites .bar i { display: block; height: 8px; background: var(--bar); border-radius: 0 3px 3px 0; min-width: 2px; }\n.sites-wrap { overflow-x: auto; }\ntable.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }\n#tip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); display: none; z-index: 9; white-space: nowrap; }\n.msg { color: var(--crit); font-size: 13px; margin: 8px 0; }\n.tiles.mini { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); margin: 0; }\n.tiles.mini .tile { background: var(--surface-2); border: 0; }\n.tiles.mini .v { font-size: 18px; }\n.h3 { font-size: 13px; margin: 14px 0 4px; color: var(--text-2); }\n.lg { display: inline-flex; gap: 6px; align-items: center; }\n.lg i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }\n.ok { color: var(--good); } .warn { color: var(--warn); } .crit { color: var(--crit); }\n.muted td { color: var(--text-3); }\n.env .card { margin: 0; padding: 0; border: 0; background: none; }\n.env h4 { font-size: 12px; margin: 4px 0; color: var(--text-2); }\n.form { display: grid; gap: 8px; font-size: 13px; }\n.form input[type=email] { width: 100%; margin-top: 4px; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; }\n.alog { font-size: 12px; border-bottom: 1px solid var(--border); padding: 6px 0; }\n.alog b { margin-right: 6px; }\n.alog .t { color: var(--text-3); margin-right: 6px; font-variant-numeric: tabular-nums; }\n.note { font-size: 11px; color: var(--text-3); line-height: 1.6; margin-top: 14px; }\n</style>\n</head>\n<body data-key=\"<?= adminKey ?>\">\n<div class=\"wrap\">\n  <h1>my tide-graph 利用状況 <span class=\"ver\" id=\"ver\"></span></h1>\n  <div class=\"sub\" id=\"upd\">読み込み中…</div>\n  <div class=\"bar-row\">\n    <div class=\"seg\" id=\"daysSeg\" role=\"group\" aria-label=\"期間\">\n      <button data-d=\"7\" aria-pressed=\"false\">7日</button>\n      <button data-d=\"30\" aria-pressed=\"true\">30日</button>\n      <button data-d=\"90\" aria-pressed=\"false\">90日</button>\n    </div>\n    <button class=\"btn\" id=\"flushBtn\">今すぐ集計</button>\n    <button class=\"btn\" id=\"reloadBtn\">再読み込み</button>\n    <button class=\"btn\" id=\"copyBtn\" title=\"今の期間の要約を文章でコピー\">要約をコピー</button>\n    <a class=\"btn\" id=\"sheetLink\" href=\"#\" target=\"_blank\" rel=\"noopener\" hidden>スプレッドシート</a>\n  </div>\n  <div class=\"msg\" id=\"msg\" hidden></div>\n\n  <div class=\"card\"><h2>監視の状態 <span id=\"healthSub\"></span></h2><div class=\"tiles mini\" id=\"health\"></div></div>\n  <div class=\"card\"><h2>データ元の異常 <span>回（404 は普段から起きるため薄く表示）</span></h2><div id=\"tFails\"></div>\n    <h3 class=\"h3\">画面で見つかったデータの異常</h3><div id=\"tQuality\"></div></div>\n\n  <div class=\"tiles\" id=\"tiles\"></div>\n\n  <div class=\"grid2\">\n    <div class=\"card\"><h2>日ごとの表示回数 <span>回</span></h2><svg class=\"chart\" id=\"cPv\"></svg></div>\n    <div class=\"card\"><h2>日ごとの利用者数 <span class=\"lg\"><i style=\"background:var(--bar)\"></i>再訪 <i style=\"background:var(--bar-2)\"></i>新規</span></h2><svg class=\"chart\" id=\"cUsers\"></svg></div>\n    <div class=\"card\"><h2>時間帯別の表示回数（期間合計） <span>回</span></h2><svg class=\"chart\" id=\"cHour\"></svg></div>\n    <div class=\"card\"><h2 id=\"ufTitle\">日ごとの URL Fetch 回数 <span>回（点線は1日の上限）</span></h2><svg class=\"chart\" id=\"cUf\"></svg></div>\n  </div>\n  <div class=\"grid2\">\n    <div class=\"card\"><h2>よく使われる潮位観測所 <span>回</span></h2><div id=\"tStations\"></div></div>\n    <div class=\"card\"><h2>よく使われる地域（約10km） <span>回</span></h2><div id=\"tAreas\"></div></div>\n    <div class=\"card\"><h2>機能の利用 <span>回</span></h2><div id=\"tFeatures\"></div></div>\n  </div>\n  <div class=\"card\"><h2>表示の速さ <span id=\"perfSub\">利用者の端末で計測（サーバーは Apps Script の処理時間）</span></h2><div id=\"tPerf\"></div></div>\n  <div class=\"card\"><h2>エラー <span>件</span></h2><div id=\"tErrors\"></div></div>\n  <div class=\"card\"><h2>外部サイトへのアクセス（期間合計） <span>回</span></h2><div id=\"tSites\"></div></div>\n  <div class=\"grid2\">\n    <div class=\"card\"><h2>流入元（どこから開いたか） <span>回</span></h2><div id=\"tRefs\"></div></div>\n    <div class=\"card\"><h2>位置情報（GPS）が使えたか <span>起動時</span></h2><div id=\"tGeo\"></div></div>\n  </div>\n  <div class=\"card\"><h2>利用環境 <span>表示回数</span></h2><div class=\"grid2 env\" id=\"tEnv\"></div></div>\n  <div class=\"grid2\" id=\"alertsArea\">\n    <div class=\"card\"><h2>通知の設定</h2>\n      <div class=\"form\">\n        <label><input type=\"checkbox\" id=\"alOn\"> 異常があればメールで知らせる（15分ごとに確認）</label>\n        <label><input type=\"checkbox\" id=\"alDaily\"> 毎朝7時ごろに前日の要約を送る</label>\n        <label>通知先 <input type=\"email\" id=\"alTo\" placeholder=\"空欄なら Apps Script の持ち主のアドレス\"></label>\n        <div class=\"bar-row\"><button class=\"btn\" id=\"alSave\">保存</button><button class=\"btn\" id=\"alTest\">テストメールを送る</button><span class=\"sub\" id=\"alMsg\"></span></div>\n      </div>\n    </div>\n    <div class=\"card\"><h2>最近の通知 <span>最大20件</span></h2><div id=\"tAlerts\"></div></div>\n  </div>\n  <p class=\"note\" id=\"cfNote\" hidden>\n    この画面は Cloudflare（v2.1.0 以降の記録）です。記録は利用者の呼び出しごとに保存し、終わった時間帯は1時間1行にまとめます（この画面を開いたときにも実行）。\n    「外部サイトからの取得」は Cloudflare Workers が気象庁・海上保安庁などから取得した回数です（Google の URL Fetch のような1日の上限はありません。川の防災情報などは全国共有のキャッシュから返した分は数えません）。\n    v2.1.0 より前（2026/10/20 朝まで）の記録は、Apps Script の管理画面とスプレッドシートに残っています。そのため、以前からの利用者もこちらでは最初の日に「新規」として数えられます。\n  </p>\n  <p class=\"note\">\n    データは1時間ごとにスプレッドシートへ集計されます（今の1時間の分も含めて表示）。利用者数は端末ごとの匿名IDの数です（ブラウザのデータを消すと別の人として数えます）。\n    地域は約10km単位に丸めた位置で、名前は国土地理院の逆ジオコーダで求めた目安です。\n    エラーの「画面」は利用者の端末でデータを受け取れなかった回数（通信の切れ目なども含む）、「サーバー」は Apps Script での処理の失敗です。\n    外部サイトの「サーバーから」は Apps Script の URL Fetch（1日の上限に数える）、「ブラウザから」は利用者の端末からの取得です（上限には数えない。地図タイルは端末ごとに初回のみ数える）。\n    データ元の異常の「ex」はサーバーからの通信の失敗・時間切れ、「net」はブラウザの通信の失敗です（利用者側の電波の弱さでも起きます）。\n    表示の速さの「起動〜表示」は、ページを開いてから潮位のグラフが出るまでの時間です。\n    流入元はページを開いたときの直前のページのサイト名です。X や LINE のアプリ内から開いた場合は「直接」になることがあります。リンクに ?from=名前 を付けると、その名前で数えます。\n  </p>\n</div>\n<div id=\"tip\"></div>\n<script>\n(function () {\n  'use strict';\n  var KEY = document.body.dataset.key, DAYS = 30, D = null;\n  var FEATURES = {\n    guide_open: '利用ガイドを開く', catch_open: '釣果の記録を開く', catch_share: '釣果：写真と文章を共有', catch_copy: '釣果：投稿文をコピー',\n    catch_cal: '釣果：Googleカレンダー', catch_savephoto: '釣果：写真を保存', today_btn: '今日に戻る', prev_day: '前日へ', next_day: '翌日へ',\n    date_pick: 'カレンダーで日付選択', refresh_btn: '更新ボタン', loc_btn: '現在地ボタン', picker_open: '潮位観測所の一覧を開く',\n    picker_select: '潮位観測所を選ぶ', river_sel: '河川の水位観測所を選ぶ', river_list: '河川の水位観測所の一覧', 'river_1': '河川水位・水質：表示',\n    'river_0': '河川水位・水質：非表示', datum_table: '高さ：潮位表基準面', datum_tp: '高さ：TP', filter_all: '一覧：すべて', filter_jcg: '一覧：海保のみ',\n    picker_auto: '位置情報なしで一覧を自動で開いた', pred_sel: '推算の地点を手動で選ぶ', pred_auto: '推算の地点を自動に戻す', view_3d: '表示：3日', view_day: '表示：1日', view_h12: '表示：±12h', view_h6: '表示：±6h', view_h3: '表示：±3h', view_h1: '表示：±1h'\n  };\n  var SITES = {\n    'www.jma.go.jp': '気象庁（観測・予報）', 'www.data.jma.go.jp': '気象庁（潮位表）', 'www1.kaiho.mlit.go.jp': '海上保安庁（験潮）',\n    'www.river.go.jp': '川の防災情報', 'api.open-meteo.com': 'Open-Meteo（風・気圧）', 'marine-api.open-meteo.com': 'Open-Meteo Marine（海面水温）',\n    'mreversegeocoder.gsi.go.jp': '国土地理院（逆ジオコーダ）', 'msearch.gsi.go.jp': '国土地理院（住所検索）', 'cyberjapandata.gsi.go.jp': '国土地理院（地図タイル）',\n    'script.google.com': 'このアプリのサーバー（Apps Script）', 'tide-api.kotaro9.workers.dev': 'このアプリのサーバー（Cloudflare Workers）', 'tide-proxy': '中継（Cloudflare Workers）', 'www.tbeic.go.jp': '東京湾環境情報センター'\n  };\n  var REFS = {\n    direct: '直接（ブックマーク・URL入力・アプリ内ブラウザなど）', home_screen: 'ホーム画面のアイコン', gas: '旧URL（Apps Script の画面）',\n    't.co': 'X（t.co）', 'x.com': 'X', 'twitter.com': 'X', 'www.google.com': 'Google 検索', 'www.google.co.jp': 'Google 検索',\n    'line.me': 'LINE', 'l.facebook.com': 'Facebook', 'm.facebook.com': 'Facebook', 'www.instagram.com': 'Instagram', 'l.instagram.com': 'Instagram',\n    'search.yahoo.co.jp': 'Yahoo! 検索', 'www.bing.com': 'Bing', 'github.com': 'GitHub'\n  };\n  function refName(k) { return REFS[k] || (/^from:/.test(k) ? 'リンクの指定（from=' + k.slice(5) + '）' : k); }\n  function $(id) { return document.getElementById(id); }\n  function esc(s) { return String(s).replace(/[&<>\"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]; }); }\n  function n(v) { return Math.round(v).toLocaleString('ja-JP'); }\n  function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }\n  // 呼び出し：Apps Script の画面なら google.script.run、Cloudflare の画面なら /admin/api\n  var CF = !(window.google && google.script && google.script.run);\n  function call(fn) {\n    var args = Array.prototype.slice.call(arguments, 1);\n    if (CF) {\n      return fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })\n        .then(function (r) { return r.json(); }).then(function (j) { if (j.error) throw new Error(j.error); return j.result; });\n    }\n    return new Promise(function (res, rej) { var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej); r[fn].apply(r, args); });\n  }\n  function msg(t) { $('msg').hidden = !t; $('msg').textContent = t || ''; }\n\n  function ymd(ms) { var d = new Date(ms + 9 * 3600e3); return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2); }\n  function dayList() { var out = [], now = D.now; for (var i = DAYS - 1; i >= 0; i--) out.push(ymd(now - i * 86400e3)); return out; }\n\n  // 集計済み（スプレッドシート）と未集計（今の1時間など）を合わせる\n  function aggregate() {\n    var days = dayList(), byDay = {}, hours = new Array(24).fill(0), users = {}, all = {};\n    days.forEach(function (d) { byDay[d] = { pv: 0, uf: 0, lim: 0, serr: 0, cerr: 0 }; users[d] = {}; });\n    D.hourly.forEach(function (r) {\n      var d = r[0].slice(0, 10), h = +r[0].slice(11, 13);\n      if (!byDay[d]) return;\n      byDay[d].pv += r[1]; byDay[d].uf += r[3]; byDay[d].lim += r[4]; byDay[d].serr += r[5]; byDay[d].cerr += r[6];\n      hours[h] += r[1];\n    });\n    D.users.forEach(function (r) { if (users[r[0]]) { users[r[0]][r[1]] = 1; all[r[1]] = 1; } });\n    var st = Object.assign({}, D.stations), ar = Object.assign({}, D.areas), fe = Object.assign({}, D.features), er = Object.assign({}, D.errors);\n    var si = {}, rf = Object.assign({}, D.referrers || {});\n    var fa = Object.assign({}, D.failures || {}), qa = Object.assign({}, D.quality || {}), en = Object.assign({}, D.env || {}), ge = Object.assign({}, D.geo || {});\n    var pf = {}, alive = 0, pvAll = 0;\n    var addPerf = function (src) { Object.keys(src || {}).forEach(function (k) { var x = pf[k] || (pf[k] = [0, 0, 0, 0, 0, 0, 0]), p = src[k]; x[0] += p[0]; x[1] += p[1]; x[2] = Math.max(x[2], p[2]); for (var i = 3; i < 7; i++) x[i] += p[i]; }); };\n    addPerf(D.perf);\n    D.hourly.forEach(function (r) { if (byDay[r[0].slice(0, 10)]) { alive += r[7] || 0; pvAll += r[1]; } });\n    Object.keys(D.sites || {}).forEach(function (k) { si[k] = { sv: D.sites[k].sv, cl: D.sites[k].cl }; });\n    var add = function (o, src, pre) { Object.keys(src || {}).forEach(function (k) { var kk = (pre || '') + k; o[kk] = (o[kk] || 0) + src[k]; }); };\n    D.pending.forEach(function (p) {\n      var d = p.hour.slice(0, 10), h = +p.hour.slice(11, 13);\n      if (!byDay[d]) return;\n      byDay[d].pv += p.pv; byDay[d].lim += p.lim; byDay[d].serr += p.serr; byDay[d].cerr += p.cerr;\n      hours[h] += p.pv;\n      p.ids.forEach(function (a) { users[d][a] = 1; all[a] = 1; });\n      add(st, p.st); add(ar, p.area); add(fe, p.f); add(rf, p.ref);\n      Object.keys(p.sv || {}).forEach(function (k) { (si[k] = si[k] || { sv: 0, cl: 0 }).sv += p.sv[k]; });\n      Object.keys(p.cl || {}).forEach(function (k) { (si[k] = si[k] || { sv: 0, cl: 0 }).cl += p.cl[k]; });\n      Object.keys(p.err || {}).forEach(function (k) { er[k] = (er[k] || 0) + p.err[k]; });\n      Object.keys(p.svf || {}).forEach(function (k) { var kk = 'server|' + k; fa[kk] = (fa[kk] || 0) + p.svf[k]; });\n      Object.keys(p.clf || {}).forEach(function (k) { var kk = 'client|' + k; fa[kk] = (fa[kk] || 0) + p.clf[k]; });\n      add(qa, p.q); add(en, p.env); add(ge, p.geo); addPerf(p.perf);\n      alive += p.alive || 0; pvAll += p.pv;\n    });\n    // 今日の URL Fetch は日ごとの実数（未集計の時間を含む）\n    var today = ymd(D.now);\n    if (byDay[today]) byDay[today].uf = Math.max(byDay[today].uf, D.ufToday);\n    // 新規・再訪（匿名IDが初めて現れた日がその日なら新規）\n    var newRet = days.map(function (d) {\n      var ids = Object.keys(users[d]), nw = ids.filter(function (a) { return (D.firstSeen[a] || d) >= d; }).length;\n      return [nw, ids.length - nw];\n    });\n    return { days: days, byDay: byDay, hours: hours, users: users, allUsers: Object.keys(all).length, st: st, ar: ar, fe: fe, er: er, si: si, rf: rf,\n      fa: fa, qa: qa, en: en, ge: ge, pf: pf, alive: alive, pvAll: pvAll, newRet: newRet };\n  }\n\n  function tiles(A) {\n    var today = ymd(D.now), t = A.byDay[today], sum = function (k) { return A.days.reduce(function (s, d) { return s + A.byDay[d][k]; }, 0); };\n    var dayPct = D.limits ? D.ufToday / D.limits.day : 0, hourPct = D.limits ? D.ufHour / D.limits.hour : 0;\n    var level = function (p) { return p >= .9 ? ['--crit', '⛔ 上限間近'] : p >= .6 ? ['--warn', '⚠ 注意'] : ['--good', '✓ 余裕あり']; };\n    var meter = function (p) { var l = level(p); return '<div class=\"meter\"><i style=\"width:' + Math.min(100, p * 100).toFixed(1) + '%;background:var(' + l[0] + ')\"></i></div><div class=\"status\" style=\"color:var(' + l[0] + ')\">' + l[1] + '</div>'; };\n    $('tiles').innerHTML = [\n      '<div class=\"tile\"><div class=\"k\">今日の表示回数</div><div class=\"v\">' + n(t.pv) + '<small>回</small></div><div class=\"s\">期間合計 ' + n(sum('pv')) + ' 回</div></div>',\n      '<div class=\"tile\"><div class=\"k\">今日の利用者数</div><div class=\"v\">' + n(Object.keys(A.users[today]).length) + '<small>人</small></div><div class=\"s\">期間の延べ ' + n(A.allUsers) + ' 人</div></div>',\n      D.limits ? '<div class=\"tile\"><div class=\"k\">今日の URL Fetch</div><div class=\"v\">' + n(D.ufToday) + '<small>/ ' + n(D.limits.day) + '</small></div>' + meter(dayPct) + '</div>' :\n        '<div class=\"tile\"><div class=\"k\">今日の外部サイトからの取得</div><div class=\"v\">' + n(D.ufToday) + '<small>回</small></div><div class=\"s\">Cloudflare Workers から（上限なし）</div></div>',\n      D.limits ? '<div class=\"tile\"><div class=\"k\">この1時間の URL Fetch</div><div class=\"v\">' + n(D.ufHour) + '<small>/ ' + n(D.limits.hour) + '</small></div>' + meter(hourPct) + '</div>' :\n        '<div class=\"tile\"><div class=\"k\">この1時間の外部サイトからの取得</div><div class=\"v\">' + n(D.ufHour) + '<small>回</small></div></div>',\n      '<div class=\"tile\"><div class=\"k\">上限超え（期間）</div><div class=\"v\">' + n(sum('lim')) + '<small>回</small></div><div class=\"s\">アクセス集中で断った回数</div></div>',\n      '<div class=\"tile\"><div class=\"k\">開いている時間（平均）</div><div class=\"v\">' + (A.pvAll ? (5 + A.alive * 5 / A.pvAll).toFixed(0) : '--') + '<small>分くらい</small></div><div class=\"s\">自動更新の回数からの目安</div></div>',\n      '<div class=\"tile\"><div class=\"k\">エラー（期間）</div><div class=\"v\">' + n(sum('serr') + sum('cerr')) + '<small>件</small></div><div class=\"s\">サーバー ' + n(sum('serr')) + ' / 画面 ' + n(sum('cerr')) + '</div></div>'\n    ].join('');\n  }\n\n  // 縦棒グラフ（1系列・1軸）。ホバー／タップで値\n  function bars(svg, labels, values, opt) {\n    opt = opt || {};\n    var W = svg.clientWidth || 300, H = svg.clientHeight || 180, L = 36, R = 6, T = 8, B = 20;\n    var tot = values.map(function (v) { return Array.isArray(v) ? v[0] + v[1] : v; });\n    var max = Math.max(opt.limit || 0, Math.max.apply(null, tot.concat([1])));\n    var step = Math.pow(10, Math.floor(Math.log10(max))), nice = Math.ceil(max / step) * step;\n    if (nice / step > 5) step *= 2; else if (nice / step <= 2) step /= 2;\n    step = Math.max(1, step);   // 回数・人数は整数\n    nice = Math.ceil(max / step) * step;\n    var bw = (W - L - R) / values.length, y = function (v) { return T + (1 - v / nice) * (H - T - B); };\n    var h = '';\n    for (var v = 0; v <= nice + 1e-9; v += step) {\n      h += '<line x1=\"' + L + '\" x2=\"' + (W - R) + '\" y1=\"' + y(v) + '\" y2=\"' + y(v) + '\" stroke=\"' + css(v ? '--grid' : '--text-3') + '\"/>';\n      h += '<text x=\"' + (L - 4) + '\" y=\"' + (y(v) + 3) + '\" text-anchor=\"end\">' + n(v) + '</text>';\n    }\n    var every = Math.ceil(values.length / (opt.ticks || 7));\n    values.forEach(function (v, i) {\n      var x = L + i * bw, w = Math.max(1, bw - 2), sv = Array.isArray(v) ? v : [0, v], total = sv[0] + sv[1], top = y(total);\n      // 下に再訪（濃い色）、上に新規（薄い色）。間に2pxのすき間\n      if (sv[1] > 0) h += '<path d=\"M' + (x + 1) + ',' + y(0) + 'V' + (y(sv[1]) + (sv[0] ? 0 : 2)) + (sv[0] ? 'h' + w : 'q0,-2 2,-2h' + Math.max(0, w - 4) + 'q2,0 2,2') + 'V' + y(0) + 'Z\" fill=\"' + css('--bar') + '\"/>';\n      if (sv[0] > 0) { var b0 = sv[1] > 0 ? y(sv[1]) - 2 : y(0); h += '<path d=\"M' + (x + 1) + ',' + b0 + 'V' + (top + 2) + 'q0,-2 2,-2h' + Math.max(0, w - 4) + 'q2,0 2,2V' + b0 + 'Z\" fill=\"' + css(Array.isArray(v) ? '--bar-2' : '--bar') + '\"/>'; }\n      h += '<rect class=\"hit\" x=\"' + x + '\" y=\"' + T + '\" width=\"' + bw + '\" height=\"' + (H - T - B) + '\" fill=\"transparent\" data-l=\"' + esc(labels[i]) + '\" data-v=\"' + total + '\"' +\n        (Array.isArray(v) ? ' data-x=\"（新規 ' + sv[0] + '・再訪 ' + sv[1] + '）\"' : '') + '/>';\n      if (i % every === 0) h += '<text x=\"' + (x + bw / 2) + '\" y=\"' + (H - 6) + '\" text-anchor=\"middle\">' + esc(opt.short ? opt.short(labels[i]) : labels[i]) + '</text>';\n    });\n    if (opt.limit) h += '<line x1=\"' + L + '\" x2=\"' + (W - R) + '\" y1=\"' + y(opt.limit) + '\" y2=\"' + y(opt.limit) + '\" stroke=\"' + css('--crit') + '\" stroke-dasharray=\"4 3\"/>';\n    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);\n    svg.innerHTML = h;\n    svg.dataset.unit = opt.unit || '';\n  }\n  document.addEventListener('pointermove', tipAt);\n  document.addEventListener('pointerdown', tipAt);\n  function tipAt(ev) {\n    var el = ev.target, tip = $('tip');\n    if (!el.classList || !el.classList.contains('hit')) { tip.style.display = 'none'; return; }\n    tip.innerHTML = '<b>' + esc(el.dataset.l) + '</b> ' + n(+el.dataset.v) + ' ' + esc(el.ownerSVGElement.dataset.unit) + esc(el.dataset.x || '');\n    tip.style.display = 'block';\n    var x = Math.min(ev.clientX + 12, window.innerWidth - tip.offsetWidth - 8);\n    tip.style.left = x + 'px'; tip.style.top = (ev.clientY - 34) + 'px';\n  }\n\n  // 横棒の上位一覧\n  function hlist(el, obj, name, max) {\n    var rows = Object.keys(obj).map(function (k) { return [k, obj[k]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, max || 10);\n    if (!rows.length) { el.innerHTML = '<div class=\"empty\">まだデータがありません</div>'; return; }\n    var top = rows[0][1];\n    el.innerHTML = rows.map(function (r) {\n      return '<div class=\"hbar\"><span class=\"n\" title=\"' + esc(name(r[0])) + '\" data-k=\"' + esc(r[0]) + '\">' + esc(name(r[0])) + '</span><span class=\"t\"><i style=\"width:' + (r[1] / top * 100).toFixed(1) + '%\"></i></span><span class=\"c\">' + n(r[1]) + '</span></div>';\n    }).join('');\n  }\n  // エラー：種類（画面／サーバー）・内容・件数。内容は折り返して全文を出す\n  var ERRS = {\n    getTideData: '潮位データの取得', getStations: '潮位観測所の一覧', getWeather: '天気・気温', getWind: '風の推移・予報',\n    getRiver: '河川水位', getRiverStations: '河川の水位観測所の一覧', getWaterQuality: '水質'\n  };\n  function errorsTable(el, er) {\n    var rows = Object.keys(er).map(function (k) { var i = k.indexOf(':'); return [k.slice(0, i), k.slice(i + 1), er[k]]; })\n      .sort(function (a, b) { return b[2] - a[2]; });\n    if (!rows.length) { el.innerHTML = '<div class=\"empty\">エラーはありません</div>'; return; }\n    el.innerHTML = '<div class=\"sites-wrap\"><table class=\"sites errs\"><thead><tr><th>内容</th><th>種類</th><th>件数</th></tr></thead><tbody>' +\n      rows.map(function (r) {\n        return '<tr><td>' + esc(ERRS[r[1]] ? ERRS[r[1]] + 'に失敗' : r[1]) + '<small>' + esc(r[1]) + '</small></td><td>' +\n          (r[0] === 'server' ? 'サーバー' : r[0] === 'client' ? '画面' : esc(r[0])) + '</td><td>' + n(r[2]) + '</td></tr>';\n      }).join('') + '</tbody></table></div>';\n  }\n  // 監視そのものの状態\n  function healthTiles() {\n    var h = D.health || {}, now = D.now, lf = h.lastFlush;\n    var ago = lf ? Math.round((now - lf.t) / 60000) : null;\n    var st = function (cls, t) { return '<div class=\"status ' + cls + '\">' + t + '</div>'; };\n    if (D.source === 'cloudflare') {\n      var mb = h.dbBytes != null ? h.dbBytes / 1048576 : null;\n      $('health').innerHTML = [\n        '<div class=\"tile\"><div class=\"k\">記録の保存先</div><div class=\"v\">D1</div>' + st('ok', '✓ Cloudflare') + '</div>',\n        '<div class=\"tile\"><div class=\"k\">最後のまとめ</div><div class=\"v\">' + (ago == null ? '--' : ago + '<small>分前</small>') + '</div>' +\n          (ago == null ? st('warn', '⚠ まだまとめていません') : st('ok', '✓ 開いたときにも実行')) + '</div>',\n        '<div class=\"tile\"><div class=\"k\">未まとめの記録</div><div class=\"v\">' + n(h.rawRows || 0) + '<small>行</small></div>' +\n          ((h.rawRows || 0) > 200000 ? st('warn', '⚠ 多め（「今すぐ集計」）') : st('ok', '✓ 問題なし')) + '</div>',\n        '<div class=\"tile\"><div class=\"k\">D1 の使用量</div><div class=\"v\">' + (mb == null ? '--' : mb.toFixed(1) + '<small>MB</small>') + '</div>' +\n          (mb != null && mb > 5000 ? st('warn', '⚠ 上限10GBの半分') : st('ok', '✓ 上限10GB')) + '</div>'\n      ].join('');\n      $('healthSub').textContent = '記録は呼び出しごと、終わった時間帯を1時間1行にまとめる';\n      return;\n    }\n    var pend = D.pending.reduce(function (s, p) { return s + (p.bytes || 0); }, 0);\n    var cells = h.cells || 0;\n    $('health').innerHTML = [\n      '<div class=\"tile\"><div class=\"k\">最後の集計</div><div class=\"v\">' + (ago == null ? '--' : ago + '<small>分前</small>') + '</div>' +\n        (ago == null ? st('warn', '⚠ まだ集計されていません') : ago <= 30 ? st('ok', '✓ 正常（15分ごと）') : st('crit', '⛔ 遅れています')) + '</div>',\n      '<div class=\"tile\"><div class=\"k\">集計のトリガー</div><div class=\"v\">' + (h.trigger ? 'あり' : h.trigger === false ? 'なし' : '--') + '</div>' +\n        (h.trigger ? st('ok', '✓ 動作中') : st('crit', '⛔ setupMonitor を実行')) + '</div>',\n      '<div class=\"tile\"><div class=\"k\">取りこぼし（今日）</div><div class=\"v\">' + n(h.dropToday || 0) + '<small>件</small></div>' +\n        (h.dropToday ? st('warn', '⚠ 混雑で記録できなかった') : st('ok', '✓ なし')) + '</div>',\n      '<div class=\"tile\"><div class=\"k\">未集計の一時保存</div><div class=\"v\">' + (pend / 1024).toFixed(0) + '<small>KB</small></div>' +\n        (D.pending.some(function (p) { return p.bytes > 80000; }) ? st('warn', '⚠ 1時間分が上限100KBに近い') : st('ok', '✓ 余裕あり')) + '</div>',\n      '<div class=\"tile\"><div class=\"k\">スプレッドシート</div><div class=\"v\">' + (cells / 10000).toFixed(1) + '<small>万セル</small></div>' +\n        (cells > 5e6 ? st('warn', '⚠ 上限1000万セルの半分') : st('ok', '✓ 上限1000万セル')) + '</div>',\n      '<div class=\"tile\"><div class=\"k\">メール通知</div><div class=\"v\">' + (h.alerts ? 'オン' : 'オフ') + '</div>' +\n        (h.alerts && h.alertTo ? st('ok', '✓ ' + esc(h.alertTo)) : st('warn', '⚠ 通知されません')) + '</div>'\n    ].join('');\n    $('healthSub').textContent = '15分ごとに集計・異常を確認';\n  }\n  // データ元の失敗：サイト × 場所・状態\n  function failsTable(el, fa, si) {\n    var by = {};\n    Object.keys(fa).forEach(function (k) {\n      var p = k.split('|'), x = by[p[1]] || (by[p[1]] = { server: {}, client: {}, total: 0, real: 0 });\n      x[p[0]][p[2]] = (x[p[0]][p[2]] || 0) + fa[k]; x.total += fa[k];\n      if (p[2] !== '404' && !(p[0] === 'client' && p[2] === 'net')) x.real += fa[k];\n    });\n    var rows = Object.keys(by).sort(function (a, b) { return by[b].real - by[a].real || by[b].total - by[a].total; });\n    if (!rows.length) { el.innerHTML = '<div class=\"empty\">取得の失敗はありません</div>'; return; }\n    var fmt = function (o) { return Object.keys(o).sort().map(function (k) { return k + '×' + n(o[k]); }).join('、') || '—'; };\n    el.innerHTML = '<div class=\"sites-wrap\"><table class=\"sites errs\"><thead><tr><th>サイト</th><th>サーバーから</th><th>ブラウザから</th><th>失敗の割合</th></tr></thead><tbody>' +\n      rows.map(function (h) {\n        var x = by[h], acc = si[h] ? si[h].sv + si[h].cl : 0, rate = acc ? x.real / acc : 0;\n        var cls = x.real === 0 ? ' class=\"muted\"' : '';\n        return '<tr' + cls + '><td>' + esc(SITES[h] || h) + '<small>' + esc(h) + '</small></td><td>' + esc(fmt(x.server)) + '</td><td>' + esc(fmt(x.client)) + '</td><td>' +\n          (acc ? '<span class=\"' + (rate >= .05 ? 'crit' : rate >= .01 ? 'warn' : 'ok') + '\">' + (rate * 100).toFixed(1) + '%</span>' : '—') + '</td></tr>';\n      }).join('') + '</tbody></table></div>';\n  }\n  function qualityName(k) {\n    var m = /^tide_stale:(\\d{6})$/.exec(k);\n    if (m) return '潮位の更新停止：' + (D.stationNames[m[1]] || m[1]);\n    if (k === 'urlfetch_quota') return 'Google の URL Fetch の上限に到達（非常時モード）';\n    if (k === 'river_paused') return '上限の手前で河川・水質を一時停止';\n    if (k === 'old_client_blocked') return '古い画面からの河川・海保の取得を止めた';\n    if (k === 'worker_fallback') return 'Cloudflare につながらず Apps Script に切り替えた';\n    m = /^near_outlier:(\\d{6})$/.exec(k);\n    if (m) return '近くの地点の偏差が異常なので使わなかった：' + (D.stationNames[m[1]] || m[1]);\n    m = /^tide_stuck:(\\d{6})$/.exec(k);\n    if (m) return '観測値が30分以上同じ値（機器の不調？）：' + (D.stationNames[m[1]] || m[1]);\n    m = /^river_nodata:(\\d+)$/.exec(k);\n    if (m) return '河川水位の欠測：観測所 ' + m[1];\n    return k;\n  }\n  // 表示の速さ：処理ごと\n  var PERFS = { load: '起動〜表示（グラフが出るまで）', getTideData: '潮位データ', getStations: '潮位観測所の一覧', getWeather: '天気',\n    getWind: '風の推移', getRiver: '河川水位', getRiverStations: '河川の水位観測所の一覧', getWaterQuality: '水質' };\n  function perfTable(el, pf) {\n    var keys = Object.keys(pf).sort(function (a, b) {\n      var an = a.slice(2), bn = b.slice(2);\n      return (an === 'load' ? -1 : bn === 'load' ? 1 : 0) || an.localeCompare(bn) || a.localeCompare(b);\n    });\n    if (!keys.length) { el.innerHTML = '<div class=\"empty\">まだデータがありません</div>'; return; }\n    el.innerHTML = '<div class=\"sites-wrap\"><table class=\"sites\"><thead><tr><th>処理</th><th>場所</th><th>回数</th><th>平均</th><th>最大</th><th>3秒以上</th></tr></thead><tbody>' +\n      keys.map(function (k) {\n        var p = pf[k], name = k.slice(2), slow = p[0] ? (p[5] + p[6]) / p[0] : 0, avg = p[0] ? p[1] / p[0] / 1000 : 0;\n        return '<tr><td>' + esc(PERFS[name] || name) + '<small>' + esc(name) + '</small></td><td>' + (k[0] === 's' ? 'サーバー' : '画面') + '</td><td>' + n(p[0]) + '</td><td><span class=\"' +\n          (avg >= 5 ? 'crit' : avg >= 2 ? 'warn' : 'ok') + '\">' + avg.toFixed(1) + '秒</span></td><td>' + (p[2] / 1000).toFixed(1) + '秒</td><td>' + (slow * 100).toFixed(0) + '%</td></tr>';\n      }).join('') + '</tbody></table></div>';\n  }\n  // 位置情報：新旧の画面ごとに成功率\n  function geoList(el, ge) {\n    var apps = { pages: '新しい URL（GitHub Pages）', gas: '旧URL（Apps Script）' }, res = { ok: '取得できた', denied: '許可されなかった', timeout: '時間切れ', unavailable: '取得できなかった', unsupported: '非対応' };\n    var html = '', fill = [];\n    Object.keys(apps).forEach(function (a) {\n      var o = {};\n      Object.keys(ge).forEach(function (k) { var p = k.split(':'); if (p[0] === a) o[p[1]] = ge[k]; });\n      var tot = Object.keys(o).reduce(function (s, k) { return s + o[k]; }, 0);\n      if (!tot) return;\n      html += '<h3 class=\"h3\">' + apps[a] + '：成功 ' + Math.round((o.ok || 0) / tot * 100) + '%（' + n(tot) + ' 回）</h3>' +\n        '<div id=\"geo_' + a + '\"></div>';\n      fill.push(function () { hlist($('geo_' + a), o, function (k) { return res[k] || k; }); });\n    });\n    el.innerHTML = html || '<div class=\"empty\">まだデータがありません</div>';\n    fill.forEach(function (f) { f(); });\n  }\n  // 利用環境：OS・端末・起動方法・アプリ・バージョン\n  function envLists(el, en) {\n    var groups = { os: 'OS', dev: '端末', mode: '起動方法', app: '画面', ver: 'アプリのバージョン' };\n    var names = { 'os:ios': 'iPhone・iPad', 'os:android': 'Android', 'os:windows': 'Windows', 'os:mac': 'Mac', 'os:linux': 'Linux・Chromebook', 'os:other': 'その他',\n      'dev:mobile': 'スマホ', 'dev:tablet': 'タブレット', 'dev:pc': 'パソコン', 'mode:home_screen': 'ホーム画面のアイコン', 'mode:browser': 'ブラウザ',\n      'app:pages': '新しい URL（GitHub Pages）', 'app:gas': '旧URL（Apps Script）' };\n    var html = '', fill = [];\n    Object.keys(groups).forEach(function (g) {\n      var o = {};\n      Object.keys(en).forEach(function (k) { if (k.indexOf(g + ':') === 0) o[k] = en[k]; });\n      html += '<div class=\"card\"><h4>' + groups[g] + '</h4><div id=\"env_' + g + '\"></div></div>';\n      fill.push(function () { hlist($('env_' + g), o, function (k) { return names[k] || k.replace(/^ver:/, 'v'); }, 8); });\n    });\n    el.innerHTML = html;\n    fill.forEach(function (f) { f(); });\n  }\n  function alertsLog(el) {\n    var a = D.alerts || [];\n    el.innerHTML = a.length ? a.map(function (r) { return '<div class=\"alog\"><span class=\"t\">' + esc(r[0]) + '</span><b>' + esc(r[1]) + '</b>' + esc(r[2]) + '</div>'; }).join('') :\n      '<div class=\"empty\">通知はまだありません</div>';\n  }\n  function alertForm() {\n    var h = D.health || {};\n    $('alOn').checked = !!h.alerts; $('alDaily').checked = !!h.daily;\n    if (!$('alTo').dataset.touched) $('alTo').value = '';\n    $('alTo').placeholder = '空欄なら ' + (h.alertTo || 'Apps Script の持ち主のアドレス');\n  }\n  // 外部サイトごと：サーバーから（URL Fetch の上限に数える）とブラウザから（上限には数えない）\n  function sitesTable(el, si) {\n    var rows = Object.keys(si).map(function (k) { return [k, si[k].sv, si[k].cl]; })\n      .sort(function (a, b) { return (b[1] + b[2]) - (a[1] + a[2]); });\n    if (!rows.length) { el.innerHTML = '<div class=\"empty\">まだデータがありません</div>'; return; }\n    var top = Math.max.apply(null, rows.map(function (r) { return r[1]; }).concat([1]));\n    var tsv = rows.reduce(function (s, r) { return s + r[1]; }, 0), tcl = rows.reduce(function (s, r) { return s + r[2]; }, 0);\n    el.innerHTML = '<div class=\"sites-wrap\"><table class=\"sites\"><thead><tr><th>サイト</th><th>サーバーから<br>（上限に数える）</th><th class=\"bar\"></th><th>ブラウザから</th></tr></thead><tbody>' +\n      rows.map(function (r) {\n        return '<tr><td>' + esc(SITES[r[0]] || (/^tide-proxy\\./.test(r[0]) ? SITES['tide-proxy'] : r[0])) + '<small>' + esc(r[0]) + '</small></td><td>' + n(r[1]) + '</td><td class=\"bar\">' +\n          (r[1] ? '<i style=\"width:' + (r[1] / top * 100).toFixed(1) + '%\"></i>' : '') + '</td><td>' + n(r[2]) + '</td></tr>';\n      }).join('') +\n      '<tr><td><b>合計</b></td><td><b>' + n(tsv) + '</b></td><td></td><td><b>' + n(tcl) + '</b></td></tr></tbody></table></div>';\n  }\n  // 地域の名前（国土地理院 逆ジオコーダ。表示のときだけブラウザから）\n  var areaNames = {};\n  function nameAreas(el) {\n    Array.prototype.forEach.call(el.querySelectorAll('[data-k]'), function (s) {\n      var k = s.dataset.k, p = k.split(',');\n      if (areaNames[k]) { s.textContent = areaNames[k] + '（' + k + '）'; return; }\n      fetch('https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=' + p[0] + '&lon=' + p[1]).then(function (r) { return r.json(); }).then(function (j) {\n        areaNames[k] = (j && j.results && j.results.lv01Nm && j.results.lv01Nm !== '－' ? j.results.lv01Nm + ' 付近' : '海上など');\n        s.textContent = areaNames[k] + '（' + k + '）';\n      }).catch(function () { /* 座標のまま */ });\n    });\n  }\n\n  function render() {\n    var A = aggregate();\n    tiles(A);\n    var short = function (d) { return +d.slice(5, 7) + '/' + +d.slice(8, 10); };\n    bars($('cPv'), A.days, A.days.map(function (d) { return A.byDay[d].pv; }), { short: short, unit: '回' });\n    bars($('cUsers'), A.days, A.newRet, { short: short, unit: '人' });\n    bars($('cHour'), A.hours.map(function (_, i) { return i + '時'; }), A.hours, { ticks: 8, unit: '回' });\n    bars($('cUf'), A.days, A.days.map(function (d) { return A.byDay[d].uf; }), { short: short, unit: '回', limit: D.limits ? D.limits.day : 0 });\n    var cf = D.source === 'cloudflare';\n    $('ufTitle').innerHTML = cf ? '日ごとの外部サイトからの取得 <span>回（Cloudflare Workers から）</span>' : '日ごとの URL Fetch 回数 <span>回（点線は1日の上限）</span>';\n    $('perfSub').textContent = '利用者の端末で計測（サーバーは ' + (cf ? 'Cloudflare Workers' : 'Apps Script') + ' の処理時間）';\n    $('alertsArea').hidden = cf; $('cfNote').hidden = !cf;\n    hlist($('tStations'), A.st, function (c) { return (D.stationNames[c] || '') + '（' + c + '）'; });\n    hlist($('tAreas'), A.ar, function (k) { return k; });\n    nameAreas($('tAreas'));\n    hlist($('tFeatures'), A.fe, function (k) { return FEATURES[k] || k; }, 30);\n    sitesTable($('tSites'), A.si);\n    healthTiles();\n    failsTable($('tFails'), A.fa, A.si);\n    hlist($('tQuality'), A.qa, qualityName, 15);\n    perfTable($('tPerf'), A.pf);\n    geoList($('tGeo'), A.ge);\n    envLists($('tEnv'), A.en);\n    alertsLog($('tAlerts'));\n    alertForm();\n    hlist($('tRefs'), A.rf, refName, 15);\n    errorsTable($('tErrors'), A.er);\n    var d = new Date(D.now + 9 * 3600e3);\n    $('upd').textContent = '直近' + DAYS + '日（' + D.since + '〜）・' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' 時点';\n    $('sheetLink').hidden = !D.sheetUrl; if (D.sheetUrl) $('sheetLink').href = D.sheetUrl;\n    if (D.version) $('ver').textContent = 'monitor v' + D.version + '（' + String(D.versionDate || '').replace(/-/g, '/') + '）' + (D.source === 'cloudflare' ? '・Cloudflare' : '・Apps Script');\n  }\n\n  function load() {\n    msg('');\n    $('upd').textContent = '読み込み中…';\n    return call('getMonitorData', KEY, DAYS).then(function (d) { D = d; render(); }).catch(function (e) { msg('読み込めませんでした：' + (e && e.message || e)); });\n  }\n  $('daysSeg').onclick = function (ev) {\n    var b = ev.target.closest('button'); if (!b) return;\n    DAYS = +b.dataset.d;\n    Array.prototype.forEach.call(this.children, function (x) { x.setAttribute('aria-pressed', String(x === b)); });\n    load();\n  };\n  $('reloadBtn').onclick = load;\n  // 要約を文章でコピー（ほかの人やアシスタントに状況を伝えるとき用）\n  $('copyBtn').onclick = function () {\n    var b = this; b.disabled = true; msg('');\n    call('getMonitorSummaryText', KEY, DAYS).then(function (t) {\n      return navigator.clipboard.writeText(t).then(function () { b.textContent = 'コピーしました'; setTimeout(function () { b.textContent = '要約をコピー'; }, 2000); },\n        function () { msg('コピーできませんでした。要約は ' + (CF ? location.href.split('#')[0].replace('/admin?', '/monitor?') + '&days=' + DAYS + '&format=text' : location.href.split('#')[0] + '&format=text') + ' でも見られます'); });\n    }).catch(function (e) { msg('要約を作れませんでした：' + (e && e.message || e)); }).then(function () { b.disabled = false; });\n  };\n  $('flushBtn').onclick = function () {\n    var b = this; b.disabled = true;\n    call('adminFlush', KEY).then(function (k) { msg(''); return load(); }).catch(function (e) { msg('集計できませんでした：' + (e && e.message || e)); })\n      .then(function () { b.disabled = false; });\n  };\n  window.addEventListener('resize', function () { if (D) render(); });\n  $('alTo').addEventListener('input', function () { this.dataset.touched = '1'; });\n  $('alSave').onclick = function () {\n    var cfg = { alerts: $('alOn').checked, daily: $('alDaily').checked };\n    if ($('alTo').dataset.touched) cfg.to = $('alTo').value;\n    $('alMsg').textContent = '保存中…';\n    call('adminSetAlerts', KEY, cfg).then(function () { $('alMsg').textContent = '保存しました'; delete $('alTo').dataset.touched; return load(); })\n      .catch(function (e) { $('alMsg').textContent = '保存できませんでした：' + (e && e.message || e); });\n  };\n  $('alTest').onclick = function () {\n    $('alMsg').textContent = '送信中…';\n    call('adminTestMail', KEY).then(function (to) { $('alMsg').textContent = to + ' に送りました'; })\n      .catch(function (e) { $('alMsg').textContent = '送れませんでした：' + (e && e.message || e); });\n  };\n  load();\n})();\n</script>\n</body>\n</html>\n";
+
 /* ==================== ここから Workers の入口 ==================== */
 
 // Workers では外部取得はすべて Workers 自身が行う（ブラウザへの依頼・中継・URL Fetch の上限は不要）
@@ -2006,7 +2015,7 @@ monCommit_ = function () {
   const p = MON_PENDING;
   MON_PENDING = null;
   if (!p || monIsEmpty_(p)) return;
-  __MON_ROWS.push([monHourKey_(Date.now()), JSON.stringify(p)]);
+  __MON_ROWS.push([monHourKey_(Date.now()), JSON.stringify(p), Object.keys(p.ids || {})]);
 };
 
 // 呼び出し元（このアプリの画面）
@@ -2096,48 +2105,148 @@ function __json(obj, status, cors) {
   return new Response(JSON.stringify(obj), { status: status || 200, headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }, cors || {}) });
 }
 
+/*
+ * 利用状況の保存（D1）
+ *   mon      … 呼び出しごとの記録（その時間帯が終わったら mon_hourly にまとめて消す）
+ *   mon_hourly … 1時間ごとにまとめた記録（同じ時間帯に複数行あってもよい。読むときに足し合わせる）
+ *   seen     … 匿名IDが初めて現れた日（新規・再訪の判定）
+ *   mon_lock … まとめ処理が同時に2つ動かないようにする
+ */
+let __schemaOk = false;
+async function __schema(env) {
+  if (__schemaOk) return;
+  await env.DB.batch([
+    'CREATE TABLE IF NOT EXISTS mon (id INTEGER PRIMARY KEY AUTOINCREMENT, hour TEXT NOT NULL, data TEXT NOT NULL)',
+    'CREATE INDEX IF NOT EXISTS mon_hour ON mon(hour)',
+    'CREATE TABLE IF NOT EXISTS mon_hourly (id INTEGER PRIMARY KEY AUTOINCREMENT, hour TEXT NOT NULL, data TEXT NOT NULL)',
+    'CREATE INDEX IF NOT EXISTS mon_hourly_hour ON mon_hourly(hour)',
+    'CREATE TABLE IF NOT EXISTS seen (id TEXT PRIMARY KEY, first TEXT NOT NULL)',
+    'CREATE INDEX IF NOT EXISTS seen_first ON seen(first)',
+    'CREATE TABLE IF NOT EXISTS mon_lock (name TEXT PRIMARY KEY, until INTEGER NOT NULL)',
+    'CREATE TABLE IF NOT EXISTS mon_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)'
+  ].map(s => env.DB.prepare(s)));
+  __schemaOk = true;
+}
+function __seenStmt(env, id, day) {
+  return env.DB.prepare('INSERT INTO seen (id, first) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET first = min(first, excluded.first)').bind(id, day);
+}
+
 async function __writeMon(env) {
   const rows = __MON_ROWS; __MON_ROWS = [];
   if (!rows.length || !env.DB) return;
   try {
-    await env.DB.batch(rows.map(r => env.DB.prepare('INSERT INTO mon (hour, data) VALUES (?, ?)').bind(r[0], r[1])));
-  } catch (e) {
-    // 初回はテーブルを作ってから書き直す
-    if (/no such table/i.test(String(e && e.message))) {
-      await env.DB.exec('CREATE TABLE IF NOT EXISTS mon (id INTEGER PRIMARY KEY AUTOINCREMENT, hour TEXT NOT NULL, data TEXT NOT NULL); CREATE INDEX IF NOT EXISTS mon_hour ON mon(hour);');
-      await env.DB.batch(rows.map(r => env.DB.prepare('INSERT INTO mon (hour, data) VALUES (?, ?)').bind(r[0], r[1])));
-    } else console.log('mon write failed: ' + e);
-  }
+    await __schema(env);
+    const stmts = [];
+    rows.forEach(r => {
+      stmts.push(env.DB.prepare('INSERT INTO mon (hour, data) VALUES (?, ?)').bind(r[0], r[1]));
+      r[2].forEach(id => stmts.push(__seenStmt(env, id, r[0].slice(0, 10))));
+    });
+    await env.DB.batch(stmts);
+  } catch (e) { console.log('mon write failed: ' + e); return; }
+  // ときどき、終わった時間帯をまとめる（Cron が無くても溜まりすぎないように）
+  if (Math.random() < 0.02) await __compact(env, 6).catch(e => console.log('compact failed: ' + e));
 }
 
-// 利用状況の要約（D1 の記録を時間帯ごとに足し合わせる）
-async function __monSummary(env, days) {
-  if (!env.DB) return { error: 'D1 がありません' };
-  const since = monHourKey_(Date.now() - days * DAY);
-  const r = await env.DB.prepare('SELECT hour, data FROM mon WHERE hour >= ? ORDER BY hour').bind(since).all();
+/** 終わった時間帯の記録を1時間1行にまとめる（最大 maxHours 時間分）。まとめた時間帯の数を返す */
+async function __compact(env, maxHours) {
+  await __schema(env);
+  const now = Date.now();
+  const lock = await env.DB.prepare('INSERT INTO mon_lock (name, until) VALUES (\'compact\', ?) ON CONFLICT(name) DO UPDATE SET until = excluded.until WHERE mon_lock.until < ?')
+    .bind(now + 120000, now).run();
+  if (!lock.meta || !lock.meta.changes) return 0;   // ほかで実行中
+  let done = 0;
+  try {
+    const cur = monHourKey_(now);
+    const hs = await env.DB.prepare('SELECT DISTINCT hour FROM mon WHERE hour < ? ORDER BY hour LIMIT ?').bind(cur, maxHours).all();
+    for (const row of hs.results || []) {
+      const r = await env.DB.prepare('SELECT id, data FROM mon WHERE hour = ? ORDER BY id LIMIT 20000').bind(row.hour).all();
+      const list = r.results || [];
+      if (!list.length) continue;
+      const h = monEmptyHour_(), maxId = list[list.length - 1].id, day = row.hour.slice(0, 10);
+      list.forEach(x => { try { monMerge_(h, monFill_(JSON.parse(x.data))); } catch (e) { /* 壊れた行は捨てる */ } });
+      // まとめの追加・元の行の削除・新規の記録を1つのトランザクションで
+      const stmts = [
+        env.DB.prepare('INSERT INTO mon_hourly (hour, data) VALUES (?, ?)').bind(row.hour, JSON.stringify(h)),
+        env.DB.prepare('DELETE FROM mon WHERE hour = ? AND id <= ?').bind(row.hour, maxId)
+      ];
+      Object.keys(h.ids).forEach(a => stmts.push(__seenStmt(env, a, day)));
+      for (let i = 0; i < stmts.length; i += 500) {
+        // 1回の batch は大きすぎないように（最初の塊にまとめと削除が入る）
+        await env.DB.batch(stmts.slice(i, i + 500));
+      }
+      done++;
+    }
+    // 古い記録（400日より前）は消す
+    await env.DB.prepare('DELETE FROM mon_hourly WHERE hour < ?').bind(monHourKey_(now - 400 * DAY)).run();
+    await env.DB.prepare('INSERT INTO mon_meta (k, v) VALUES (\'last_compact\', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind(String(now)).run();
+  } finally {
+    await env.DB.prepare('UPDATE mon_lock SET until = 0 WHERE name = \'compact\'').run();
+  }
+  return done;
+}
+
+/** 潮位観測所の名前（共有キャッシュ経由。取れなければ空） */
+async function __stationNames(env) {
+  const stat = { kv: 0, up: 0, waits: [] }, names = {};
+  try {
+    const out = await __runBatch([['s', 'getStations', []]], null, env, stat);
+    const list = out.done.s && out.done.s.result;
+    (list || []).forEach(s => { names[s.c] = s.n; });
+  } catch (e) { /* 名前なしで続ける */ }
+  MON_PENDING = null;   // 管理画面の読み込みは利用状況に数えない
+  await Promise.all(stat.waits);
+  return names;
+}
+
+/** 管理画面のデータ（Apps Script の getMonitorData と同じ形） */
+async function __monData(env, days) {
+  await __schema(env);
+  days = Math.min(Math.max(+days || 30, 1), 365);
+  const now = Date.now(), since = ymd_(now - (days - 1) * DAY), today = ymd_(now), curHour = monHourKey_(now);
+  const [a, b, cnt, meta, names] = await Promise.all([
+    env.DB.prepare('SELECT hour, data FROM mon_hourly WHERE hour >= ?').bind(since).all(),
+    env.DB.prepare('SELECT hour, data FROM mon WHERE hour >= ?').bind(since).all(),
+    env.DB.prepare('SELECT count(*) AS n FROM mon').first(),
+    env.DB.prepare('SELECT v FROM mon_meta WHERE k = \'last_compact\'').first(),
+    __stationNames(env)
+  ]);
   const hours = {};
-  (r.results || []).forEach(row => {
+  [a, b].forEach(r => (r.results || []).forEach(row => {
     let h; try { h = monFill_(JSON.parse(row.data)); } catch (e) { return; }
     hours[row.hour] = hours[row.hour] ? monMerge_(hours[row.hour], h) : h;
-  });
-  const all = monEmptyHour_(), byDay = {};
+  }));
+  const all = monEmptyHour_(), users = {}, hourly = [];
   Object.keys(hours).sort().forEach(hk => {
-    const h = hours[hk], d = hk.slice(0, 10), b = byDay[d] || (byDay[d] = { day: d, pv: 0, users: {}, serr: 0, cerr: 0, upstream: 0 });
-    b.pv += h.pv; b.serr += h.serr; b.cerr += h.cerr; Object.keys(h.ids).forEach(a => { b.users[a] = 1; });
-    Object.keys(h.sv).forEach(k => { b.upstream += h.sv[k]; });
+    const h = hours[hk], up = Object.keys(h.sv).reduce((s, k) => s + h.sv[k], 0), d = hk.slice(0, 10);
+    hourly.push([hk, h.pv, Object.keys(h.ids).length, up, h.lim, h.serr, h.cerr, h.alive]);
+    Object.keys(h.ids).forEach(id => { users[d + '|' + id] = 1; });
     monMerge_(all, h);
   });
-  const top = (o, n) => Object.keys(o).map(k => ({ key: k, n: o[k] })).sort((a, b) => b.n - a.n).slice(0, n || 15);
+  // 初めて現れた日（期間内に初めて現れた人だけ記録にある。ほかは期間より前からの利用者）
+  const firstSeen = {};
+  Object.keys(all.ids).forEach(id => { firstSeen[id] = '0000-00-00'; });
+  const fs = await env.DB.prepare('SELECT id, first FROM seen WHERE first >= ?').bind(since).all();
+  (fs.results || []).forEach(r => { if (firstSeen[r.id]) firstSeen[r.id] = r.first; });
+  const pre = (o, p) => { const x = {}; Object.keys(o).forEach(k => { x[p + k] = o[k]; }); return x; };
+  const sites = {};
+  Object.keys(all.sv).forEach(k => { (sites[k] = sites[k] || { sv: 0, cl: 0 }).sv += all.sv[k]; });
+  Object.keys(all.cl).forEach(k => { (sites[k] = sites[k] || { sv: 0, cl: 0 }).cl += all.cl[k]; });
+  const th = hours[curHour], ufHour = th ? Object.keys(th.sv).reduce((s, k) => s + th.sv[k], 0) : 0;
+  const ufToday = hourly.filter(r => r[0].slice(0, 10) === today).reduce((s, r) => s + r[3], 0);
+  const lc = meta ? +meta.v : null;
   return {
-    generatedAt: new Date().toISOString(), source: 'cloudflare', days: days, rows: (r.results || []).length,
-    byDay: Object.keys(byDay).sort().map(d => ({ day: d, pv: byDay[d].pv, users: Object.keys(byDay[d].users).length, serverErrors: byDay[d].serr, clientErrors: byDay[d].cerr, upstreamFetches: byDay[d].upstream })),
-    hourly: Object.keys(hours).sort().slice(-48).map(hk => ({ hour: hk, pv: hours[hk].pv })),
-    totals: { pv: all.pv, users: Object.keys(all.ids).length, serverErrors: all.serr, clientErrors: all.cerr },
-    failures: top(Object.assign({}, ...Object.keys(all.svf).map(k => ({ ['server|' + k]: all.svf[k] })), ...Object.keys(all.clf).map(k => ({ ['client|' + k]: all.clf[k] }))), 30),
-    errors: top(all.err, 20), dataQuality: top(all.q, 15),
-    perf: Object.keys(all.perf).map(k => { const p = all.perf[k]; return { name: k.slice(2), place: k[0] === 's' ? 'server' : 'client', n: p[0], avgSec: p[0] ? Math.round(p[1] / p[0] / 100) / 10 : null, maxSec: Math.round(p[2] / 100) / 10, over3sPct: p[0] ? Math.round((p[5] + p[6]) / p[0] * 100) : null }; }),
-    upstream: top(all.sv, 20), browser: top(all.cl, 20), referrers: top(all.ref, 10), geo: all.geo, env: top(all.env, 30),
-    stations: top(all.st, 10), features: top(all.f, 25)
+    source: 'cloudflare', days: days, since: since, now: now,
+    hourly: hourly,
+    users: Object.keys(users).map(k => k.split('|')),
+    firstSeen: firstSeen,
+    stations: all.st, stationNames: names,
+    areas: all.area, features: all.f, errors: all.err, sites: sites, referrers: all.ref,
+    failures: Object.assign(pre(all.svf, 'server|'), pre(all.clf, 'client|')),
+    quality: all.q, perf: all.perf, env: all.env, geo: all.geo,
+    alerts: [], limits: null,
+    version: MONITOR_VERSION, versionDate: MONITOR_DATE,
+    sheetUrl: null, pending: [], ufHour: ufHour, ufToday: ufToday,
+    health: { lastFlush: lc ? { t: lc } : null, rawRows: cnt ? cnt.n : 0, dbBytes: a.meta && a.meta.size_after || null, trigger: null, dropToday: 0, cells: 0, alerts: false, daily: false, alertTo: '' }
   };
 }
 
@@ -2148,11 +2257,38 @@ export default {
     const cors = { 'Access-Control-Allow-Origin': okOrigin ? origin : 'null', 'Vary': 'Origin' };
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: Object.assign({ 'Access-Control-Allow-Methods': 'POST, GET', 'Access-Control-Allow-Headers': 'Content-Type' }, cors) });
 
-    // 利用状況の要約（合言葉が必要）
+    // 利用状況（合言葉が必要）
+    const keyOk = k => !!env.ADMIN_KEY && typeof k === 'string' && k === env.ADMIN_KEY;
+    // 要約：JSON（format=text で文章）
     if (request.method === 'GET' && url.pathname === '/monitor') {
-      if (!env.ADMIN_KEY || url.searchParams.get('key') !== env.ADMIN_KEY) return __json({ error: '合言葉が違います' }, 403);
-      const days = Math.min(Math.max(+url.searchParams.get('days') || 2, 1), 90);
-      return __json(await __monSummary(env, days));
+      if (!keyOk(url.searchParams.get('key'))) return __json({ error: '合言葉が違います' }, 403);
+      if (!env.DB) return __json({ error: 'D1 がありません' }, 500);
+      const days = Math.min(Math.max(+url.searchParams.get('days') || 2, 1), 365);
+      await __compact(env, 24).catch(e => console.log('compact failed: ' + e));
+      const s = monSummaryFrom_(await __monData(env, days));
+      if (url.searchParams.get('format') === 'text') return new Response(monSummaryText_(s), { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+      return __json(s);
+    }
+    // 管理画面
+    if (request.method === 'GET' && url.pathname === '/admin') {
+      const k = url.searchParams.get('key');
+      if (!keyOk(k)) return new Response('合言葉が違います', { status: 403, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+      const html = __ADMIN_HTML.replace('<?= adminKey ?>', k.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
+      return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer' } });
+    }
+    // 管理画面からの呼び出し（同じ場所から。合言葉を本文で受け取る）
+    if (request.method === 'POST' && url.pathname === '/admin/api') {
+      if (origin && origin !== url.origin) return __json({ error: 'forbidden' }, 403);
+      let req; try { req = await request.json(); } catch (e) { return __json({ error: '不正な呼び出しです' }, 400); }
+      const a = Array.isArray(req.args) ? req.args : [];
+      if (!keyOk(a[0])) return __json({ error: '合言葉が違います' }, 403);
+      if (!env.DB) return __json({ error: 'D1 がありません' }, 500);
+      try {
+        if (req.fn === 'getMonitorData') { await __compact(env, 24).catch(e => console.log('compact failed: ' + e)); return __json({ result: await __monData(env, a[1]) }); }
+        if (req.fn === 'getMonitorSummaryText') return __json({ result: monSummaryText_(monSummaryFrom_(await __monData(env, a[1]))) });
+        if (req.fn === 'adminFlush') return __json({ result: await __compact(env, 48) });
+        return __json({ error: '不正な呼び出しです' }, 400);
+      } catch (e) { return __json({ error: String((e && e.message) || e) }, 500); }
     }
     if (request.method === 'GET' && url.pathname === '/health') return __json({ ok: true, at: new Date().toISOString() }, 200, cors);
     if (request.method !== 'POST') return __json({ error: 'not found' }, 404, cors);
@@ -2172,5 +2308,9 @@ export default {
     monCommit_();
     ctx.waitUntil(Promise.all(stat.waits).then(() => __writeMon(env)));
     return __json(out, 200, Object.assign({ 'x-upstream': String(stat.up), 'x-kv': String(stat.kv) }, cors));
+  },
+  // Cron トリガー（任意。設定すれば終わった時間帯を定期的にまとめる）
+  async scheduled(event, env, ctx) {
+    if (env.DB) ctx.waitUntil(__compact(env, 48).catch(e => console.log('compact failed: ' + e)));
   }
 };

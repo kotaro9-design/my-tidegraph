@@ -31,6 +31,7 @@
   --good: #48bb78; --warn: #ecc94b; --crit: #fc8181;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; }
 .wrap { max-width: 960px; margin: 0 auto; padding: 12px 16px 40px; }
 h1 { font-size: 18px; margin: 4px 0 2px; }
@@ -118,14 +119,14 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     <div class="card"><h2>日ごとの表示回数 <span>回</span></h2><svg class="chart" id="cPv"></svg></div>
     <div class="card"><h2>日ごとの利用者数 <span class="lg"><i style="background:var(--bar)"></i>再訪 <i style="background:var(--bar-2)"></i>新規</span></h2><svg class="chart" id="cUsers"></svg></div>
     <div class="card"><h2>時間帯別の表示回数（期間合計） <span>回</span></h2><svg class="chart" id="cHour"></svg></div>
-    <div class="card"><h2>日ごとの URL Fetch 回数 <span>回（点線は1日の上限）</span></h2><svg class="chart" id="cUf"></svg></div>
+    <div class="card"><h2 id="ufTitle">日ごとの URL Fetch 回数 <span>回（点線は1日の上限）</span></h2><svg class="chart" id="cUf"></svg></div>
   </div>
   <div class="grid2">
     <div class="card"><h2>よく使われる潮位観測所 <span>回</span></h2><div id="tStations"></div></div>
     <div class="card"><h2>よく使われる地域（約10km） <span>回</span></h2><div id="tAreas"></div></div>
     <div class="card"><h2>機能の利用 <span>回</span></h2><div id="tFeatures"></div></div>
   </div>
-  <div class="card"><h2>表示の速さ <span>利用者の端末で計測（サーバーは Apps Script の処理時間）</span></h2><div id="tPerf"></div></div>
+  <div class="card"><h2>表示の速さ <span id="perfSub">利用者の端末で計測（サーバーは Apps Script の処理時間）</span></h2><div id="tPerf"></div></div>
   <div class="card"><h2>エラー <span>件</span></h2><div id="tErrors"></div></div>
   <div class="card"><h2>外部サイトへのアクセス（期間合計） <span>回</span></h2><div id="tSites"></div></div>
   <div class="grid2">
@@ -133,7 +134,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     <div class="card"><h2>位置情報（GPS）が使えたか <span>起動時</span></h2><div id="tGeo"></div></div>
   </div>
   <div class="card"><h2>利用環境 <span>表示回数</span></h2><div class="grid2 env" id="tEnv"></div></div>
-  <div class="grid2">
+  <div class="grid2" id="alertsArea">
     <div class="card"><h2>通知の設定</h2>
       <div class="form">
         <label><input type="checkbox" id="alOn"> 異常があればメールで知らせる（15分ごとに確認）</label>
@@ -144,6 +145,11 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     </div>
     <div class="card"><h2>最近の通知 <span>最大20件</span></h2><div id="tAlerts"></div></div>
   </div>
+  <p class="note" id="cfNote" hidden>
+    この画面は Cloudflare（v2.1.0 以降の記録）です。記録は利用者の呼び出しごとに保存し、終わった時間帯は1時間1行にまとめます（この画面を開いたときにも実行）。
+    「外部サイトからの取得」は Cloudflare Workers が気象庁・海上保安庁などから取得した回数です（Google の URL Fetch のような1日の上限はありません。川の防災情報などは全国共有のキャッシュから返した分は数えません）。
+    v2.1.0 より前（2026/10/20 朝まで）の記録は、Apps Script の管理画面とスプレッドシートに残っています。そのため、以前からの利用者もこちらでは最初の日に「新規」として数えられます。
+  </p>
   <p class="note">
     データは1時間ごとにスプレッドシートへ集計されます（今の1時間の分も含めて表示）。利用者数は端末ごとの匿名IDの数です（ブラウザのデータを消すと別の人として数えます）。
     地域は約10km単位に丸めた位置で、名前は国土地理院の逆ジオコーダで求めた目安です。
@@ -171,7 +177,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     'www.jma.go.jp': '気象庁（観測・予報）', 'www.data.jma.go.jp': '気象庁（潮位表）', 'www1.kaiho.mlit.go.jp': '海上保安庁（験潮）',
     'www.river.go.jp': '川の防災情報', 'api.open-meteo.com': 'Open-Meteo（風・気圧）', 'marine-api.open-meteo.com': 'Open-Meteo Marine（海面水温）',
     'mreversegeocoder.gsi.go.jp': '国土地理院（逆ジオコーダ）', 'msearch.gsi.go.jp': '国土地理院（住所検索）', 'cyberjapandata.gsi.go.jp': '国土地理院（地図タイル）',
-    'script.google.com': 'このアプリのサーバー（Apps Script）', 'tide-proxy': '中継（Cloudflare Workers）', 'www.tbeic.go.jp': '東京湾環境情報センター'
+    'script.google.com': 'このアプリのサーバー（Apps Script）', 'tide-api.kotaro9.workers.dev': 'このアプリのサーバー（Cloudflare Workers）', 'tide-proxy': '中継（Cloudflare Workers）', 'www.tbeic.go.jp': '東京湾環境情報センター'
   };
   var REFS = {
     direct: '直接（ブックマーク・URL入力・アプリ内ブラウザなど）', home_screen: 'ホーム画面のアイコン', gas: '旧URL（Apps Script の画面）',
@@ -184,8 +190,14 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function n(v) { return Math.round(v).toLocaleString('ja-JP'); }
   function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+  // 呼び出し：Apps Script の画面なら google.script.run、Cloudflare の画面なら /admin/api
+  var CF = !(window.google && google.script && google.script.run);
   function call(fn) {
     var args = Array.prototype.slice.call(arguments, 1);
+    if (CF) {
+      return fetch('/admin/api', { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
+        .then(function (r) { return r.json(); }).then(function (j) { if (j.error) throw new Error(j.error); return j.result; });
+    }
     return new Promise(function (res, rej) { var r = google.script.run.withSuccessHandler(res).withFailureHandler(rej); r[fn].apply(r, args); });
   }
   function msg(t) { $('msg').hidden = !t; $('msg').textContent = t || ''; }
@@ -242,14 +254,16 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
 
   function tiles(A) {
     var today = ymd(D.now), t = A.byDay[today], sum = function (k) { return A.days.reduce(function (s, d) { return s + A.byDay[d][k]; }, 0); };
-    var dayPct = D.ufToday / D.limits.day, hourPct = D.ufHour / D.limits.hour;
+    var dayPct = D.limits ? D.ufToday / D.limits.day : 0, hourPct = D.limits ? D.ufHour / D.limits.hour : 0;
     var level = function (p) { return p >= .9 ? ['--crit', '⛔ 上限間近'] : p >= .6 ? ['--warn', '⚠ 注意'] : ['--good', '✓ 余裕あり']; };
     var meter = function (p) { var l = level(p); return '<div class="meter"><i style="width:' + Math.min(100, p * 100).toFixed(1) + '%;background:var(' + l[0] + ')"></i></div><div class="status" style="color:var(' + l[0] + ')">' + l[1] + '</div>'; };
     $('tiles').innerHTML = [
       '<div class="tile"><div class="k">今日の表示回数</div><div class="v">' + n(t.pv) + '<small>回</small></div><div class="s">期間合計 ' + n(sum('pv')) + ' 回</div></div>',
       '<div class="tile"><div class="k">今日の利用者数</div><div class="v">' + n(Object.keys(A.users[today]).length) + '<small>人</small></div><div class="s">期間の延べ ' + n(A.allUsers) + ' 人</div></div>',
-      '<div class="tile"><div class="k">今日の URL Fetch</div><div class="v">' + n(D.ufToday) + '<small>/ ' + n(D.limits.day) + '</small></div>' + meter(dayPct) + '</div>',
-      '<div class="tile"><div class="k">この1時間の URL Fetch</div><div class="v">' + n(D.ufHour) + '<small>/ ' + n(D.limits.hour) + '</small></div>' + meter(hourPct) + '</div>',
+      D.limits ? '<div class="tile"><div class="k">今日の URL Fetch</div><div class="v">' + n(D.ufToday) + '<small>/ ' + n(D.limits.day) + '</small></div>' + meter(dayPct) + '</div>' :
+        '<div class="tile"><div class="k">今日の外部サイトからの取得</div><div class="v">' + n(D.ufToday) + '<small>回</small></div><div class="s">Cloudflare Workers から（上限なし）</div></div>',
+      D.limits ? '<div class="tile"><div class="k">この1時間の URL Fetch</div><div class="v">' + n(D.ufHour) + '<small>/ ' + n(D.limits.hour) + '</small></div>' + meter(hourPct) + '</div>' :
+        '<div class="tile"><div class="k">この1時間の外部サイトからの取得</div><div class="v">' + n(D.ufHour) + '<small>回</small></div></div>',
       '<div class="tile"><div class="k">上限超え（期間）</div><div class="v">' + n(sum('lim')) + '<small>回</small></div><div class="s">アクセス集中で断った回数</div></div>',
       '<div class="tile"><div class="k">開いている時間（平均）</div><div class="v">' + (A.pvAll ? (5 + A.alive * 5 / A.pvAll).toFixed(0) : '--') + '<small>分くらい</small></div><div class="s">自動更新の回数からの目安</div></div>',
       '<div class="tile"><div class="k">エラー（期間）</div><div class="v">' + n(sum('serr') + sum('cerr')) + '<small>件</small></div><div class="s">サーバー ' + n(sum('serr')) + ' / 画面 ' + n(sum('cerr')) + '</div></div>'
@@ -327,6 +341,20 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     var h = D.health || {}, now = D.now, lf = h.lastFlush;
     var ago = lf ? Math.round((now - lf.t) / 60000) : null;
     var st = function (cls, t) { return '<div class="status ' + cls + '">' + t + '</div>'; };
+    if (D.source === 'cloudflare') {
+      var mb = h.dbBytes != null ? h.dbBytes / 1048576 : null;
+      $('health').innerHTML = [
+        '<div class="tile"><div class="k">記録の保存先</div><div class="v">D1</div>' + st('ok', '✓ Cloudflare') + '</div>',
+        '<div class="tile"><div class="k">最後のまとめ</div><div class="v">' + (ago == null ? '--' : ago + '<small>分前</small>') + '</div>' +
+          (ago == null ? st('warn', '⚠ まだまとめていません') : st('ok', '✓ 開いたときにも実行')) + '</div>',
+        '<div class="tile"><div class="k">未まとめの記録</div><div class="v">' + n(h.rawRows || 0) + '<small>行</small></div>' +
+          ((h.rawRows || 0) > 200000 ? st('warn', '⚠ 多め（「今すぐ集計」）') : st('ok', '✓ 問題なし')) + '</div>',
+        '<div class="tile"><div class="k">D1 の使用量</div><div class="v">' + (mb == null ? '--' : mb.toFixed(1) + '<small>MB</small>') + '</div>' +
+          (mb != null && mb > 5000 ? st('warn', '⚠ 上限10GBの半分') : st('ok', '✓ 上限10GB')) + '</div>'
+      ].join('');
+      $('healthSub').textContent = '記録は呼び出しごと、終わった時間帯を1時間1行にまとめる';
+      return;
+    }
     var pend = D.pending.reduce(function (s, p) { return s + (p.bytes || 0); }, 0);
     var cells = h.cells || 0;
     $('health').innerHTML = [
@@ -370,6 +398,11 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     if (k === 'urlfetch_quota') return 'Google の URL Fetch の上限に到達（非常時モード）';
     if (k === 'river_paused') return '上限の手前で河川・水質を一時停止';
     if (k === 'old_client_blocked') return '古い画面からの河川・海保の取得を止めた';
+    if (k === 'worker_fallback') return 'Cloudflare につながらず Apps Script に切り替えた';
+    m = /^near_outlier:(\d{6})$/.exec(k);
+    if (m) return '近くの地点の偏差が異常なので使わなかった：' + (D.stationNames[m[1]] || m[1]);
+    m = /^tide_stuck:(\d{6})$/.exec(k);
+    if (m) return '観測値が30分以上同じ値（機器の不調？）：' + (D.stationNames[m[1]] || m[1]);
     m = /^river_nodata:(\d+)$/.exec(k);
     if (m) return '河川水位の欠測：観測所 ' + m[1];
     return k;
@@ -467,7 +500,11 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     bars($('cPv'), A.days, A.days.map(function (d) { return A.byDay[d].pv; }), { short: short, unit: '回' });
     bars($('cUsers'), A.days, A.newRet, { short: short, unit: '人' });
     bars($('cHour'), A.hours.map(function (_, i) { return i + '時'; }), A.hours, { ticks: 8, unit: '回' });
-    bars($('cUf'), A.days, A.days.map(function (d) { return A.byDay[d].uf; }), { short: short, unit: '回', limit: D.limits.day });
+    bars($('cUf'), A.days, A.days.map(function (d) { return A.byDay[d].uf; }), { short: short, unit: '回', limit: D.limits ? D.limits.day : 0 });
+    var cf = D.source === 'cloudflare';
+    $('ufTitle').innerHTML = cf ? '日ごとの外部サイトからの取得 <span>回（Cloudflare Workers から）</span>' : '日ごとの URL Fetch 回数 <span>回（点線は1日の上限）</span>';
+    $('perfSub').textContent = '利用者の端末で計測（サーバーは ' + (cf ? 'Cloudflare Workers' : 'Apps Script') + ' の処理時間）';
+    $('alertsArea').hidden = cf; $('cfNote').hidden = !cf;
     hlist($('tStations'), A.st, function (c) { return (D.stationNames[c] || '') + '（' + c + '）'; });
     hlist($('tAreas'), A.ar, function (k) { return k; });
     nameAreas($('tAreas'));
@@ -485,8 +522,8 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     errorsTable($('tErrors'), A.er);
     var d = new Date(D.now + 9 * 3600e3);
     $('upd').textContent = '直近' + DAYS + '日（' + D.since + '〜）・' + d.getUTCHours() + ':' + ('0' + d.getUTCMinutes()).slice(-2) + ' 時点';
-    $('sheetLink').href = D.sheetUrl; $('sheetLink').hidden = false;
-    if (D.version) $('ver').textContent = 'monitor v' + D.version + '（' + String(D.versionDate || '').replace(/-/g, '/') + '）';
+    $('sheetLink').hidden = !D.sheetUrl; if (D.sheetUrl) $('sheetLink').href = D.sheetUrl;
+    if (D.version) $('ver').textContent = 'monitor v' + D.version + '（' + String(D.versionDate || '').replace(/-/g, '/') + '）' + (D.source === 'cloudflare' ? '・Cloudflare' : '・Apps Script');
   }
 
   function load() {
@@ -506,7 +543,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     var b = this; b.disabled = true; msg('');
     call('getMonitorSummaryText', KEY, DAYS).then(function (t) {
       return navigator.clipboard.writeText(t).then(function () { b.textContent = 'コピーしました'; setTimeout(function () { b.textContent = '要約をコピー'; }, 2000); },
-        function () { msg('コピーできませんでした。要約は ' + location.href.split('#')[0] + '&format=text でも見られます'); });
+        function () { msg('コピーできませんでした。要約は ' + (CF ? location.href.split('#')[0].replace('/admin?', '/monitor?') + '&days=' + DAYS + '&format=text' : location.href.split('#')[0] + '&format=text') + ' でも見られます'); });
     }).catch(function (e) { msg('要約を作れませんでした：' + (e && e.message || e)); }).then(function () { b.disabled = false; });
   };
   $('flushBtn').onclick = function () {
