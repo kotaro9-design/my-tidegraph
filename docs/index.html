@@ -923,7 +923,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.3.4', APP_DATE = '2026-10-21';
+  var APP_VERSION = '2.3.5', APP_DATE = '2026-10-21';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -1097,11 +1097,14 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   // サーバー：Cloudflare Workers（tide-api）を先に使い、つながらないときだけ Apps Script に切り替える
   var API_WORKER = 'https://tide-api.kotaro9.workers.dev/api';
   var workerDownUntil = 0;   // Workers が失敗したら、しばらく Apps Script だけを使う
+  var WORKER_TIMEOUT_MS = 30000;   // これより長く返事がなければ、つながらないときと同じく Apps Script に切り替える
   function workerRun(name, args) {
     countHost(API_WORKER);
-    return fetch(API_WORKER, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: name, args: args }) })
+    var ac = window.AbortController ? new AbortController() : null, timer = ac ? setTimeout(function () { ac.abort(); }, WORKER_TIMEOUT_MS) : 0;
+    return fetch(API_WORKER, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: name, args: args }), signal: ac ? ac.signal : undefined })
       .then(function (r) { if (!r.ok) { failHost(API_WORKER, r.status); throw new Error('通信エラー ' + r.status); } return r.json(); },
-        function (e) { failHost(API_WORKER, 'net'); throw e; })
+        function (e) { failHost(API_WORKER, e && e.name === 'AbortError' ? 'timeout' : 'net'); throw e; })
+      .then(function (j) { clearTimeout(timer); return j; }, function (e) { clearTimeout(timer); throw e; })
       .then(function (j) { if (j.error) { var er = new Error(j.error); er.fromServer = true; throw er; } return j.result; });
   }
   function rawRun(name) {

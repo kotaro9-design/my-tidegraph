@@ -1417,7 +1417,7 @@ function distKm_(la1, lo1, la2, lo2) {
  */
 
 // 利用状況アプリ（Monitor.gs と admin.html）のバージョン。更新したら CHANGELOG-monitor.md にも書き、monitor-vX.Y.Z のタグを付ける
-var MONITOR_VERSION = '2.5.0', MONITOR_DATE = '2026-10-21';
+var MONITOR_VERSION = '2.5.1', MONITOR_DATE = '2026-10-21';
 
 var MON_HOST_RE = /^[a-z0-9.\-]{3,80}$/;
 // 機能名・エラー名などに使える文字（送られてきた値はこれで絞る）
@@ -1733,19 +1733,33 @@ function __get(u, env, stat) {
   q.then(() => __INFLIGHT.delete(k), () => __INFLIGHT.delete(k));
   return q;
 }
+// 待つ時間の上限。相手が応答しないと取得が終わらず、画面の読み込みが止まり、同じデータを待つ後の呼び出しも止まるため
+const FETCH_TIMEOUT_MS = 10000, KV_TIMEOUT_MS = 3000, BATCH_DEADLINE_MS = 20000;
+function __within(p, ms) {
+  let tm;
+  return Promise.race([p, new Promise((_, rej) => { tm = setTimeout(() => rej(new Error('timeout')), ms); })]).finally(() => clearTimeout(tm));
+}
 async function __get1(u, env, stat) {
   const c = __ttlFor(u), kvKey = 'u:' + (c.key || u);
   if (c.kv && env.CACHE) {
     try {
-      const hit = await env.CACHE.get(kvKey);
+      const hit = await __within(env.CACHE.get(kvKey), KV_TIMEOUT_MS);
       if (hit != null) { stat.kv++; return hit === '__404__' ? null : hit; }
-    } catch (e) { /* KV が使えなくても続ける */ }
+    } catch (e) { /* KV が使えない・遅いときも続ける */ }
   }
   const host = __siteOf(u);
-  const res = await fetch(u, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; my-tide-graph; +https://kotaro9-design.github.io/my-tidegraph/)' },
-    cf: { cacheTtl: c.ttl, cacheEverything: true }
-  });
+  // 時間切れは本文の読み込みも含めて打ち切る（signal は本文にも効く）
+  const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(u, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; my-tide-graph; +https://kotaro9-design.github.io/my-tidegraph/)' },
+      cf: { cacheTtl: c.ttl, cacheEverything: true }, signal
+    });
+  } catch (e) {
+    monFailHost_(u, e && (e.name === 'TimeoutError' || e.name === 'AbortError') ? 'timeout' : 'net');
+    throw e;
+  }
   // Cloudflare の配信網に一時保存されていた分（HIT など）は相手サイトに届いていないので数えない
   const cs = String(res.headers.get('cf-cache-status') || '').toUpperCase();
   if (cs === 'HIT' || cs === 'STALE' || cs === 'UPDATING' || cs === 'REVALIDATED') stat.edge++;
@@ -1755,7 +1769,8 @@ async function __get1(u, env, stat) {
     return null;
   }
   if (!res.ok) { monFailHost_(u, res.status); throw new Error('取得失敗 ' + res.status); }
-  const t = await res.text();
+  let t;
+  try { t = await res.text(); } catch (e) { monFailHost_(u, 'timeout'); throw e; }
   if (c.kv && env.CACHE && t.length < 20 * 1024 * 1024) stat.waits.push(env.CACHE.put(kvKey, t, { expirationTtl: Math.max(60, c.ttl) }).catch(() => {}));
   return t;
 }
@@ -1764,9 +1779,10 @@ async function __get1(u, env, stat) {
 async function __runBatch(calls, ev, env, stat) {
   if (ev) monRecord_(ev);
   if (!Array.isArray(calls) || !calls.length || calls.length > 12) throw new Error('不正な呼び出しです');
-  const api = api_(), done = {}, pre = {};
+  const api = api_(), done = {}, pre = {}, t0 = Date.now();
   let left = calls.filter(c => Array.isArray(c));
-  for (let round = 0; round < 15 && left.length; round++) {
+  // 全体でも時間を区切る（間に合わなかった処理はエラーで返し、画面はほかの結果を表示できる）
+  for (let round = 0; round < 15 && left.length && Date.now() - t0 < BATCH_DEADLINE_MS; round++) {
     const need = new Set();
     left = left.filter(c => {
       const id = String(c[0]).slice(0, 20), name = c[1], args = c[2];
