@@ -4,6 +4,11 @@
 「monitor v大きな変更.機能追加.修正」でバージョンを付けます。管理画面の見出しに表示しているのは `Monitor.gs` の `MONITOR_VERSION` / `MONITOR_DATE` です。
 GitHub のタグは `monitor-vX.Y.Z` です。本体の更新履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
+## monitor v2.0.0（2026/10/20）— 本体 v2.1.1
+- Apps Script での利用状況の監視を廃止（15分ごとのトリガー・スプレッドシートへの書き込み・メール通知・`/exec?admin=` の管理画面と要約）。トリガーと設定値は削除し、Apps Script の権限からスプレッドシートとトリガーを外した
+- 記録と管理画面は Cloudflare 版（`https://tide-api.kotaro9.workers.dev/admin?key=…`）だけに。Monitor.gs は記録の形と要約だけを残し、Workers に組み込む
+- 管理画面の説明を Cloudflare 版に合わせた
+
 ## monitor v1.6.0（2026/10/20）— 本体 v2.1.1
 - Cloudflare 版の管理画面：`https://tide-api.kotaro9.workers.dev/admin?key=合言葉`（Workers のシークレット `ADMIN_KEY`）。D1 の記録から、Apps Script 版と同じ表・グラフを表示
 - D1 の記録は呼び出しごとの行（mon）を、終わった時間帯ごとに1行（mon_hourly）にまとめる。管理画面を開いたとき・要約を読んだとき・記録のついで（約2%）に実行。Cron トリガーを設定すれば定期的にも

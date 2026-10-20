@@ -33,18 +33,6 @@ var APP_NAME = 'my tide-graph';
 var ICON_FILE_ID = '';
 
 function doGet(e) {
-  // 管理画面（利用状況）：?admin=合言葉
-  if (e && e.parameter && e.parameter.admin) {
-    if (!monAdminOk_(e.parameter.admin)) return HtmlService.createHtmlOutput('ページが見つかりません').setTitle(APP_NAME);
-    // 要約をデータ（json）・文章（text）で返す。スクリーンショットなしで状況を読めるように
-    var fmt = e.parameter.format, dd = Math.min(Math.max(+e.parameter.days || 7, 1), 90);
-    if (fmt === 'json') return ContentService.createTextOutput(JSON.stringify(getMonitorSummary(e.parameter.admin, dd))).setMimeType(ContentService.MimeType.JSON);
-    if (fmt === 'text') return ContentService.createTextOutput(getMonitorSummaryText(e.parameter.admin, dd)).setMimeType(ContentService.MimeType.TEXT);
-    var a = HtmlService.createTemplateFromFile('admin');
-    a.adminKey = e.parameter.admin;
-    return a.evaluate().setTitle(APP_NAME + ' 利用状況')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
   var t = HtmlService.createTemplateFromFile('index');
   t.initialSt = (e && e.parameter && e.parameter.st) || '';
   // 釣果の予定に付けるアプリへのリンク用

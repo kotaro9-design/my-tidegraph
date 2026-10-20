@@ -148,9 +148,13 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   <p class="note" id="cfNote" hidden>
     この画面は Cloudflare（v2.1.0 以降の記録）です。記録は利用者の呼び出しごとに保存し、終わった時間帯は1時間1行にまとめます（この画面を開いたときにも実行）。
     「外部サイトからの取得」は Cloudflare Workers が気象庁・海上保安庁などから取得した回数です（Google の URL Fetch のような1日の上限はありません。川の防災情報などは全国共有のキャッシュから返した分は数えません）。
-    v2.1.0 より前（2026/10/20 朝まで）の記録は、Apps Script の管理画面とスプレッドシートに残っています。そのため、以前からの利用者もこちらでは最初の日に「新規」として数えられます。
+    記録は v2.1.0（2026/10/20 朝）からです。それより前の Apps Script での記録は引き継いでいないため、以前からの利用者も最初の日は「新規」として数えます。
+    利用者数は端末ごとの匿名IDの数です（ブラウザのデータを消すと別の人として数えます）。地域は約10km単位に丸めた位置で、名前は国土地理院の逆ジオコーダで求めた目安です。
+    エラーの「画面」は利用者の端末でデータを受け取れなかった回数（通信の切れ目なども含む）、「サーバー」は Workers での処理の失敗です。データ元の異常の「net」はブラウザの通信の失敗です（利用者側の電波の弱さでも起きます）。
+    表示の速さの「起動〜表示」は、ページを開いてから潮位のグラフが出るまでの時間です。
+    流入元はページを開いたときの直前のページのサイト名です。X や LINE のアプリ内から開いた場合は「直接」になることがあります。リンクに ?from=名前 を付けると、その名前で数えます。
   </p>
-  <p class="note">
+  <p class="note" id="gasNote">
     データは1時間ごとにスプレッドシートへ集計されます（今の1時間の分も含めて表示）。利用者数は端末ごとの匿名IDの数です（ブラウザのデータを消すと別の人として数えます）。
     地域は約10km単位に丸めた位置で、名前は国土地理院の逆ジオコーダで求めた目安です。
     エラーの「画面」は利用者の端末でデータを受け取れなかった回数（通信の切れ目なども含む）、「サーバー」は Apps Script での処理の失敗です。
@@ -504,7 +508,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     var cf = D.source === 'cloudflare';
     $('ufTitle').innerHTML = cf ? '日ごとの外部サイトからの取得 <span>回（Cloudflare Workers から）</span>' : '日ごとの URL Fetch 回数 <span>回（点線は1日の上限）</span>';
     $('perfSub').textContent = '利用者の端末で計測（サーバーは ' + (cf ? 'Cloudflare Workers' : 'Apps Script') + ' の処理時間）';
-    $('alertsArea').hidden = cf; $('cfNote').hidden = !cf;
+    $('alertsArea').hidden = cf; $('cfNote').hidden = !cf; $('gasNote').hidden = cf;
     hlist($('tStations'), A.st, function (c) { return (D.stationNames[c] || '') + '（' + c + '）'; });
     hlist($('tAreas'), A.ar, function (k) { return k; });
     nameAreas($('tAreas'));

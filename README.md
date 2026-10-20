@@ -124,11 +124,10 @@ Apps Script の Web アプリは独自のページ枠の中で動くため、ホ
 
 ### 利用状況のモニタリング（Monitor.gs / admin.html）
 
-- 画面はデータ取得の通信に利用状況（匿名ID・潮位観測所・約10km単位の地域・機能・エラー）を相乗りさせて送り、サーバーはキャッシュにまとめて1時間ごとのトリガー（`flushMonitor`）でスプレッドシート「my tide-graph 利用状況」に書き込みます
-- 初回だけ Apps Script のエディタで `setupMonitor` を実行します（スプレッドシート・合言葉・トリガーを作成し、管理画面の URL を実行ログに出力）
+- 画面はデータ取得の通信に利用状況（匿名ID・潮位観測所・約10km単位の地域・機能・エラー）を相乗りさせて送り、Cloudflare Workers が D1 に記録します（下の「サーバー」）
+- [Monitor.gs](Monitor.gs) は記録の形と要約、[admin.html](admin.html) は管理画面で、どちらも Workers に組み込みます（Apps Script では記録しません。Apps Script での監視は monitor v2.0.0 で廃止）
 - 外部サイトごとのアクセス回数（サーバー／ブラウザ別）と流入元も記録します。共有するリンクに `?from=名前`（例：`?from=x`）を付けると、流入元をその名前で数えます
 - 利用状況アプリのバージョンは本体とは別に管理します（`Monitor.gs` の `MONITOR_VERSION`、[CHANGELOG-monitor.md](CHANGELOG-monitor.md)、タグ `monitor-vX.Y.Z`）
-- 管理画面：`/exec?admin=合言葉`（要約：`&format=json` または `&format=text`、期間：`&days=7`）（合言葉はスクリプト プロパティ `ADMIN_KEY`）
 
 ### サーバー（Cloudflare Workers「tide-api」、v2.1.0〜）
 
