@@ -331,6 +331,27 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .pk-list li .a { font-size: 12px; color: var(--text-2); }
 .pk-list li .d { font-size: 13px; color: var(--text-2); white-space: nowrap; align-self: center; }
 .pk-list li.cur .n { color: var(--accent); }
+.pk-head .pk-map-btn { flex: none; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; }
+/* 地図で地点・観測所を選ぶ */
+:root { --map-tide: #eb6834; --map-pred: #2a78d6; --map-river: #1baf7a; --map-wq: #b8338a; --map-place: #c62828; }
+#mapDlg[open] { display: flex; flex-direction: column; }
+.mp-head { padding: calc(10px + env(safe-area-inset-top)) 16px 8px; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--border); }
+.mp-head .pk-row b { font-size: 15px; margin-right: auto; }
+.mp-head button { border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; padding: 0 4px; }
+.mp-hint { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.mp-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-2); }
+.mp-legend i, .mp-info i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+.mp-map { flex: 1; min-height: 240px; background: var(--surface-2); }
+.mp-map:focus:not(:focus-visible) { outline: none; }
+.mp-info { padding: 8px 16px calc(10px + env(safe-area-inset-bottom)); font-size: 13px; line-height: 1.6; border-top: 1px solid var(--border); max-height: 34vh; overflow-y: auto; }
+.mp-info .sub { color: var(--text-2); font-size: 12px; }
+.mp-info button { border: 1px solid var(--border); background: var(--surface); color: var(--accent); border-radius: 10px; padding: 6px 10px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+.mp-pin { width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--map-place); border: 3px solid #fff; box-shadow: 0 0 0 2px var(--map-place), 0 1px 4px rgba(0,0,0,.4); }
+.mp-gps { width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: #2a78d6; border: 2px solid #fff; box-shadow: 0 0 0 6px rgba(42,120,214,.25); }
+.mp-map .leaflet-tooltip { font: 12px var(--font); padding: 2px 6px; }
+.mp-map .leaflet-tooltip.hl { font-weight: 700; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mp-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); } }
+:root[data-theme="dark"] .mp-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); }
 </style>
 </head>
 <body data-st="<?= initialSt ?>" data-app="<?= appUrl ?>">
@@ -634,6 +655,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   <div class="pk-head">
     <div class="pk-row">
       <input id="pkQ" type="search" placeholder="潮位観測所の名前・住所で検索" autocomplete="off">
+      <button id="pkMap" class="pk-map-btn">地図で選ぶ</button>
       <button id="pkClose">閉じる</button>
     </div>
     <div class="pk-row">
@@ -645,6 +667,16 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     </div>
   </div>
   <ul class="pk-list" id="pkList"></ul>
+</dialog>
+
+<dialog id="mapDlg" aria-labelledby="mpTitle">
+  <div class="mp-head">
+    <div class="pk-row"><b id="mpTitle">地図で地点・観測所を選ぶ</b><button id="mpGps">現在地に戻す</button><button id="mpClose">閉じる</button></div>
+    <div class="mp-hint">地図をタップすると、その場所を「指定地点」にして、一番近い観測所を自動で選びます。観測所の印をタップすると、その観測所を選びます（選んでいる観測所は大きな印と名前で表示）。</div>
+    <div class="mp-legend"><span><i style="background:var(--map-tide)"></i>潮位観測所</span><span><i style="background:var(--map-pred)"></i>潮位表の地点（推算・満干潮）</span><span><i style="background:var(--map-river)"></i>河川の水位観測所</span><span><i style="background:var(--map-wq)"></i>水質観測所</span></div>
+  </div>
+  <div class="mp-map" id="mpMap"></div>
+  <div class="mp-info" id="mpInfo"></div>
 </dialog>
 
 <dialog id="guideDlg" aria-labelledby="guideTitle">
@@ -699,7 +731,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <dt>風の推移・予報</dt><dd>現在地の地図の上に、0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（アメダス）、薄い矢印が予報、赤い線が現在時刻です。</dd>
       <dt>風（地上の観測）</dt><dd>近くのアメダスの最新の風速・風向・最大瞬間風速と、気象庁の予報の風・波です。</dd>
       <dt>海面水温（推定）</dt><dd>近くの海の海面水温と、24時間前との差、明日の予報範囲です。約8km四方の解析・予報モデルの値なので、湾奥・河口・岸近くの実際の水温とは差があることがあります。どの海域の値かはカードの下に表示します。</dd>
-      <dt>水質</dt><dd>「表示の設定」の「河川水位・水質の表示」が「表示」で、現在地から10km以内に水質観測所があるときだけ、水温・塩分濃度を表示します。</dd>
+      <dt>水質</dt><dd>「表示の設定」の「河川水位・水質の表示」が「表示」で、現在地から10km以内に水質観測所があるときだけ、水温・塩分濃度を表示します（地図で水質観測所を選んだときは、その観測所）。</dd>
     </dl>
 
     <h3 id="g-station">潮位観測所の選び方</h3>
@@ -707,6 +739,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <li><b>画面左上の潮位観測所名</b>をタップすると一覧が開きます。現在地から近い順に並び、名前や住所で検索できます。</li>
       <li>「海上保安庁サイトの潮位観測所のみ」を選ぶと、5分ごとの速報がある観測所だけに絞れます（気象庁の公開は15〜20分ほど遅れます）。</li>
       <li>一覧の印：<span class="tag">海保速報</span> 速報あり、<span class="tag">欠測</span> 現在欠測中の可能性、<span class="tag">潮位表なし</span> 満潮・干潮は推算からの目安。</li>
+      <li>一覧の上の<b>「地図で選ぶ」</b>で地図が開きます。地図をタップすると、その場所を<b>指定地点</b>にして、潮位観測所・潮位表の地点・河川の水位観測所・水質観測所をそれぞれ一番近いものに自動で切り替えます（天気・風・海面水温なども指定地点の値になります）。</li>
+      <li>地図の印は色で種類を分けています（<span class="gb" style="background:var(--map-tide)"></span>潮位観測所、<span class="gb" style="background:var(--map-pred)"></span>潮位表の地点、<span class="gb" style="background:var(--map-river)"></span>河川の水位観測所、<span class="gb" style="background:var(--map-wq)"></span>水質観測所）。使っている観測所は大きな印と名前で表示し、印をタップするとその観測所を選べます。河川・水質の観測所は「河川水位・水質の表示」が「表示」のときだけ、指定地点の近くのものを表示します。</li>
+      <li>指定地点はアプリを開いている間だけ使います。地図の「現在地に戻す」か、右上の <span class="gk">◎</span> で現在地（GPS）に戻ります。</li>
       <li>右上の <span class="gk">◎</span> で、現在地から一番近い潮位観測所に戻ります。</li>
     </ul>
 
@@ -786,7 +821,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.2.0', APP_DATE = '2026-10-20';
+  var APP_VERSION = '2.3.0', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -812,6 +847,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     stFilter: load('stfilter') || 'all',
     showRiver: riverDefault(), river: null,
     predSel: load('pred') || '', predPoints: [],   // 推算の地点（潮位表の地点）。空なら自動（現在地から一番近い地点）
+    place: null,   // 地図で指定した地点 { lat, lon }（アプリを開いている間だけ。GPS より優先）
+    wqFcd: '',     // 地図で選んだ水質観測所（空なら自動）
     riverFcd: load('river_fcd') || '',   // 空なら自動（一番近い観測所）   // 'all' | 'jcg'（海上保安庁サイトの観測所のみ）
     curve: null, ext: [], hover: null, loading: false, lastFetch: 0
   };
@@ -1210,7 +1247,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       .sort(function (a, b) { return a.d - b.d; }).slice(0, 25);
     var auto = predPoint();
     if (S.predSel && !list.some(function (o) { return o.x.c === S.predSel; }) && auto) list.unshift({ x: auto, d: p ? distKm(p.lat, p.lon, auto.lat, auto.lon) : 0 });
-    sel.innerHTML = '<option value="">自動（' + (p && p.gps ? '現在地' : '潮位観測所') + 'から一番近い地点' + (!S.predSel && auto ? '：' + esc(auto.n) : '') + '）</option>' +
+    syncMapSoon();
+    sel.innerHTML = '<option value="">自動（' + (p ? p.lbl : '潮位観測所') + 'から一番近い地点' + (!S.predSel && auto ? '：' + esc(auto.n) : '') + '）</option>' +
       list.map(function (o) {
         return '<option value="' + esc(o.x.c) + '">' + esc(o.x.n) + '（' + fmtKm(o.d) + (o.x.obs ? '' : '・実測なし') + '）</option>';
       }).join('');
@@ -1278,6 +1316,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var r = S.river, on = riverOn();
     Array.prototype.forEach.call($('riverSeg').children, function (b) { b.setAttribute('aria-pressed', String((b.dataset.r === '1') === S.showRiver)); });
     $('riverLeg').hidden = !on;
+    syncMapSoon();
     if (r) $('riverLegTxt').textContent = '河川水位（' + r.name + '）';
     var note = $('riverNote');
     renderRiverSel();
@@ -1296,9 +1335,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       return;
     }
     note.innerHTML = r.tidal ?
-      esc('河川水位：' + (r.river ? r.river + ' ' : '') + '「' + r.name + '」（' + (S.riverGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(r.dist) + (S.riverFcd ? '・選択' : '') + '）' +
+      esc('河川水位：' + (r.river ? r.river + ' ' : '') + '「' + r.name + '」（' + S.riverWhere + 'から' + fmtKm(r.dist) + (S.riverFcd ? '・選択' : '') + '）' +
         (last ? ' 最新 ' + hm(last[0]) + ' ' + fmtH(last[1]) + 'cm' : '')) + ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">川の防災情報</a>' :
-      esc((S.riverFcd ? '選択した河川の水位観測所「' : '最寄りの河川の水位観測所「') + r.name + '」（' + (S.riverGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(r.dist) + '）は標高が高く潮位と同じ目盛りに収まらないため、重ねていません' + (last ? '（最新 ' + hm(last[0]) + ' T.P.' + (last[1] / 100).toFixed(2) + 'm）' : '')) + ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">川の防災情報</a>';
+      esc((S.riverFcd ? '選択した河川の水位観測所「' : '最寄りの河川の水位観測所「') + r.name + '」（' + S.riverWhere + 'から' + fmtKm(r.dist) + '）は標高が高く潮位と同じ目盛りに収まらないため、重ねていません' + (last ? '（最新 ' + hm(last[0]) + ' T.P.' + (last[1] / 100).toFixed(2) + 'm）' : '')) + ' <a href="' + esc(r.url) + '" target="_blank" rel="noopener">川の防災情報</a>';
   }
   // 河川観測所の選択肢（現在地の近くの、TP 換算値のある観測所）。
   // 取得回数が多いので、水位表示がオンで選択欄に触れたときだけ読み込む
@@ -1329,7 +1368,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (S.riverFcd && !list.some(function (x) { return x.fcd === S.riverFcd; }) && S.river && S.river.fcd === S.riverFcd) {
       list.unshift({ fcd: S.river.fcd, name: S.river.name, river: S.river.river, dist: S.river.dist });
     }
-    sel.innerHTML = '<option value="">自動（' + (here() && here().gps ? '現在地' : '潮位観測所') + 'から一番近い水位観測所・欠測中は除く）</option>' +
+    sel.innerHTML = '<option value="">自動（' + (here() ? here().lbl : '潮位観測所') + 'から一番近い水位観測所・欠測中は除く）</option>' +
       list.map(function (x) {
         return '<option value="' + esc(x.fcd) + '">' + esc((x.river ? x.river + ' ' : '') + x.name) + '（' + fmtKm(x.dist) + '）</option>';
       }).join('') +
@@ -1348,7 +1387,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     return run('getRiver', p.lat, p.lon, S.riverFcd || null).then(function (r) {
       var q = here();
       if (!q || q.lat.toFixed(3) + ',' + q.lon.toFixed(3) + '|' + S.riverFcd !== key) return;
-      S.river = r; S.riverFor = key; S.riverFetch = Date.now(); S.riverTried = true; S.riverGps = p.gps; S.riverPaused = '';
+      S.river = r; S.riverFor = key; S.riverFetch = Date.now(); S.riverTried = true; S.riverWhere = p.lbl; S.riverPaused = '';
       renderRiver(); drawCharts();
     }).catch(function (e) { S.riverTried = true; S.riverPaused = /一時的に止めて/.test(String(e && e.message)) ? e.message : /回数が多すぎ|urlfetch/i.test(String(e && e.message)) ? 'アクセスが集中しているため、河川水位を一時的に表示できません（潮位は表示を続けます）。' : ''; renderRiver(); });
   }
@@ -1539,10 +1578,13 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var toMs = function (j) { return Math.round((j - 2440587.5) * DAY); };
     return { rise: toMs(jt - w / 360), set: toMs(jt + w / 360) };
   }
+  // 位置で変わるもの（天気・風・河川・水質など）の基準の位置。地図の指定地点 → 現在地（GPS） → 潮位観測所の順
   function here() {
-    if (S.pos) return { lat: S.pos.latitude, lon: S.pos.longitude, gps: true };
-    return S.st ? { lat: S.st.lat, lon: S.st.lon, gps: false } : null;
+    if (S.place) return { lat: S.place.lat, lon: S.place.lon, gps: false, manual: true, lbl: '指定地点' };
+    if (S.pos) return { lat: S.pos.latitude, lon: S.pos.longitude, gps: true, lbl: '現在地' };
+    return S.st ? { lat: S.st.lat, lon: S.st.lon, gps: false, lbl: '潮位観測所' } : null;
   }
+  function nearLbl(p) { return p && p.manual ? '指定地点' : p && p.gps ? '現在地' : '潮位観測所付近'; }
 
   function useTable() { return S.datum === 'table' && S.data && S.data.offset != null; }
   function disp(h) { return h == null ? null : h + (useTable() ? S.data.offset : 0); }
@@ -1555,7 +1597,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (!s) return;
     $('stName').textContent = s.n;
     var parts = ['潮位観測所' + (s.o ? '（' + s.o + '）' : '')];
-    if (S.pos) parts.push('現在地から ' + fmtKm(distKm(S.pos.latitude, S.pos.longitude, s.lat, s.lon)));
+    var p = here();
+    if (p && p.lbl !== '潮位観測所') parts.push(p.lbl + 'から ' + fmtKm(distKm(p.lat, p.lon, s.lat, s.lon)));
+    syncMapSoon();
     parts.push(s.a);
     $('stSub').textContent = parts.filter(Boolean).join(' · ');
   }
@@ -1666,7 +1710,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
   function renderWeather() {
     var w = S.wx, now = Date.now(), p = here();
-    $('wxLbl').textContent = p && p.gps ? '現在地の天気' : '潮位観測所付近の天気';
+    $('wxLbl').textContent = nearLbl(p) + 'の天気';
     var a = w && w.amedas, f = w && w.forecast;
 
     // 予報
@@ -1714,7 +1758,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     }
 
     var src = [];
-    if (a) src.push('アメダス「' + a.name + '」' + (p && p.gps ? '（現在地から' + fmtKm(a.dist) + '）' : '（' + fmtKm(a.dist) + '）') + ' ' + hm(a.time) + ' 観測' +
+    if (a) src.push('アメダス「' + a.name + '」' + (p && p.lbl !== '潮位観測所' ? '（' + p.lbl + 'から' + fmtKm(a.dist) + '）' : '（' + fmtKm(a.dist) + '）') + ' ' + hm(a.time) + ' 観測' +
       (a.precip1h ? ' · 1時間降水量 ' + a.precip1h + 'mm' : '') + (a.humidity != null ? ' · 湿度 ' + a.humidity + '%' : ''));
     if (f) src.push('天気予報：' + f.area + '（' + hm(f.report) + ' 気象庁発表）');
     $('wxSrc').textContent = src.join(' / ');
@@ -2309,7 +2353,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var hasObs = !!(S.presObs && S.presObs.length), hasFc = !!(S.presFc && S.presFc.length);
     $('presObsLeg').hidden = !hasObs; $('presFcLeg').hidden = !hasFc;
     if (st) $('presObsTxt').textContent = '実測（' + st.name + '・' + fmtKm(st.dist) + '）';
-    $('presFcTxt').textContent = (p && p.gps ? '現在地' : '潮位観測所付近') + 'の推移・予報';
+    $('presFcTxt').textContent = nearLbl(p) + 'の推移・予報';
     $('presNote').textContent = '実測は気象庁「' + (st ? st.name : '近くの気象台') + '」の海面気圧（10分ごと）、推移・予報は Open-Meteo（気象庁モデル、1時間ごと）。' +
       '気圧が1 hPa 下がると潮位は約1 cm 上がります（吸い上げ効果、1013 hPa 基準の目安）。';
   }
@@ -2429,9 +2473,12 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   }
 
   function useLocation(explicit) {
+    var had = explicit && !!S.place;   // 指定地点をやめて GPS に戻る
+    if (had) clearPlace();
     $('locBtn').classList.add('spin');
     return locate().then(function (c) {
       S.pos = c;
+      if (S.place) { S.locPending = false; syncMapSoon(); return; }
       var s = nearest(c.latitude, c.longitude);
       if (s) trackPv(s.c, { lat: c.latitude, lon: c.longitude });
       S.locPending = false;   // 位置がわかったので、位置で変わるものを読み込んでよい
@@ -2439,6 +2486,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       if (s) return selectStation(s);
     }).catch(function (e) {
       if (explicit) notice('位置情報を取得できませんでした（' + (e && e.message || e) + '）。画面左上の潮位観測所名をタップして選択してください。');
+      if (had) { renderHeader(); refreshPlace(); }
       throw e;
     }).then(function (v) { $('locBtn').classList.remove('spin'); return v; },
       function (e) { $('locBtn').classList.remove('spin'); throw e; });
@@ -2452,6 +2500,166 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
   }
   function closePicker() { var dlg = $('picker'); if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
+
+  /* ---------- 地図で地点・観測所を選ぶ（Leaflet は地図を開いたときだけ読み込む） ---------- */
+  var LEAFLET = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
+  var MAPV = null;   // { map, layer, lists }
+  function loadLeaflet() {
+    if (!loadLeaflet.css) {
+      var css = loadLeaflet.css = document.createElement('link');
+      css.rel = 'stylesheet'; css.href = LEAFLET + 'leaflet.css'; css.crossOrigin = 'anonymous';
+      css.integrity = 'sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w==';
+      document.head.appendChild(css);
+    }
+    if (window.L) return Promise.resolve();
+    if (loadLeaflet.p) return loadLeaflet.p;
+    return (loadLeaflet.p = new Promise(function (res, rej) {
+      var js = document.createElement('script');
+      js.src = LEAFLET + 'leaflet.js'; js.crossOrigin = 'anonymous';
+      js.integrity = 'sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg==';
+      js.onload = function () { res(); };
+      js.onerror = function () { loadLeaflet.p = null; rej(new Error('地図を読み込めませんでした。通信状況を確かめて、もう一度開いてください。')); };
+      document.head.appendChild(js);
+    }));
+  }
+  function mapOpen() { return !!MAPV && $('mapDlg').hasAttribute('open'); }
+  function openMap() {
+    closePicker();
+    var dlg = $('mapDlg');
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    track('f', 'map_open');
+    $('mpInfo').textContent = '地図を読み込み中…';
+    loadLeaflet().then(function () {
+      var p = here() || { lat: 35.68, lon: 139.77 };
+      if (!MAPV) initMap(p);
+      else { MAPV.map.invalidateSize(); MAPV.map.setView([p.lat, p.lon], Math.max(MAPV.map.getZoom(), 10)); }
+      syncMap();
+      loadMapLists();
+    }).catch(function (e) { $('mpInfo').textContent = e.message || String(e); });
+  }
+  function closeMap() { var dlg = $('mapDlg'); if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); }
+  function initMap(p) {
+    var map = L.map('mpMap', { renderer: L.canvas({ tolerance: 8 }), zoomControl: true }).setView([p.lat, p.lon], 11);
+    var tiles = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', { minZoom: 5, maxZoom: 18,
+      attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>' });
+    tiles.on('tileloadstart', function (e) { var u = e.tile.src; if (!TILE_SEEN[u]) { TILE_SEEN[u] = 1; countHost(u); } });
+    tiles.addTo(map);
+    map.attributionControl.setPrefix(false);
+    // 印をタップしたときは、同じタップが地図にも届くことがある（キャンバスの印）。直後の地図のタップは無視する
+    map.on('click', function (e) { if (Date.now() - MAPV.pickAt > 400) setPlace(e.latlng.lat, e.latlng.lng); });
+    MAPV = { map: map, layer: L.layerGroup().addTo(map), lists: { key: '', river: [], wq: [] }, pickAt: 0 };
+    setTimeout(function () { map.invalidateSize(); }, 0);
+  }
+  var syncTimer = 0;
+  function syncMapSoon() { if (MAPV && !syncTimer) syncTimer = setTimeout(function () { syncTimer = 0; if (mapOpen()) syncMap(); }, 30); }
+  function cssVar(k, d) { return getComputedStyle(document.documentElement).getPropertyValue(k).trim() || d; }
+  // 観測所の印を描き直す（選んでいる観測所は大きな印と名前）
+  function syncMap() {
+    if (!MAPV) return;
+    var g = MAPV.layer, ink = cssVar('--text', '#000');
+    var col = { tide: cssVar('--map-tide', '#eb6834'), pred: cssVar('--map-pred', '#2a78d6'), river: cssVar('--map-river', '#1baf7a'), wq: cssVar('--map-wq', '#b8338a') };
+    g.clearLayers();
+    var pp = predPoint(), rv = S.showRiver ? S.river : null, wq = S.showRiver ? S.wq : null;
+    var mark = function (kind, lat, lon, name, hl, dim, onPick) {
+      if (lat == null || lon == null) return;
+      var m = L.circleMarker([lat, lon], { radius: hl ? 10 : kind === 'pred' ? 4.5 : 6, color: hl ? ink : '#fff', weight: hl ? 3 : 1.5,
+        fillColor: col[kind], fillOpacity: dim ? 0.35 : 0.9, bubblingMouseEvents: false });
+      // 潮位観測所と潮位表の地点は同じ場所にあることが多いので、潮位表の地点の名前は下に出す
+      var below = kind === 'pred';
+      m.bindTooltip(esc(name), hl ? { permanent: true, direction: below ? 'bottom' : 'top', offset: [0, below ? 10 : -10], className: 'hl' } : { direction: 'top', offset: [0, -6] });
+      m.on('click', function (e) { MAPV.pickAt = Date.now(); if (e.originalEvent) L.DomEvent.stop(e.originalEvent); if (onPick) onPick(); });
+      m.addTo(g);
+    };
+    (S.predPoints || []).forEach(function (x) {
+      if (pp && x.c === pp.c) return;
+      mark('pred', x.lat, x.lon, '潮位表の地点：' + x.n, false, false, function () { pickPred(x); });
+    });
+    S.stations.forEach(function (s) {
+      if (!stationOk(s) || (S.st && s.c === S.st.c)) return;
+      mark('tide', s.lat, s.lon, '潮位観測所：' + s.n + (s.miss ? '（欠測）' : ''), false, s.miss, function () { pickTide(s); });
+    });
+    if (S.showRiver) {
+      MAPV.lists.river.forEach(function (x) { if (!rv || x.fcd !== rv.fcd) mark('river', x.lat, x.lon, '河川：' + (x.river ? x.river + ' ' : '') + x.name, false, false, function () { pickRiver(x); }); });
+      MAPV.lists.wq.forEach(function (x) { if (!wq || x.fcd !== wq.fcd) mark('wq', x.lat, x.lon, '水質：' + (x.river ? x.river + ' ' : '') + x.name, false, false, function () { pickWq(x); }); });
+    }
+    // 選んでいる観測所（最後に描いて上に重ねる）
+    if (pp) mark('pred', pp.lat, pp.lon, '潮位表の地点：' + pp.n, true, false, null);
+    if (rv) mark('river', rv.lat, rv.lon, '河川：' + rv.name, true, false, null);
+    if (wq) mark('wq', wq.lat, wq.lon, '水質：' + wq.name, true, false, null);
+    if (S.st) mark('tide', S.st.lat, S.st.lon, '潮位観測所：' + S.st.n, true, S.st.miss, null);
+    // 現在地（GPS）・指定地点
+    if (S.pos) L.marker([S.pos.latitude, S.pos.longitude], { icon: L.divIcon({ className: '', html: '<div class="mp-gps"></div>', iconSize: [0, 0] }), interactive: false }).addTo(g);
+    if (S.place) L.marker([S.place.lat, S.place.lon], { icon: L.divIcon({ className: '', html: '<div class="mp-pin"></div>', iconSize: [0, 0] }), interactive: false, zIndexOffset: 1000 }).addTo(g);
+    renderMapInfo(pp, rv, wq);
+  }
+  function renderMapInfo(pp, rv, wq) {
+    var p = here(), km = function (lat, lon) { return p && lat != null ? '（' + p.lbl + 'から' + fmtKm(distKm(p.lat, p.lon, lat, lon)) + '）' : ''; };
+    var dot = function (k) { return '<i style="background:var(--map-' + k + ')"></i>'; };
+    var out = ['<div class="sub">基準の位置：' + (p ? esc(p.lbl) + (S.place ? '（地図で指定）' : S.pos ? '（GPS）' : '（位置情報なし）') : '—') + '</div>'];
+    if (S.st) out.push(dot('tide') + '潮位観測所「' + esc(S.st.n) + '」' + esc(km(S.st.lat, S.st.lon)));
+    if (pp) out.push(dot('pred') + '潮位表の地点「' + esc(pp.n) + '」' + esc(km(pp.lat, pp.lon)) + (S.predSel ? '・選択' : ''));
+    if (!S.showRiver) {
+      out.push('<div class="sub">河川水位・水質の表示がオフのため、河川・水質の観測所は表示していません。</div><button type="button" id="mpRiverOn">河川水位・水質を表示する</button>');
+    } else {
+      out.push(dot('river') + (rv ? '河川の水位観測所「' + esc(rv.name) + '」' + esc(km(rv.lat, rv.lon)) + (S.riverFcd ? '・選択' : '') : '河川の水位観測所：' + (S.riverTried ? '近くにありません' : '読み込み中…')));
+      out.push(dot('wq') + (wq ? '水質観測所「' + esc(wq.name) + '」' + esc(km(wq.lat, wq.lon)) + (S.wqFcd ? '・選択' : '') : '水質観測所：' + (S.wqFcd || S.wqKey == null ? '読み込み中…' : '10km以内にありません')));
+    }
+    $('mpInfo').innerHTML = out.join('<br>');
+    var b = $('mpRiverOn');
+    if (b) b.onclick = function () { track('f', 'map_river_on'); setRiverOn(true); loadMapLists(); };
+  }
+  // 河川・水質の観測所の一覧（基準の位置の近く。約5km単位でサーバーが共有するので、少し動かしただけでは取り直さない）
+  function loadMapLists() {
+    var p = here();
+    if (!MAPV || !p || !S.showRiver) return;
+    var key = (Math.round(p.lat * 20) / 20).toFixed(2) + ',' + (Math.round(p.lon * 20) / 20).toFixed(2);
+    if (MAPV.lists.key === key) return;
+    MAPV.lists.key = key;
+    Promise.all([run('getRiverStations', p.lat, p.lon).catch(function () { return []; }),
+      run('getWQStations', p.lat, p.lon).catch(function () { return []; })]).then(function (r) {
+      if (MAPV.lists.key !== key) return;
+      MAPV.lists.river = r[0] || []; MAPV.lists.wq = r[1] || [];
+      // 河川の選択欄の一覧にも使う（同じ位置なら取り直さない）
+      var k2 = p.lat.toFixed(2) + ',' + p.lon.toFixed(2), h2 = here();
+      if (h2 && h2.lat.toFixed(2) + ',' + h2.lon.toFixed(2) === k2) { S.riverList = MAPV.lists.river; S.riverListKey = k2; }
+      syncMap();
+    });
+  }
+  // 地図をタップした地点を基準の位置にして、どの観測所も一番近いものを自動で選ぶ
+  function setPlace(lat, lon) {
+    S.place = { lat: Math.round(lat * 1e5) / 1e5, lon: Math.round(lon * 1e5) / 1e5 };
+    S.locPending = false;
+    track('f', 'map_place');
+    autoAll();
+    // 観測所の一覧は別の通信にする（同じ通信にまとめると、河川水位などの表示が一覧の取得を待つため）
+    setTimeout(loadMapLists, 60);
+    var s = nearest(S.place.lat, S.place.lon);
+    if (s && (!S.st || s.c !== S.st.c)) return selectStation(s, true);
+    renderHeader(); syncMap();
+    return refreshPlace();
+  }
+  function clearPlace() {
+    if (!S.place) return;
+    S.place = null;
+    autoAll();
+  }
+  // 河川・水質・推算の地点を自動（一番近いもの）に戻す
+  function autoAll() {
+    if (S.riverFcd) { S.riverFcd = ''; save('river_fcd', ''); }
+    if (S.predSel) { S.predSel = ''; save('pred', ''); }
+    S.wqFcd = '';
+    S.river = null; S.riverFor = null; S.riverTried = false; S.wq = null; S.wqKey = null;
+    renderRiver(); renderWQ();   // 前の地点の観測所を表示に残さない
+  }
+  function pickTide(s) { track('st', s.c); track('f', 'map_tide'); selectStation(s, true); }
+  function pickPred(x) { track('f', 'map_pred'); S.predSel = x.c; save('pred', x.c); renderPredSel(); refresh(); }
+  function pickRiver(x) {
+    track('f', 'map_river');
+    S.riverFcd = x.fcd; save('river_fcd', x.fcd);
+    S.river = null; S.riverFor = null;
+    renderRiver(); drawCharts(); loadRiver();
+  }
+  function pickWq(x) { track('f', 'map_wq'); S.wqFcd = x.fcd; S.wq = null; renderWQ(); loadWQ(true); }
 
   /* ---------- 利用ガイド・バージョン ---------- */
   function openGuide() {
@@ -2477,8 +2685,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var q = $('pkQ').value.trim();
     Array.prototype.forEach.call($('stFilterSeg').children, function (b) { b.setAttribute('aria-pressed', String(b.dataset.f === S.stFilter)); });
     var list = S.stations.filter(function (s) { return stationOk(s) && (!q || s.n.indexOf(q) >= 0 || s.a.indexOf(q) >= 0); });
-    if (S.pos) {
-      list = list.map(function (s) { return [s, distKm(S.pos.latitude, S.pos.longitude, s.lat, s.lon)]; })
+    var hp = here();
+    if (hp && hp.lbl !== '潮位観測所') {
+      list = list.map(function (s) { return [s, distKm(hp.lat, hp.lon, s.lat, s.lon)]; })
         .sort(function (a, b) { return a[1] - b[1]; });
     } else list = list.map(function (s) { return [s, null]; });
     $('pkList').innerHTML = list.map(function (x) {
@@ -2531,7 +2740,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var t0 = midnight(ymd(now)) + DAY, fc = x.pts.filter(function (q) { return q[0] >= t0 && q[0] < t0 + DAY; }).map(function (q) { return q[1]; });
     $('sstFc').textContent = fc.length ? '明日の予報 ' + fmt1(Math.min.apply(null, fc)) + '〜' + fmt1(Math.max.apply(null, fc)) + '℃' : '';
     var dist = distKm(x.from.lat, x.from.lon, x.lat, x.lon);
-    $('sstNote').innerHTML = esc('値の地点：' + (x.from.gps ? '現在地' : '潮位観測所') + 'から' + (dist < 1 ? 'すぐ近く' : bearing16(x.from.lat, x.from.lon, x.lat, x.lon) + 'へ約' + fmtKm(dist)) +
+    $('sstNote').innerHTML = esc('値の地点：' + x.from.lbl + 'から' + (dist < 1 ? 'すぐ近く' : bearing16(x.from.lat, x.from.lon, x.lat, x.lon) + 'へ約' + fmtKm(dist)) +
       'の海域（約8km四方の推定値のため、湾奥・河口・岸近くの実際の水温とは差があることがあります）。') +
       '<a href="https://open-meteo.com/en/docs/marine-weather-api" target="_blank" rel="noopener">Open-Meteo Marine</a>';
   }
@@ -2540,10 +2749,12 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var p = here();
     if (!p) return Promise.resolve();
     if (!S.showRiver) { renderWQ(); return Promise.resolve(); }   // 河川水位・水質の表示がオフなら取りに行かない
-    var key = p.lat.toFixed(3) + ',' + p.lon.toFixed(3);
+    var key = p.lat.toFixed(3) + ',' + p.lon.toFixed(3) + '|' + S.wqFcd;
     if (!force && S.wqKey === key && Date.now() - S.wqFetch < 30 * MIN) { renderWQ(); return Promise.resolve(); }
-    return run('getWaterQuality', p.lat, p.lon).then(function (q) {
-      S.wq = q; S.wqKey = key; S.wqFetch = Date.now(); S.wqGps = p.gps;
+    return run('getWaterQuality', p.lat, p.lon, S.wqFcd || null).then(function (q) {
+      var h2 = here();
+      if (h2 && key !== h2.lat.toFixed(3) + ',' + h2.lon.toFixed(3) + '|' + S.wqFcd) return;   // 問い合わせ中に地点・選択が変わった
+      S.wq = q; S.wqKey = key; S.wqFetch = Date.now(); S.wqWhere = p.lbl;
       renderWQ();
     }).catch(function () { renderWQ(); });
   }
@@ -2556,9 +2767,10 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   }
   function renderWQ() {
     var q = S.showRiver ? S.wq : null, card = $('wqCard');
+    syncMapSoon();
     card.hidden = !q;
     if (!q) return;
-    $('wqLbl').textContent = '水質（水質観測所 ' + (q.river ? q.river + '「' + q.name + '」' : q.name) + '・' + (S.wqGps ? '現在地' : '潮位観測所') + 'から' + fmtKm(q.dist) + '）';
+    $('wqLbl').textContent = '水質（水質観測所 ' + (q.river ? q.river + '「' + q.name + '」' : q.name) + '・' + S.wqWhere + 'から' + fmtKm(q.dist) + (S.wqFcd ? '・選択' : '') + '）';
     if (!q.layers.length) { $('wqBody').innerHTML = '<div class="sub">現在は欠測中です</div>'; }
     else {
       $('wqBody').innerHTML = '<table class="wq num"><thead><tr><th></th><th>水温</th><th>塩分濃度</th><th>観測</th></tr></thead><tbody>' +
@@ -2601,14 +2813,14 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
           Math.round(tx * 256 - left) + 'px;top:' + Math.round(ty * 256 - top) + 'px">';
       }
     }
-    box.innerHTML = html + '<span class="wtl-pin" title="' + (p.gps ? '現在地' : '潮位観測所') + '"></span>';
+    box.innerHTML = html + '<span class="wtl-pin" title="' + p.lbl + '"></span>';
     box.dataset.key = p.lat.toFixed(4) + ',' + p.lon.toFixed(4) + ',' + W + 'x' + H;
   }
   function renderWind() {
     var w = S.wind, cols = $('wtlCols'), p = here();
     var mk = p ? p.lat.toFixed(4) + ',' + p.lon.toFixed(4) + ',' + $('wtlMap').clientWidth + 'x' + $('wtlMap').clientHeight : '';
     if ($('wtlMap').dataset.key !== mk) renderWindMap();
-    $('wtlLbl').textContent = '風の推移・予報' + (p ? '（' + (p.gps ? '現在地' : '潮位観測所付近') + '）' : '');
+    $('wtlLbl').textContent = '風の推移・予報' + (p ? '（' + nearLbl(p) + '）' : '');
     if (!w) { cols.innerHTML = ''; $('wtlNote').textContent = ''; $('wtlNow').hidden = true; return; }
     var now = Date.now(), base = w.base, html = '';
     var lastObs = w.obs.length ? w.obs[w.obs.length - 1][0] : -Infinity;
@@ -3083,6 +3295,17 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   };
   $('stBtn').onclick = openPicker;
   $('pkClose').onclick = closePicker;
+  $('pkMap').onclick = openMap;
+  $('mpClose').onclick = closeMap;
+  $('mpGps').onclick = function () {
+    track('f', 'map_gps');
+    var back = function () {
+      var p = here();
+      if (MAPV && p) MAPV.map.setView([p.lat, p.lon], MAPV.map.getZoom());
+      loadMapLists(); syncMap();
+    };
+    useLocation(true).then(back, back);
+  };
   $('pkQ').oninput = renderPicker;
   $('stFilterSeg').onclick = function (ev) {
     var b = ev.target.closest('button'); if (!b) return;
@@ -3150,10 +3373,14 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     S.river = null; S.riverFor = null;
     renderRiver(); drawCharts(); loadRiver();
   };
+  function setRiverOn(on) {
+    S.showRiver = on; save('river', on ? '1' : '0');
+    renderRiver(); drawCharts(); loadRiver(); loadWQ();
+  }
   $('riverSeg').onclick = function (ev) {
     var b = ev.target.closest('button'); if (!b) return;
-    S.showRiver = b.dataset.r === '1'; save('river', S.showRiver ? '1' : '0');
-    renderRiver(); drawCharts(); loadRiver(); loadWQ();
+    setRiverOn(b.dataset.r === '1');
+    loadMapLists();
   };
   $('datumSeg').onclick = function (ev) {
     var b = ev.target.closest('button'); if (!b || b.disabled) return;

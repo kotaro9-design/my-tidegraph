@@ -185,7 +185,9 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     date_pick: 'カレンダーで日付選択', refresh_btn: '更新ボタン', loc_btn: '現在地ボタン', picker_open: '潮位観測所の一覧を開く',
     picker_select: '潮位観測所を選ぶ', river_sel: '河川の水位観測所を選ぶ', river_list: '河川の水位観測所の一覧', 'river_1': '河川水位・水質：表示',
     'river_0': '河川水位・水質：非表示', datum_table: '高さ：潮位表基準面', datum_tp: '高さ：TP', filter_all: '一覧：すべて', filter_jcg: '一覧：海保のみ',
-    picker_auto: '位置情報なしで一覧を自動で開いた', pred_sel: '推算の地点を手動で選ぶ', pred_auto: '推算の地点を自動に戻す', view_3d: '表示：3日', view_day: '表示：1日', view_h12: '表示：±12h', view_h6: '表示：±6h', view_h3: '表示：±3h', view_h1: '表示：±1h'
+    picker_auto: '位置情報なしで一覧を自動で開いた', pred_sel: '推算の地点を手動で選ぶ', pred_auto: '推算の地点を自動に戻す', view_3d: '表示：3日', view_day: '表示：1日', view_h12: '表示：±12h', view_h6: '表示：±6h', view_h3: '表示：±3h', view_h1: '表示：±1h',
+    map_open: '地図を開く', map_place: '地図で地点を指定', map_tide: '地図で潮位観測所を選ぶ', map_pred: '地図で潮位表の地点を選ぶ', map_river: '地図で河川の水位観測所を選ぶ',
+    map_wq: '地図で水質観測所を選ぶ', map_gps: '地図で現在地に戻す', map_river_on: '地図から河川水位・水質を表示'
   };
   var SITES = {
     'www.jma.go.jp': '気象庁（観測・予報）', 'www.data.jma.go.jp': '気象庁（潮位表）', 'www1.kaiho.mlit.go.jp': '海上保安庁（験潮）',
@@ -354,7 +356,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   var ERRS = {
     getPressure: '気圧', getPredPoints: '推算の地点の一覧',
     getTideData: '潮位データの取得', getStations: '潮位観測所の一覧', getWeather: '天気・気温', getWind: '風の推移・予報',
-    getRiver: '河川水位', getRiverStations: '河川の水位観測所の一覧', getWaterQuality: '水質'
+    getRiver: '河川水位', getRiverStations: '河川の水位観測所の一覧', getWaterQuality: '水質', getWQStations: '水質観測所の一覧'
   };
   function errorsTable(el, er) {
     var rows = Object.keys(er).map(function (k) { var i = k.indexOf(':'); return [k.slice(0, i), k.slice(i + 1), er[k]]; })
@@ -439,7 +441,7 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
   }
   // 表示の速さ：処理ごと
   var PERFS = { load: '起動〜表示（グラフが出るまで）', getPressure: '気圧', getPredPoints: '推算の地点の一覧', getTideData: '潮位データ', getStations: '潮位観測所の一覧', getWeather: '天気',
-    getWind: '風の推移', getRiver: '河川水位', getRiverStations: '河川の水位観測所の一覧', getWaterQuality: '水質' };
+    getWind: '風の推移', getRiver: '河川水位', getRiverStations: '河川の水位観測所の一覧', getWaterQuality: '水質', getWQStations: '水質観測所の一覧' };
   function perfTable(el, pf) {
     var keys = Object.keys(pf).sort(function (a, b) {
       var an = a.slice(2), bn = b.slice(2);

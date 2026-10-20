@@ -312,6 +312,7 @@ function getRiver(lat, lon, fcd) {
     name: st.name,
     river: info.rvrNm || '',
     dist: Math.round(st.d * 10) / 10,
+    lat: st.lat, lon: st.lon,
     tidal: tidal,
     noData: noData,
     url: 'https://www.river.go.jp/kawabou/pc/tm?itmkndCd=4&ofcCd=' + st.ofc + '&obsCd=' + st.obs + '&isCurrent=true&fld=0',
@@ -341,7 +342,7 @@ function getRiverStations(lat, lon) {
   });
   return out;
   });
-  return list.map(function (x) { return { fcd: x.fcd, name: x.name, river: x.river, dist: Math.round(distKm_(lat, lon, x.lat, x.lon) * 10) / 10 }; })
+  return list.map(function (x) { return { fcd: x.fcd, name: x.name, river: x.river, lat: x.lat, lon: x.lon, dist: Math.round(distKm_(lat, lon, x.lat, x.lon) * 10) / 10 }; })
     .sort(function (a, b) { return a.dist - b.dist; });
 }
 
@@ -407,16 +408,53 @@ function riverVals_(ts) {
 
 /**
  * 近くの水質観測所（国土交通省「川の防災情報」）の水温・塩分濃度。
- * 指定位置から 10km 以内に観測所があるときだけ返す。上層・下層など水深別の観測は層ごとに返す。
+ * 指定位置から 10km 以内に観測所があるときだけ返す（fcd で観測所を選んだときは距離によらずその観測所）。
+ * 上層・下層など水深別の観測は層ごとに返す。
  */
-function getWaterQuality(lat, lon) {
+function getWaterQuality(lat, lon, fcd) {
   lat = +lat; lon = +lon;
   checkPos_(lat, lon);
+  if (fcd && !/^\d{13}$/.test(fcd)) throw new Error('水質観測所の指定が不正です');
   var LIMIT_KM = 10;
   // 近くに水質観測所が無いとわかった地点（約5km単位）は、しばらく探しに行かない
   var cache = CacheService.getScriptCache(), noneKey = CACHE_VER + 'wq_none_' + (Math.round(lat * 20) / 20).toFixed(2) + '_' + (Math.round(lon * 20) / 20).toFixed(2);
-  if (cache.get(noneKey)) return null;
-  var none = function () { cache.put(noneKey, '1', 21600); return null; };
+  if (!fcd && cache.get(noneKey)) return null;
+  var none = function () { if (!fcd) cache.put(noneKey, '1', 21600); return null; };
+  // 選んだ観測所は、地図の一覧（getWQStations）と同じ約5km単位の位置の近くから探す
+  var stations = fcd ? wqNearby_(Math.round(lat * 20) / 20, Math.round(lon * 20) / 20) : wqNearby_(lat, lon);
+  var site = fcd ? stations.filter(function (s) { return s.fcd === fcd; })[0] : stations[0];
+  if (!site || (!fcd && site.d > LIMIT_KM)) return none();
+  if (fcd) site.d = distKm_(lat, lon, site.lat, site.lon);
+
+  // 同じ地点の水深別（平均・上層・中層・下層など）をまとめる
+  var siteName = site.name.replace(WQ_LAYER, '');
+  var group = stations.filter(function (s) { return s.name.replace(WQ_LAYER, '') === siteName && distKm_(s.lat, s.lon, site.lat, site.lon) < 0.5; });
+  return wqSite_(site, siteName, group);
+}
+
+// 水深別の観測所の名前の末尾（「波崎上流上層（自動）」のように括弧書きが付くこともある）
+var WQ_LAYER = /(平均|表層|上層|中層|下層|底層)(（[^）]*）)?$/;
+
+/** 地図用：指定位置の近くの水質観測所（水深別は1地点にまとめる、近い順）。約5km単位で6時間共有 */
+function getWQStations(lat, lon) {
+  lat = +lat; lon = +lon;
+  checkPos_(lat, lon);
+  var glat = Math.round(lat * 20) / 20, glon = Math.round(lon * 20) / 20;
+  var list = cached_('wq_list_' + glat.toFixed(2) + '_' + glon.toFixed(2), 6 * 3600, function () {
+    var out = [];
+    wqNearby_(glat, glon).forEach(function (s) {
+      var name = s.name.replace(WQ_LAYER, '');
+      if (out.some(function (x) { return x.name === name && distKm_(x.lat, x.lon, s.lat, s.lon) < 0.5; })) return;
+      out.push({ fcd: s.fcd, name: name, river: s.river, lat: s.lat, lon: s.lon });
+    });
+    return out;
+  });
+  return list.map(function (x) { return { fcd: x.fcd, name: x.name, river: x.river, lat: x.lat, lon: x.lon, dist: Math.round(distKm_(lat, lon, x.lat, x.lon) * 10) / 10 }; })
+    .sort(function (a, b) { return a.dist - b.dist; });
+}
+
+/** 指定位置の近く（市区町村の重心が20km以内）の水質観測所（近い順） */
+function wqNearby_(lat, lon) {
   var towns = cached_('wq_towns', 24 * 3600, function () {
     var a = JSON.parse(fetchAll_([RIVER + 'files/map/twn/twnarea.json'])[0]).towns || [];
     return a.filter(function (t) { return t.qwtrExistFlg; })
@@ -424,7 +462,7 @@ function getWaterQuality(lat, lon) {
   });
   var near = towns.map(function (t) { return [t[0], distKm_(lat, lon, t[1], t[2])]; })
     .filter(function (t) { return t[1] < 20; }).sort(function (a, b) { return a[1] - b[1]; }).slice(0, 4);
-  if (!near.length) return none();
+  if (!near.length) return [];
 
   // 観測所の一覧と位置（位置が未登録のものは住所から求める）
   prefetch_(near.map(function (t) { return ['wq_twn_' + t[0], RIVER + 'files/obslist/obs/twnlist/' + t[0] + '.json', 6 * 3600]; }));
@@ -453,12 +491,12 @@ function getWaterQuality(lat, lon) {
     });
   });
   stations.sort(function (a, b) { return a.d - b.d; });
-  if (!stations.length || stations[0].d > LIMIT_KM) return none();
+  return stations;
+}
 
-  // 同じ地点の水深別（平均・上層・中層・下層など）をまとめる
-  var LAYER = /(平均|表層|上層|中層|下層|底層)$/;
-  var site = stations[0], siteName = site.name.replace(LAYER, '');
-  var group = stations.filter(function (s) { return s.name.replace(LAYER, '') === siteName && s.d - site.d < 0.5; });
+/** 水質観測所（水深別のまとまり）の最新の水温・塩分濃度 */
+function wqSite_(site, siteName, group) {
+  var LAYER = WQ_LAYER;
   var tm = JSON.parse(cachedText_('rv_time', RIVER_TIME_TTL, RIVER + 'system/tmCrntTime.json')).crntObsTime;
   var path = tm.substr(0, 10).replace(/\//g, '') + '/' + tm.substr(11, 5).replace(':', '');
   var wqItems = group.map(function (s) { return ['wq_ts1h_' + s.fcd, RIVER + 'files/tmlist/qwtr/' + path + '/' + s.fcd + '.json', 3600]; });
@@ -478,7 +516,7 @@ function getWaterQuality(lat, lon) {
   }).filter(function (l) { return l.temp || l.salt; })
     .sort(function (a, b) { return order.indexOf(a.layer) - order.indexOf(b.layer); });
   return {
-    name: siteName, river: site.river, place: site.place, dist: Math.round(site.d * 10) / 10,
+    fcd: site.fcd, name: siteName, river: site.river, place: site.place, dist: Math.round(site.d * 10) / 10, lat: site.lat, lon: site.lon,
     url: 'https://www.river.go.jp/kawabou/pc/tm?itmkndCd=6&ofcCd=' + site.ofc + '&obsCd=' + site.obs + '&isCurrent=true&fld=0',
     layers: layers
   };
@@ -1035,7 +1073,7 @@ var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300, lowShare: 0.7 }; 
 // 画面から呼べる処理
 function api_() {
   return { getStations: getStations, getTideData: getTideData, getWeather: getWeather, getRiver: getRiver,
-    getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality, getPredPoints: getPredPoints, getPressure: getPressure };
+    getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality, getWQStations: getWQStations, getPredPoints: getPredPoints, getPressure: getPressure };
 }
 function callWithPre(name, args, pre, ev) {
   if (ev) monRecord_(ev);   // 利用状況（Monitor.gs。書き込みは最後にまとめて）
