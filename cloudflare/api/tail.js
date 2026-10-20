@@ -23,11 +23,16 @@ const __ORIGINS = [
 ];
 
 // 取得先ごとのキャッシュ時間（秒）。kv：全国の拠点で共有する（川の防災情報・海上保安庁は相手の負担を減らすため必ず共有）
+// key：共有キャッシュの見出し（省略時は URL）。川の防災情報の URL には最新の観測時刻（10分ごと）が入るので、
+// 中身が変わらない・毎時の値のものは時刻を外して共有する（Apps Script では名前で6時間・1時間持っていたのと同じ）
+const __RV = /^https:\/\/www\.river\.go\.jp\/kawabou\/file\//, __RV_TIME = /\/\d{8}\/\d{4}\//;
 function __ttlFor(u) {
   if (/www\.river\.go\.jp\/kawabou\/file\/system\/tmCrntTime/.test(u)) return { ttl: 300, kv: true };
+  if (/www\.river\.go\.jp\/kawabou\/file\/files\/tmlist\/qwtr\//.test(u)) return { ttl: 3600, kv: true, key: u.replace(__RV_TIME, '/') };
   if (/www\.river\.go\.jp\/kawabou\/file\/files\/tmlist\//.test(u)) return { ttl: 600, kv: true };
-  if (/www\.river\.go\.jp\/kawabou\/file\/files\/obslist\//.test(u)) return { ttl: 1800, kv: true };
-  if (/www\.river\.go\.jp\/kawabou\/file\/(files\/master|gjson)\//.test(u)) return { ttl: 21600, kv: true };
+  if (/www\.river\.go\.jp\/kawabou\/file\/files\/obslist\//.test(u)) return { ttl: 21600, kv: true };
+  if (/www\.river\.go\.jp\/kawabou\/file\/gjson\//.test(u)) return { ttl: 21600, kv: true, key: u.replace(__RV_TIME, '/') };
+  if (/www\.river\.go\.jp\/kawabou\/file\/files\/master\//.test(u)) return { ttl: 21600, kv: true };
   if (/www\.river\.go\.jp\/kawabou\/file\/files\/map\//.test(u)) return { ttl: 86400, kv: true };
   if (/www1\.kaiho\.mlit\.go\.jp\/TIDE\/gauge\/gauge\.php/.test(u)) return { ttl: 120, kv: true };
   if (/www1\.kaiho\.mlit\.go\.jp\/TIDE\/gauge\/index\.php/.test(u)) return { ttl: 86400, kv: true };
@@ -41,16 +46,36 @@ function __ttlFor(u) {
   if (/msearch\.gsi\.go\.jp|mreversegeocoder/.test(u)) return { ttl: 86400, kv: true };
   return { ttl: 300, kv: false };
 }
+// 利用状況での外部サイトの名前。川の防災情報は種類ごとに分けて数える（どれが多いかを見るため）
+function __siteOf(u) {
+  const host = (/^https?:\/\/([^/?#]+)/.exec(u) || [])[1] || '';
+  if (!__RV.test(u)) return host;
+  const kind = /system\/tmCrntTime/.test(u) ? 'time' : /tmlist\/qwtr\//.test(u) ? 'qwtr' : /tmlist\//.test(u) ? 'stg'
+    : /obslist\/top\//.test(u) ? 'top' : /obslist\//.test(u) ? 'twnlist' : /gjson\//.test(u) ? 'gjson'
+    : /files\/master\//.test(u) ? 'master' : /files\/map\//.test(u) ? 'map' : 'other';
+  return host + '/' + kind;
+}
+// 同じ拠点（実行環境）で同時に同じものを取りに行くときは、1回の取得を分け合う
+const __INFLIGHT = new Map();
 // 1件取る。KV（共有）→ 相手サイトの順。404 は null、失敗は例外
-async function __get(u, env, stat) {
-  const c = __ttlFor(u), kvKey = 'u:' + u;
+function __get(u, env, stat) {
+  const k = (__ttlFor(u).key || u);
+  const p = __INFLIGHT.get(k);
+  if (p) { stat.kv++; return p; }
+  const q = __get1(u, env, stat);
+  __INFLIGHT.set(k, q);
+  q.then(() => __INFLIGHT.delete(k), () => __INFLIGHT.delete(k));
+  return q;
+}
+async function __get1(u, env, stat) {
+  const c = __ttlFor(u), kvKey = 'u:' + (c.key || u);
   if (c.kv && env.CACHE) {
     try {
       const hit = await env.CACHE.get(kvKey);
       if (hit != null) { stat.kv++; return hit === '__404__' ? null : hit; }
     } catch (e) { /* KV が使えなくても続ける */ }
   }
-  const host = (/^https?:\/\/([^/?#]+)/.exec(u) || [])[1] || '';
+  const host = __siteOf(u);
   const res = await fetch(u, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; my-tide-graph; +https://kotaro9-design.github.io/my-tidegraph/)' },
     cf: { cacheTtl: c.ttl, cacheEverything: true }

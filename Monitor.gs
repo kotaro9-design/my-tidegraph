@@ -10,7 +10,7 @@
  */
 
 // 利用状況アプリ（Monitor.gs と admin.html）のバージョン。更新したら CHANGELOG-monitor.md にも書き、monitor-vX.Y.Z のタグを付ける
-var MONITOR_VERSION = '2.2.0', MONITOR_DATE = '2026-10-20';
+var MONITOR_VERSION = '2.3.0', MONITOR_DATE = '2026-10-20';
 
 var MON_HOST_RE = /^[a-z0-9.\-]{3,80}$/;
 // 機能名・エラー名などに使える文字（送られてきた値はこれで絞る）
