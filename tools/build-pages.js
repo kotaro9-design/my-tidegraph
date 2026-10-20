@@ -36,6 +36,10 @@ rep('<meta name="author" content="kotaro9">', [
 
 fs.mkdirSync(OUT, { recursive: true });
 fs.writeFileSync(path.join(OUT, 'index.html'), html);
+// 画面が自分の版と比べる最新の版（index.html と同時に公開されるので、ずれない）
+const ver = /APP_VERSION = '([\d.]+)', APP_DATE = '([\d-]+)'/.exec(html);
+if (!ver) throw new Error('APP_VERSION が見つかりません');
+fs.writeFileSync(path.join(OUT, 'version.json'), JSON.stringify({ version: ver[1], date: ver[2] }) + '\n');
 ['icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'].forEach(f => fs.copyFileSync(path.join(ROOT, f), path.join(OUT, f)));
 fs.writeFileSync(path.join(OUT, 'manifest.webmanifest'), JSON.stringify({
   name: NAME,

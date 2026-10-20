@@ -4,6 +4,9 @@
 「monitor v大きな変更.機能追加.修正」でバージョンを付けます。管理画面の見出しに表示しているのは `Monitor.gs` の `MONITOR_VERSION` / `MONITOR_DATE` です。
 GitHub のタグは `monitor-vX.Y.Z` です。本体の更新履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
+## monitor v2.5.2（2026/10/21）— 本体 v2.3.6
+- 機能の名前に「新しい版の「更新」を押した」
+
 ## monitor v2.5.1（2026/10/21）— 本体 v2.3.5
 - 「データ元の失敗」に時間切れ（timeout）：サーバーでは外部サイトの取得が10秒で終わらなかったとき、画面では Workers から30秒返事がなかったとき
 

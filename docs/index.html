@@ -228,6 +228,12 @@ footer a { color: var(--text-2); }
 
 .notice { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--text-2); margin: 8px 0; display: none; }
 .notice.show { display: block; }
+/* 新しい版があるときの案内（自動で再読み込みしない場面だけ） */
+.upd-bar { position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 10px;
+  width: max-content; max-width: calc(100% - 32px); padding: 10px 12px 10px 14px; border-radius: 14px; background: var(--text); color: var(--bg); font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+.upd-bar[hidden] { display: none; }
+.upd-bar button { flex: none; border: 0; border-radius: 9px; padding: 7px 12px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+.upd-bar .x { background: none; color: inherit; opacity: .7; padding: 4px 6px; }
 .loading { opacity: .45; transition: opacity .2s; }
 
 /* 水質 */
@@ -409,6 +415,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
 <main class="wrap" id="app">
   <div class="notice" id="notice"></div>
+  <div class="upd-bar" id="updBar" role="status" hidden><span id="updTxt">新しい版があります</span><button type="button" id="updGo">更新</button><button type="button" class="x" id="updX" aria-label="閉じる">×</button></div>
   <a class="moved" id="moved" href="https://kotaro9-design.github.io/my-tidegraph/" target="_top" hidden>
     <span><b>新しい URL に移転しました</b><br>表示が速く、ホーム画面に専用アイコンで追加できます。起動時に、「このアプリケーションはGoogle Apps Scriptユーザーによって作成されたものです」のメッセージが表示されなくなります。</span>
     <span class="go">開く</span>
@@ -923,7 +930,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.3.5', APP_DATE = '2026-10-21';
+  var APP_VERSION = '2.3.6', APP_DATE = '2026-10-21';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -3530,7 +3537,56 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   }, 60e3);
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden && !S.date && Date.now() - S.lastFetch > 2 * MIN) refresh(true);
+    if (!document.hidden) checkVersion('resume');
   });
+
+  /* ---------- 新しい版の確認（GitHub Pages の version.json と比べ、古ければ読み直す） ---------- */
+  // 起動時・ホーム画面のアプリに戻ってきたとき・開いている間は30分ごとに確かめる。
+  // 釣果記録などの画面を開いている、地図で地点を指定している、別の日を表示しているときは、
+  // 入力や表示を消さないよう自動では読み直さず、画面の下に「更新」を出す
+  var VER_CHECK_MS = 30 * MIN, verChecked = 0, verLatest = null;
+  function verNewer(a, b) {   // a が b より新しいか（"2.3.10" のような版番号）
+    var x = String(a).split('.'), y = String(b).split('.');
+    for (var i = 0; i < 3; i++) { var d = (+x[i] || 0) - (+y[i] || 0); if (d) return d > 0; }
+    return false;
+  }
+  function verSafeToReload() {
+    var open = Array.prototype.some.call(document.querySelectorAll('dialog'), function (d) { return d.hasAttribute('open'); });
+    return !open && !S.place && !S.date && !cfPhotos.length;
+  }
+  function verReload(v) {
+    // 同じ版のために何度も読み直さない（キャッシュで古い版が返ってきたとき）
+    try { if (sessionStorage.getItem('tide_upd_try') === v) return false; sessionStorage.setItem('tide_upd_try', v); } catch (e) { /* 使えない環境 */ }
+    // キャッシュを避けるため、版番号つきのアドレスで開き直す（開いたあとで元のアドレスに戻す）
+    var q = location.search.replace(/([?&])v=[^&]*&?/, '$1').replace(/[?&]$/, '');
+    location.replace(location.pathname + (q ? q + '&' : '?') + 'v=' + encodeURIComponent(v) + location.hash);
+    return true;
+  }
+  function checkVersion(why) {
+    if (!/github\.io$|^localhost$/.test(location.hostname) || !window.fetch) return;   // Apps Script の画面では使わない
+    if (why !== 'start' && Date.now() - verChecked < (why === 'resume' ? 5 * MIN : VER_CHECK_MS)) return;
+    verChecked = Date.now();
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !j.version || !verNewer(j.version, APP_VERSION)) return;
+      verLatest = j.version;
+      if (verSafeToReload() && verReload(j.version)) return;
+      $('updTxt').textContent = '新しい版（v' + j.version + '）があります';
+      $('updBar').hidden = false;
+    }).catch(function () { /* 次の確認で */ });
+  }
+  $('updGo').onclick = function () {
+    track('f', 'update_btn');
+    try { sessionStorage.removeItem('tide_upd_try'); } catch (e) { /* 使えない環境 */ }
+    if (verLatest) verReload(verLatest); else location.reload();
+  };
+  $('updX').onclick = function () { $('updBar').hidden = true; };
+  // 版番号つきのアドレスで開き直したときは、元のアドレスに戻す（ホーム画面・ブックマークのアドレスを変えない）
+  if (/[?&]v=/.test(location.search) && history.replaceState) {
+    var q0 = location.search.replace(/([?&])v=[^&]*&?/, '$1').replace(/[?&]$/, '');
+    history.replaceState(null, '', location.pathname + q0 + location.hash);
+  }
+  setInterval(function () { if (!document.hidden) checkVersion('timer'); }, 5 * MIN);
+  checkVersion('start');   // 古ければ、データを読み込む前に開き直す
 
   /* ---------- boot ---------- */
   var predPointsReady = run('getPredPoints').then(function (pts) { S.predPoints = pts || []; }, function () { S.predPoints = []; });
