@@ -797,7 +797,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.1.0', APP_DATE = '2026-10-20';
+  var APP_VERSION = '2.1.1', APP_DATE = '2026-10-20';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -1247,10 +1247,24 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     S.rtFrom = o.start + first * o.step;
   }
   // 補正予測に使う偏差。近くの地点の速報があれば、実測の最新時刻からその時刻にかけて移行させる
+  // 実測が30分以上まったく同じ値のまま（観測機器の不調）。潮位は30分あれば必ず少しは動く
+  function obsStuck() {
+    var o = S.data.obs, n = o.tide.length, v = n ? o.tide[n - 1] : null, k = 0;
+    if (v == null) return false;
+    for (var i = n - 1; i >= 0 && o.tide[i] === v; i--) k++;
+    return k >= 30;
+  }
+  // 近くの地点の偏差。この観測所の偏差と30cm以上違うときは、近くの地点の異常値とみなして使わない
+  function nearDep() {
+    var n = S.data.near, lo = latestObs();
+    if (!n || n.dep == null || Date.now() - n.t >= 3 * HOUR) return null;
+    if (lo && lo.dep != null && !obsStuck() && Math.abs(n.dep - lo.dep) > 30) { quality('near_outlier:' + S.st.c); return null; }
+    return n;
+  }
   function depAt(t) {
-    var lo = latestObs(), n = S.data.near, now = Date.now();
-    var nOk = n && now - n.t < 3 * HOUR;
-    if (!lo || lo.dep == null || now - lo.t >= 3 * HOUR) return nOk ? n.dep : null;
+    var lo = latestObs(), n = nearDep(), now = Date.now();
+    var nOk = !!n;
+    if (!lo || lo.dep == null || now - lo.t >= 3 * HOUR || obsStuck()) return nOk ? n.dep : null;
     if (nOk && n.t > lo.t) return lo.dep + (n.dep - lo.dep) * Math.min(1, Math.max(0, (t - lo.t) / (n.t - lo.t)));
     return lo.dep;
   }
@@ -1615,16 +1629,18 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       if (stale) quality('tide_stale:' + S.st.c);
       $('curTide').innerHTML = fmtH(lo.tide) + unit;
       // 推算は観測と同じ時刻の値で比べる。現在時刻の値は「推算＋直近の偏差」で推定
-      var a = (S.data._obsCurve || S.curve)(lo.t), an = S.curve(now), dn = depAt(now), nr = S.data.near;
+      var a = (S.data._obsCurve || S.curve)(lo.t), an = S.curve(now), dn = depAt(now), nr = nearDep(), stuck = obsStuck();
+      if (stuck) quality('tide_stuck:' + S.st.c);
       var isRt = S.rtFrom != null && lo.t >= S.rtFrom;
       $('curTideSub').innerHTML = esc(hm(lo.t) + ' 観測') + '<br>' + esc(dur(now - lo.t) + '前') +
         '<br>' + (stale ? '<span class="tag warn">⚠ 更新停止</span>' : '<span class="tag">' + (useTable() ? '基準面' : 'TP') + '</span>');
       var alt = S.data.near && S.data.near.fallback ? '近くの「' + S.data.near.src + '」など、' : '';
       var staleMsg = stale ? '⚠ この潮位観測所の観測データは ' + hm(lo.t) + ' から更新されていません（配信元の停止または欠測）。' +
-        alt + '他の潮位観測所に変更してください（画面左上の潮位観測所名をタップすると選べます）。' : '';
+        alt + '他の潮位観測所に変更してください（画面左上の潮位観測所名をタップすると選べます）。' :
+        stuck ? '⚠ この潮位観測所の観測値が30分以上同じ値のままです（観測機器の不調の可能性）。偏差補正予測には使っていません。' : '';
       note.push(hm(lo.t) + ' 観測' + (isRt ? '（海上保安庁 速報）' : '（気象庁）') + '・同時刻の推算 ' + fmtH(a) + 'cm' + (S.data.pred ? '（潮位観測所「' + S.st.n + '」）' : ''));
       if (an != null && dn != null) note.push('現在 ' + hm(now) + ' の推定 ' + fmtH(an + dn) + 'cm' +
-        (nr && nr.t > lo.t ? '（' + nr.src + (nr.fallback ? '（' + fmtKm(nr.dist) + '）' : '') + ' ' + hm(nr.t) + (nr.fallback ? ' の偏差 ' : ' の速報偏差 ') + fmtDev(nr.dep) + ' を使用）' : ''));
+        (nr && (nr.t > lo.t || stuck) ? '（' + nr.src + (nr.fallback ? '（' + fmtKm(nr.dist) + '）' : '') + ' ' + hm(nr.t) + (nr.fallback ? ' の偏差 ' : ' の速報偏差 ') + fmtDev(nr.dep) + ' を使用）' : ''));
       $('curDev').innerHTML = fmtDev(lo.dep) + unit;
       var dv = Math.round(lo.dep || 0);
       $('curDevSub').innerHTML = lo.dep == null ? '' : esc('推算より') + '<br>' +
