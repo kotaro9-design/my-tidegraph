@@ -130,6 +130,13 @@ Apps Script の Web アプリは独自のページ枠の中で動くため、ホ
 - 利用状況アプリのバージョンは本体とは別に管理します（`Monitor.gs` の `MONITOR_VERSION`、[CHANGELOG-monitor.md](CHANGELOG-monitor.md)、タグ `monitor-vX.Y.Z`）
 - 管理画面：`/exec?admin=合言葉`（要約：`&format=json` または `&format=text`、期間：`&days=7`）（合言葉はスクリプト プロパティ `ADMIN_KEY`）
 
+### サーバー（Cloudflare Workers「tide-api」、v2.1.0〜）
+
+- 画面は `https://tide-api.kotaro9.workers.dev/api` にまとめた呼び出し（`callBatch`）を送ります。Workers につながらないときは2分間、従来の Apps Script に切り替えます
+- [cloudflare/api/worker.js](cloudflare/api/worker.js) は `node tools/build-worker.js` で組み立てます（[head.js](cloudflare/api/head.js)＋Code.gs＋Monitor.gs＋[tail.js](cloudflare/api/tail.js)）。Code.gs・Monitor.gs を直したら組み立て直して Workers にも貼り付けます
+- 外部データは Workers 自身が取得し、川の防災情報・海上保安庁・潮位表などは KV（バインディング `CACHE`）で全国の拠点と共有します
+- 利用状況は D1（バインディング `DB`、テーブル `mon`）に記録します。要約：`GET /monitor?key=合言葉&days=2`（合言葉は Workers のシークレット `ADMIN_KEY`）
+
 ### 中継（Cloudflare Workers）
 
 - [cloudflare/worker.js](cloudflare/worker.js)：ブラウザから直接取れない川の防災情報・海上保安庁の験潮データを中継します（`https://tide-proxy.kotaro9.workers.dev/?u=…`）
