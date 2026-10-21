@@ -268,14 +268,15 @@ footer a { color: var(--text-2); }
 .wloc .wtl-map::after { opacity: .35; }
 .wloc-mk { position: absolute; z-index: 2; transform: translate(-50%, -50%); }
 .wloc-mk.here { width: 12px; height: 12px; border-radius: 50%; background: #e34948; box-shadow: 0 0 0 3px #fff, 0 1px 4px rgba(0,0,0,.4); }
-.wloc-mk.obs { width: 11px; height: 11px; background: var(--text); box-shadow: 0 0 0 2px var(--surface); }
-.wloc-mk.grid { width: 11px; height: 11px; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); transform: translate(-50%, -50%) rotate(45deg); }
+/* 色は上の矢印と同じ：実況（アメダス）＝水色、モデル計算値＝灰色 */
+.wloc-mk.obs { width: 11px; height: 11px; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
+.wloc-mk.grid { width: 11px; height: 11px; background: var(--text-3); box-shadow: 0 0 0 2px var(--surface); transform: translate(-50%, -50%) rotate(45deg); }
 .wloc-lb { position: absolute; z-index: 3; font-size: 11px; line-height: 1.3; color: var(--text); background: var(--surface); border-radius: 6px; padding: 1px 5px; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 .wloc-leg { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; color: var(--text-2); margin-top: 4px; }
 .wloc-leg i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; vertical-align: -1px; }
 .wloc-leg i.here { border-radius: 50%; background: #e34948; }
-.wloc-leg i.obs { background: var(--text); }
-.wloc-leg i.grid { background: var(--accent); transform: rotate(45deg) scale(.85); }
+.wloc-leg i.obs { background: var(--accent); }
+.wloc-leg i.grid { background: var(--text-3); transform: rotate(45deg) scale(.85); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wtl-map img { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); } }
 :root[data-theme="dark"] .wtl-map img { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); }
 
@@ -790,7 +791,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
     <h3 id="g-wind">風・水質</h3>
     <dl>
-      <dt>風の推移（アメダスの実況・気象庁モデルの計算値）</dt><dd>0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（近くのアメダスの観測値）、薄い矢印が数値予報モデル（気象庁 MSM/GSM）の格子点の計算値、赤い線が現在時刻です。下の地図に、現在地（赤い丸）と、実況のアメダスの観測点（黒い四角）、モデルの格子点（青いひし形）の位置と距離を示します。どちらも現在地そのものの値ではありません。モデルの計算値は予報ではなく、大きな誤差を含むことがあります。</dd>
+      <dt>風の推移（アメダスの実況・気象庁モデルの計算値）</dt><dd>0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（近くのアメダスの観測値）、薄い矢印が数値予報モデル（気象庁 MSM/GSM）の格子点の計算値、赤い線が現在時刻です。下の地図に、現在地（赤い丸）と、実況のアメダスの観測点（水色の四角）、モデルの格子点（灰色のひし形）の位置と距離を示します。印の色は矢印の色と同じです。どちらも現在地そのものの値ではありません。モデルの計算値は予報ではなく、大きな誤差を含むことがあります。</dd>
       <dt>風（地上の観測）</dt><dd>近くのアメダスの最新の風速・風向・最大瞬間風速と、気象庁の予報の風・波です。</dd>
       <dt>海面水温（推定）</dt><dd>近くの海の海面水温と、24時間前との差、明日のモデル計算値の範囲です。約8km四方の解析・予報モデルの値なので、湾奥・河口・岸近くの実際の水温とは差があることがあります。どの海域の値かはカードの下に表示します。</dd>
       <dt>水質</dt><dd>「表示の設定」の「河川水位・水質の表示」が「表示」で、現在地から10km以内に水質観測所があるときだけ、水温・塩分濃度を表示します（地図で水質観測所を選んだときは、その観測所）。</dd>
@@ -960,7 +961,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.4.0', APP_DATE = '2026-10-22';
+  var APP_VERSION = '2.4.1', APP_DATE = '2026-10-22';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
