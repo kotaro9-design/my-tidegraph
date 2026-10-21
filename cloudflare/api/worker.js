@@ -793,7 +793,7 @@ function getWind(lat, lon, dateStr) {
       });
       if (pts.length) {
         out.obs = pts.sort(function (a, b) { return a[0] - b[0]; });
-        out.station = { name: s[1], dist: Math.round(near[i].d * 10) / 10 };
+        out.station = { name: s[1], dist: Math.round(near[i].d * 10) / 10, lat: s[2], lon: s[3] };
         break;
       }
     }
@@ -806,6 +806,8 @@ function getWind(lat, lon, dateStr) {
       '&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m&wind_speed_unit=ms&timezone=Asia%2FTokyo' +
       '&models=jma_seamless&past_days=2&forecast_days=4';
     var j = JSON.parse(cachedText_(key, 1800, url));
+    // 実際に使われたモデルの格子点（Open-Meteo が返す）。画面でどこの値かを示すため
+    if (j.latitude != null) out.grid = { lat: j.latitude, lon: j.longitude, dist: Math.round(distKm_(lat, lon, j.latitude, j.longitude) * 10) / 10 };
     var hr = j.hourly || {};
     (hr.time || []).forEach(function (t, k) {
       var ms = Date.parse(t + ':00+09:00');
@@ -831,7 +833,7 @@ function getPressure(lat, lon) {
     var st = null;
     presTable_().forEach(function (s) {
       var d = distKm_(lat, lon, s[2], s[3]);
-      if (d < 80 && (!st || d < st.dist)) st = { code: s[0], name: s[1], dist: Math.round(d * 10) / 10 };
+      if (d < 80 && (!st || d < st.dist)) st = { code: s[0], name: s[1], dist: Math.round(d * 10) / 10, lat: s[2], lon: s[3] };
     });
     if (st) {
       out.station = st;
@@ -859,6 +861,7 @@ function getPressure(lat, lon) {
     var la = lat.toFixed(2), lo = lon.toFixed(2);
     var j = JSON.parse(cachedText_('om_p_' + la + '_' + lo, 1800, OPEN_METEO + '?latitude=' + la + '&longitude=' + lo +
       '&hourly=pressure_msl&past_days=3&forecast_days=3&models=jma_seamless&timeformat=unixtime&timezone=GMT'));
+    if (j.latitude != null) out.grid = { lat: j.latitude, lon: j.longitude, dist: Math.round(distKm_(lat, lon, j.latitude, j.longitude) * 10) / 10 };
     var h = j.hourly || {};
     (h.time || []).forEach(function (t, i) { if (h.pressure_msl[i] != null) out.fc.push([t * 1000, h.pressure_msl[i]]); });
   } catch (e) { rethrowNeed_(e); out.fcError = String(e.message || e); }

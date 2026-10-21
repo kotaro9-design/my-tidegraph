@@ -252,6 +252,19 @@ footer a { color: var(--text-2); }
 .wtl-now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #e34948; z-index: 3; }
 .wtl-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-3); padding: 2px 0 0; }
 .wtl-note { font-size: 11px; color: var(--text-3); margin-top: 4px; line-height: 1.5; }
+/* 実況・モデル計算値の位置（現在地・アメダスの観測点・モデルの格子点） */
+.wloc { position: relative; height: 130px; margin-top: 8px; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
+.wloc .wtl-map::after { opacity: .35; }
+.wloc-mk { position: absolute; z-index: 2; transform: translate(-50%, -50%); }
+.wloc-mk.here { width: 12px; height: 12px; border-radius: 50%; background: #e34948; box-shadow: 0 0 0 3px #fff, 0 1px 4px rgba(0,0,0,.4); }
+.wloc-mk.obs { width: 11px; height: 11px; background: var(--text); box-shadow: 0 0 0 2px var(--surface); }
+.wloc-mk.grid { width: 11px; height: 11px; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); transform: translate(-50%, -50%) rotate(45deg); }
+.wloc-lb { position: absolute; z-index: 3; font-size: 11px; line-height: 1.3; color: var(--text); background: var(--surface); border-radius: 6px; padding: 1px 5px; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.wloc-leg { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; color: var(--text-2); margin-top: 4px; }
+.wloc-leg i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; vertical-align: -1px; }
+.wloc-leg i.here { border-radius: 50%; background: #e34948; }
+.wloc-leg i.obs { background: var(--text); }
+.wloc-leg i.grid { background: var(--accent); transform: rotate(45deg) scale(.85); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wtl-map img { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); } }
 :root[data-theme="dark"] .wtl-map img { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); }
 
@@ -549,13 +562,15 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div class="wtl-note" id="wqNote"></div>
     </div>
     <div class="card wtl-card">
-      <div class="lbl" id="wtlLbl">風の推移（実況・モデル計算値）</div>
+      <div class="lbl" id="wtlLbl">風の推移（アメダスの実況・気象庁モデルの計算値）</div>
       <div class="wtl">
         <div class="wtl-map" id="wtlMap" aria-hidden="true"></div>
         <div class="wtl-cols" id="wtlCols"></div>
         <div class="wtl-now" id="wtlNow" hidden></div>
       </div>
       <div class="wtl-axis num"><span>0</span><span>3</span><span>6</span><span>9</span><span>12</span><span>15</span><span>18</span><span>21</span><span>24</span></div>
+      <div class="wloc" id="wloc" aria-label="実況とモデル計算値の位置"><div class="wtl-map" id="wlocMap"></div></div>
+      <div class="wloc-leg"><span><i class="here"></i><span id="wlocHere">現在地</span></span><span><i class="obs"></i>実況：アメダスの観測点</span><span><i class="grid"></i>モデル計算値：気象庁モデルの格子点</span></div>
       <div class="wtl-note" id="wtlNote"></div>
     </div>
     <div class="card">
@@ -764,7 +779,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
     <h3 id="g-wind">風・水質</h3>
     <dl>
-      <dt>風の推移（実況・モデル計算値）</dt><dd>現在地の地図の上に、0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（アメダス）、薄い矢印が数値予報モデル（気象庁 MSM/GSM）の計算値、赤い線が現在時刻です。モデルの計算値は予報ではなく、大きな誤差を含むことがあります。</dd>
+      <dt>風の推移（アメダスの実況・気象庁モデルの計算値）</dt><dd>0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（近くのアメダスの観測値）、薄い矢印が数値予報モデル（気象庁 MSM/GSM）の格子点の計算値、赤い線が現在時刻です。下の地図に、現在地（赤い丸）と、実況のアメダスの観測点（黒い四角）、モデルの格子点（青いひし形）の位置と距離を示します。どちらも現在地そのものの値ではありません。モデルの計算値は予報ではなく、大きな誤差を含むことがあります。</dd>
       <dt>風（地上の観測）</dt><dd>近くのアメダスの最新の風速・風向・最大瞬間風速と、気象庁の予報の風・波です。</dd>
       <dt>海面水温（推定）</dt><dd>近くの海の海面水温と、24時間前との差、明日のモデル計算値の範囲です。約8km四方の解析・予報モデルの値なので、湾奥・河口・岸近くの実際の水温とは差があることがあります。どの海域の値かはカードの下に表示します。</dd>
       <dt>水質</dt><dd>「表示の設定」の「河川水位・水質の表示」が「表示」で、現在地から10km以内に水質観測所があるときだけ、水温・塩分濃度を表示します（地図で水質観測所を選んだときは、その観測所）。</dd>
@@ -934,7 +949,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.3.9', APP_DATE = '2026-10-21';
+  var APP_VERSION = '2.4.0', APP_DATE = '2026-10-22';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -2433,7 +2448,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var key = p.lat.toFixed(2) + ',' + p.lon.toFixed(2);
     if (!force && S.presKey === key && Date.now() - S.presAt < 9 * MIN) return Promise.resolve();
     return run('getPressure', p.lat, p.lon).then(function (r) {
-      S.presSt = r.station;
+      S.presSt = r.station; S.presGrid = r.grid || null;
       S.presObs = r.obs && r.obs.length ? r.obs : null;
       S.presFc = r.fc && r.fc.length ? r.fc : null;
       S.presKey = key; S.presAt = Date.now();
@@ -2474,8 +2489,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var hasObs = !!(S.presObs && S.presObs.length), hasFc = !!(S.presFc && S.presFc.length);
     $('presObsLeg').hidden = !hasObs; $('presFcLeg').hidden = !hasFc;
     if (st) $('presObsTxt').textContent = '実測（' + st.name + '・' + fmtKm(st.dist) + '）';
-    $('presFcTxt').textContent = nearLbl(p) + 'のモデル計算値';
-    $('presNote').textContent = '実測は気象庁「' + (st ? st.name : '近くの気象台') + '」の海面気圧（10分ごと）、破線は Open-Meteo による数値予報モデル（気象庁 MSM/GSM）の計算値（1時間ごと。予報ではなく、大きな誤差を含むことがあります）。' +
+    var gd = S.presGrid, ref = p ? p.lbl : '現在地';
+    $('presFcTxt').textContent = '気象庁モデルの格子点の計算値' + (gd ? '（' + fmtKm(gd.dist) + '）' : '');
+    $('presNote').textContent = '実測は気象庁「' + (st ? st.name : '近くの気象台') + '」の海面気圧（10分ごと' + (st ? '、' + ref + 'から' + fmtKm(st.dist) : '') + '）、破線は気象庁の数値予報モデル（MSM/GSM）の格子点の計算値（Open-Meteo、1時間ごと' + (gd ? '、' + ref + 'から' + fmtKm(gd.dist) : '') + '。予報ではなく、大きな誤差を含むことがあります）。' +
       '気圧が1 hPa 下がると潮位は約1 cm 上がります（吸い上げ効果、1013 hPa 基準の目安）。';
   }
   function drawPres() {
@@ -2934,14 +2950,58 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
           Math.round(tx * 256 - left) + 'px;top:' + Math.round(ty * 256 - top) + 'px">';
       }
     }
-    box.innerHTML = html + '<span class="wtl-pin" title="' + p.lbl + '"></span>';
+    box.innerHTML = html;
     box.dataset.key = p.lat.toFixed(4) + ',' + p.lon.toFixed(4) + ',' + W + 'x' + H;
+  }
+  // 実況・モデル計算値がどこの値かを示す地図（現在地・アメダスの観測点・モデルの格子点が収まる縮尺）
+  function renderWindLoc() {
+    var box = $('wloc'), map = $('wlocMap'), p = here(), w = S.wind;
+    $('wlocHere').textContent = p ? p.lbl : '現在地';
+    Array.prototype.slice.call(box.querySelectorAll('.wloc-mk, .wloc-lb')).forEach(function (e) { e.remove(); });
+    if (!p) { map.innerHTML = ''; return; }
+    var pts = [{ k: 'here', lat: p.lat, lon: p.lon, t: p.lbl }];
+    if (w && w.station && w.station.lat != null) pts.push({ k: 'obs', lat: w.station.lat, lon: w.station.lon, t: 'アメダス「' + w.station.name + '」 ' + fmtKm(w.station.dist) });
+    if (w && w.grid) pts.push({ k: 'grid', lat: w.grid.lat, lon: w.grid.lon, t: 'モデル格子点 ' + fmtKm(w.grid.dist) });
+    var W = box.clientWidth, H = box.clientHeight;
+    if (!W) return;
+    var xy = function (la, lo, z) { var n = Math.pow(2, z) * 256, s = Math.sin(la * Math.PI / 180); return [(lo + 180) / 360 * n, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n]; };
+    // 3点が余白つきで収まる一番大きい縮尺（13〜7）
+    var z = 13;
+    for (; z > 7; z--) {
+      var q = pts.map(function (o) { return xy(o.lat, o.lon, z); });
+      var xs = q.map(function (a) { return a[0]; }), ys = q.map(function (a) { return a[1]; });
+      if (Math.max.apply(null, xs) - Math.min.apply(null, xs) < W - 170 && Math.max.apply(null, ys) - Math.min.apply(null, ys) < H - 44) break;
+    }
+    var qq = pts.map(function (o) { return xy(o.lat, o.lon, z); });
+    var cx = (Math.max.apply(null, qq.map(function (a) { return a[0]; })) + Math.min.apply(null, qq.map(function (a) { return a[0]; }))) / 2;
+    var cy = (Math.max.apply(null, qq.map(function (a) { return a[1]; })) + Math.min.apply(null, qq.map(function (a) { return a[1]; }))) / 2;
+    var left = cx - W / 2, top = cy - H / 2, html = '';
+    for (var tx = Math.floor(left / 256); tx <= Math.floor((left + W) / 256); tx++) {
+      for (var ty = Math.floor(top / 256); ty <= Math.floor((top + H) / 256); ty++) {
+        var tile = 'https://cyberjapandata.gsi.go.jp/xyz/pale/' + z + '/' + tx + '/' + ty + '.png';
+        if (!TILE_SEEN[tile]) { TILE_SEEN[tile] = 1; countHost(tile); }
+        html += '<img alt="" src="' + tile + '" style="left:' + Math.round(tx * 256 - left) + 'px;top:' + Math.round(ty * 256 - top) + 'px">';
+      }
+    }
+    map.innerHTML = html;
+    // 印と名前。名前は印の右（右端に近いときは左）に置き、重なるときは上下にずらす
+    var used = [];
+    pts.forEach(function (o, i) {
+      var x = qq[i][0] - left, y = qq[i][1] - top;
+      box.insertAdjacentHTML('beforeend', '<span class="wloc-mk ' + o.k + '" style="left:' + x.toFixed(0) + 'px;top:' + y.toFixed(0) + 'px"></span>');
+      var right = x < W - 150, ly = y - 9;
+      used.forEach(function (u) { if (Math.abs(u - ly) < 18) ly = u + 18; });
+      ly = Math.min(Math.max(ly, 2), H - 20);
+      used.push(ly);
+      box.insertAdjacentHTML('beforeend', '<span class="wloc-lb" style="' + (right ? 'left:' + (x + 10).toFixed(0) : 'right:' + (W - x + 10).toFixed(0)) + 'px;top:' + ly.toFixed(0) + 'px">' + esc(o.t) + '</span>');
+    });
   }
   function renderWind() {
     var w = S.wind, cols = $('wtlCols'), p = here();
     var mk = p ? p.lat.toFixed(4) + ',' + p.lon.toFixed(4) + ',' + $('wtlMap').clientWidth + 'x' + $('wtlMap').clientHeight : '';
     if ($('wtlMap').dataset.key !== mk) renderWindMap();
-    $('wtlLbl').textContent = '風の推移（実況・モデル計算値）' + (p ? '（' + nearLbl(p) + '）' : '');
+    $('wtlLbl').textContent = '風の推移（アメダスの実況・気象庁モデルの計算値）';
+    renderWindLoc();
     if (!w) { cols.innerHTML = ''; $('wtlNote').textContent = ''; $('wtlNow').hidden = true; return; }
     var now = Date.now(), base = w.base, html = '';
     var lastObs = w.obs.length ? w.obs[w.obs.length - 1][0] : -Infinity;
@@ -2968,8 +3028,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (now >= base && now < base + DAY) { nowEl.hidden = false; nowEl.style.left = ((now - base) / DAY * 100) + '%'; }
     else nowEl.hidden = true;
     var notes = [];
-    if (w.station) notes.push('実況：アメダス「' + w.station.name + '」（' + fmtKm(w.station.dist) + '）');
-    if (w.fc.length) notes.push('モデル計算値：Open-Meteo（気象庁の数値予報モデル MSM/GSM。予報ではなく、大きな誤差を含むことがあります）');
+    var ref = p ? p.lbl : '現在地';
+    if (w.station) notes.push('実況：アメダス「' + w.station.name + '」の観測値（' + ref + 'から' + fmtKm(w.station.dist) + '）');
+    if (w.fc.length) notes.push('モデル計算値：気象庁の数値予報モデル（MSM/GSM）の格子点の値（Open-Meteo' + (w.grid ? '、' + ref + 'から' + fmtKm(w.grid.dist) : '') + '）。予報ではなく、大きな誤差を含むことがあります');
     notes.push('地図：地理院タイル');
     $('wtlNote').textContent = notes.join(' / ') + '。濃い矢印が実況、薄い矢印がモデル計算値。矢印は風の吹いていく向き。';
   }
