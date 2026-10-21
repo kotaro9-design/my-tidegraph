@@ -338,6 +338,7 @@ footer a { color: var(--text-2); }
 .guide-tbl { border-collapse: collapse; width: 100%; font-size: 13px; }
 .guide-tbl th, .guide-tbl td { border-bottom: 1px solid var(--border); padding: 6px 4px; text-align: left; vertical-align: top; }
 .guide-tbl th { white-space: nowrap; padding-right: 10px; }
+.guide-tbl.wrap th { white-space: normal; width: 32%; }
 .guide-foot { color: var(--text-3); font-size: 12px; margin-top: 18px !important; }
 /* ホーム画面に追加する手順の図（画面のイメージ） */
 .guide h4.gh-os { font-size: 14px; margin: 14px 0 4px; }
@@ -621,6 +622,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     潮位：気象庁「<a href="https://www.jma.go.jp/bosai/map.html#contents=tidelevel" target="_blank" rel="noopener">潮位観測情報</a>」（気象庁・国土交通省港湾局・海上保安庁・国土地理院 等の潮位観測所＝検潮所）、
     気象庁「<a href="https://www.data.jma.go.jp/kaiyou/db/tide/suisan/" target="_blank" rel="noopener">潮位表</a>」。
     天気・風：気象庁「<a href="https://www.jma.go.jp/bosai/forecast/" target="_blank" rel="noopener">天気予報</a>」「<a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" rel="noopener">アメダス</a>」（気象の観測所）、地域の判定に国土地理院「逆ジオコーダ」を利用。
+    気象庁のデータは、出典：気象庁ホームページ（潮位観測情報・潮位表・天気予報・アメダス）を加工して作成（潮位偏差・推算潮位の曲線・満潮干潮・潮の動きの計算、グラフ化。天気予報の文章は加工せずに表示）。
     河川水位・水質：出典：国土交通省 <a href="https://www.river.go.jp/" target="_blank" rel="noopener">川の防災情報ホームページ</a>（https://www.river.go.jp/）を加工して作成（観測値をグラフ化し、潮位と重ねて表示）。河川水位は現在地から一番近い河川の水位観測所（位置が取れない場合は表示中の潮位観測所の位置から。T.P.基準）、水質（水温・塩分濃度）は水質観測所（水位観測所とは別の観測所。10km以内にある場合のみ表示）。観測直後の値のため、機器の故障などによる異常値が含まれることがあります。
     風・気圧のモデル計算値：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁の数値予報モデル MSM/GSM の計算結果、CC BY 4.0）。海面水温：Open-Meteo Marine（解析・予報モデルによる推定値、CC BY 4.0）。気圧の実測：気象庁「アメダス」（気象台などの海面気圧）。数値予報モデルの計算値は予報ではなく、大きな誤差を含むことがあります。地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>。
     日の出・日の入り・薄明（常用薄明＝太陽高度−6°、天文薄明＝−18°）は計算値（誤差1〜2分程度）。「薄明」の2つの時刻は、朝は天文薄明・常用薄明、夕は常用薄明・天文薄明の順です。
@@ -741,6 +743,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <button data-jump="g-words">用語</button>
       <button data-jump="g-home">スマホのアプリとして使う</button>
       <button data-jump="g-trouble">困ったときは</button>
+      <button data-jump="g-privacy">位置情報と外部への送信</button>
     </nav>
 
     <h3 id="g-about">このアプリについて</h3>
@@ -919,6 +922,18 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     <h3>利用状況の集計について</h3>
     <p>アプリの改善のため、利用状況（端末ごとの匿名ID、表示した潮位観測所、約10km単位の地域、使った機能、エラーの種類、どのサイトから開いたか、データを取得した外部サイトごとの回数と失敗、表示にかかった時間、位置情報が使えたか、端末の種類（スマホ・PC、iPhone・Android）、開いていた時間の目安）を集計しています。名前・メールアドレス・正確な位置など、個人を特定できる情報は集めていません。</p>
 
+    <h3 id="g-privacy">位置情報と外部への送信について</h3>
+    <p>天気・風・河川水位などをその場所の値で表示するため、位置情報を許可したときは<b>現在地の緯度・経度</b>（許可しないときや地図で指定したときは、潮位観測所や指定地点の位置）を、次の送り先に送って値を取得しています。位置は表示に使うだけで、このアプリのサーバーには保存しません（利用状況の集計では約10km単位の地域だけを記録します）。</p>
+    <table class="guide-tbl wrap">
+      <tr><th>このアプリのサーバー（Cloudflare）</th><td>潮位・天気・風・気圧・河川水位・水質などの取得。サーバーが位置に応じて下の各サイトから値を取ります</td></tr>
+      <tr><th>Open-Meteo</th><td>風・気圧のモデル計算値（サーバー経由）、海面水温（スマホから直接）</td></tr>
+      <tr><th>国土地理院</th><td>天気の地域の判定（逆ジオコーダ、約1km単位に丸めた位置。サーバー経由）、地図の画像（地理院タイル。表示している範囲の地図をスマホから直接）</td></tr>
+      <tr><th>気象庁</th><td>天気予報・アメダス・潮位など（位置ではなく、地域や観測所を指定して取得）</td></tr>
+      <tr><th>川の防災情報（国土交通省）</th><td>河川水位・水質（サーバー経由。表示がオンのときだけ）</td></tr>
+      <tr><th>cdnjs（Cloudflare）</th><td>地図の表示に使うプログラム（Leaflet）の読み込み。位置は送りません</td></tr>
+    </table>
+    <p>スマホから直接取得するサイトには、通常のウェブの閲覧と同じく、お使いの端末の IP アドレスなどが伝わります。各サイトでの情報の扱いは、それぞれのサイトの規約によります。釣果記録の写真や入力内容は、どこにも送りません（<button type="button" class="guide-link" data-jump="g-catch-data">釣果・写真のデータの扱い</button>）。</p>
+
     <h3>ご注意</h3>
     <p>実測値は速報値で、推算や天気予報は目安です。実際の海や天候の状況を必ず自分の目で確かめ、安全第一で釣りを楽しんでください。</p>
     <p class="guide-foot">my tide-graph <span id="guideVer2" class="num"></span> ／ 作成：<a href="https://x.com/kotaro9_lures" target="_blank" rel="noopener">kotaro9</a></p>
@@ -930,7 +945,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.3.8', APP_DATE = '2026-10-21';
+  var APP_VERSION = '2.3.9', APP_DATE = '2026-10-21';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
