@@ -870,7 +870,7 @@ function amedasNear_(lat, lon) {
     });
     if (!cur || keyMs_(curKey) < latest - 2 * HOUR) continue;
     return {
-      code: s[0], name: s[1], dist: Math.round(near[i].d * 10) / 10,
+      code: s[0], name: s[1], dist: Math.round(near[i].d * 10) / 10, lat: s[2], lon: s[3],
       time: keyMs_(curKey),
       wind: val_(cur.wind),
       dir: val_(cur.windDirection),          // 0=静穏, 1=北北東 … 16=北

@@ -272,11 +272,23 @@ footer a { color: var(--text-2); }
 .wloc-mk.obs { width: 11px; height: 11px; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
 .wloc-mk.grid { width: 11px; height: 11px; background: var(--text-3); box-shadow: 0 0 0 2px var(--surface); transform: translate(-50%, -50%) rotate(45deg); }
 .wloc-lb { position: absolute; z-index: 3; font-size: 11px; line-height: 1.3; color: var(--text); background: var(--surface); border-radius: 6px; padding: 1px 5px; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
-.wloc-leg { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; color: var(--text-2); margin-top: 4px; }
-.wloc-leg i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; vertical-align: -1px; }
-.wloc-leg i.here { border-radius: 50%; background: #e34948; }
-.wloc-leg i.obs { background: var(--accent); }
-.wloc-leg i.grid { background: var(--text-3); transform: rotate(45deg) scale(.85); }
+/* 各観測点の位置 */
+.omap { height: 220px; }
+.wloc-mk.tide { width: 12px; height: 12px; border-radius: 50%; background: var(--map-tide); box-shadow: 0 0 0 2px var(--surface); }
+.wloc-mk.pred { width: 9px; height: 9px; border-radius: 50%; background: var(--map-pred); box-shadow: 0 0 0 2px var(--surface); }
+.wloc-mk.sst { width: 10px; height: 10px; background: var(--surface); border: 2px solid var(--text-3); transform: translate(-50%, -50%) rotate(45deg); }
+.wloc-mk.river { width: 11px; height: 11px; border-radius: 50%; background: var(--map-river); box-shadow: 0 0 0 2px var(--surface); }
+.wloc-mk.wq { width: 11px; height: 11px; border-radius: 50%; background: var(--map-wq); box-shadow: 0 0 0 2px var(--surface); }
+.wloc-no { position: absolute; z-index: 3; font-size: 10px; font-weight: 700; line-height: 14px; min-width: 14px; text-align: center; color: var(--text); background: var(--surface); border-radius: 7px; padding: 0 3px; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.omap-list { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; line-height: 1.5; }
+.omap-list li { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.omap-list li:last-child { border-bottom: 0; }
+.omap-list .no { flex: none; font-weight: 700; min-width: 1.4em; color: var(--text-2); }
+.omap-list .sym { flex: none; position: relative; width: 14px; height: 12px; }
+.omap-list .sym .wloc-mk { left: 50%; top: 50%; }
+.omap-list .nm { flex: 1; min-width: 0; }
+.omap-list .use { color: var(--text-3); font-size: 11px; }
+.omap-list .d { flex: none; color: var(--text-2); font-variant-numeric: tabular-nums; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wtl-map img { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); } }
 :root[data-theme="dark"] .wtl-map img { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.9); }
 
@@ -581,8 +593,6 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         <div class="wtl-now" id="wtlNow" hidden></div>
       </div>
       <div class="wtl-axis num"><span>0</span><span>3</span><span>6</span><span>9</span><span>12</span><span>15</span><span>18</span><span>21</span><span>24</span></div>
-      <div class="wloc" id="wloc" aria-label="実況とモデル計算値の位置"><div class="wtl-map" id="wlocMap"></div></div>
-      <div class="wloc-leg"><span><i class="here"></i><span id="wlocHere">現在地</span></span><span><i class="obs"></i>実況：アメダスの観測点</span><span><i class="grid"></i>モデル計算値：気象庁モデルの格子点</span></div>
       <div class="wtl-note" id="wtlNote"></div>
     </div>
     <div class="card">
@@ -596,6 +606,12 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         </div>
       </div>
       <div class="sub fc-wind" id="fcWind" hidden></div>
+    </div>
+    <div class="card" id="omapCard">
+      <div class="lbl">各観測点の位置</div>
+      <div class="wloc omap" id="omap" aria-label="各観測点の位置の地図"><div class="wtl-map" id="omapMap"></div></div>
+      <ul class="omap-list" id="omapList"></ul>
+      <div class="wtl-note">各カードの値が、どこの観測点・計算地点のものかを示します。どれも現在地そのものの値ではありません。地図：地理院タイル。</div>
     </div>
     <div class="wx-src" id="wxSrc">&nbsp;</div>
   </section>
@@ -791,8 +807,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
     <h3 id="g-wind">風・水質</h3>
     <dl>
-      <dt>風の推移（アメダスの実況・気象庁モデルの計算値）</dt><dd>0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（近くのアメダスの観測値）、薄い矢印が数値予報モデル（気象庁 MSM/GSM）の格子点の計算値、赤い線が現在時刻です。下の地図に、現在地（赤い丸）と、実況のアメダスの観測点（水色の四角）、モデルの格子点（灰色のひし形）の位置と距離を示します。印の色は矢印の色と同じです。どちらも現在地そのものの値ではありません。モデルの計算値は予報ではなく、大きな誤差を含むことがあります。</dd>
+      <dt>風の推移（アメダスの実況・気象庁モデルの計算値）</dt><dd>0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（近くのアメダスの観測値）、薄い矢印が数値予報モデル（気象庁 MSM/GSM）の格子点の計算値、赤い線が現在時刻です。実況のアメダスの観測点とモデルの格子点の位置は、「各観測点の位置」のカードに示します。どちらも現在地そのものの値ではありません。モデルの計算値は予報ではなく、大きな誤差を含むことがあります。</dd>
       <dt>風（地上の観測）</dt><dd>近くのアメダスの最新の風速・風向・最大瞬間風速と、気象庁の予報の風・波です。</dd>
+      <dt>各観測点の位置</dt><dd>各カードの値が、どこの観測点・計算地点のものかを地図と一覧で示します。基準の位置（赤い丸：現在地、地図で指定した地点、または潮位観測所）、潮位観測所（オレンジ）、潮位表の地点（青い小さな丸）、アメダスの観測点（水色の四角）、気象庁モデルの格子点（灰色のひし形）、海面水温の格子点（白抜きのひし形）、河川の水位観測所（緑）、水質観測所（赤紫）です。同じ場所の点は1つにまとめ、何の値に使っているかを一覧に書きます。</dd>
       <dt>海面水温（推定）</dt><dd>近くの海の海面水温と、24時間前との差、明日のモデル計算値の範囲です。約8km四方の解析・予報モデルの値なので、湾奥・河口・岸近くの実際の水温とは差があることがあります。どの海域の値かはカードの下に表示します。</dd>
       <dt>水質</dt><dd>「表示の設定」の「河川水位・水質の表示」が「表示」で、現在地から10km以内に水質観測所があるときだけ、水温・塩分濃度を表示します（地図で水質観測所を選んだときは、その観測所）。</dd>
     </dl>
@@ -961,7 +978,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.4.1', APP_DATE = '2026-10-22';
+  var APP_VERSION = '2.4.2', APP_DATE = '2026-10-22';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -1395,7 +1412,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       .sort(function (a, b) { return a.d - b.d; }).slice(0, 25);
     var auto = predPoint();
     if (S.predSel && !list.some(function (o) { return o.x.c === S.predSel; }) && auto) list.unshift({ x: auto, d: p ? distKm(p.lat, p.lon, auto.lat, auto.lon) : 0 });
-    syncMapSoon();
+    syncMapSoon(); obsMapSoon();
     sel.innerHTML = '<option value="">自動（' + (p ? p.lbl : '潮位観測所') + 'から一番近い地点' + (!S.predSel && auto ? '：' + esc(auto.n) : '') + '）</option>' +
       list.map(function (o) {
         return '<option value="' + esc(o.x.c) + '">' + esc(o.x.n) + '（' + fmtKm(o.d) + (o.x.obs ? '' : '・実測なし') + '）</option>';
@@ -1464,7 +1481,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var r = S.river, on = riverOn();
     Array.prototype.forEach.call($('riverSeg').children, function (b) { b.setAttribute('aria-pressed', String((b.dataset.r === '1') === S.showRiver)); });
     $('riverLeg').hidden = !on;
-    syncMapSoon();
+    syncMapSoon(); obsMapSoon();
     if (r) $('riverLegTxt').textContent = '河川水位（' + r.name + '）';
     var note = $('riverNote');
     renderRiverSel();
@@ -1747,7 +1764,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var parts = ['潮位観測所' + (s.o ? '（' + s.o + '）' : '')];
     var p = here();
     if (p && p.lbl !== '潮位観測所') parts.push(p.lbl + 'から ' + fmtKm(distKm(p.lat, p.lon, s.lat, s.lon)));
-    syncMapSoon();
+    syncMapSoon(); obsMapSoon();
     parts.push(s.a);
     $('stSub').textContent = parts.filter(Boolean).join(' · ');
   }
@@ -1858,6 +1875,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 
   function renderWeather() {
     var w = S.wx, now = Date.now(), p = here();
+    obsMapSoon();
     $('wxLbl').textContent = nearLbl(p) + 'の天気';
     var a = w && w.amedas, f = w && w.forecast;
 
@@ -2494,6 +2512,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     return { v: cur, t: curT, d: d, word: word, obs: obs };
   }
   function renderPressure() {
+    obsMapSoon();
     var tr = presTrend(), st = S.presSt, p = here();
     $('presNow').innerHTML = tr ? '現在 <b>' + tr.v.toFixed(1) + '</b> hPa' + (tr.obs ? '（' + hm(tr.t) + '）' : '') +
       (tr.d != null ? '・3時間で ' + (tr.d > 0 ? '+' : tr.d < 0 ? '−' : '±') + Math.abs(tr.d).toFixed(1) + ' hPa（' + tr.word + (tr.word === '横ばい' ? '' : '中') + '）' : '') +
@@ -2880,6 +2899,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   }
   function renderSST() {
     var x = S.sst, now = Date.now();
+    obsMapSoon();
     $('sstCard').hidden = !x;
     if (!x) return;
     var cur = x.cur != null ? x.cur : sstAt(now), ago = sstAt(now - DAY);
@@ -2916,7 +2936,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   }
   function renderWQ() {
     var q = S.showRiver ? S.wq : null, card = $('wqCard');
-    syncMapSoon();
+    syncMapSoon(); obsMapSoon();
     card.hidden = !q;
     if (!q) return;
     $('wqLbl').textContent = '水質（水質観測所 ' + (q.river ? q.river + '「' + q.name + '」' : q.name) + '・' + S.wqWhere + 'から' + fmtKm(q.dist) + (S.wqFcd ? '・選択' : '') + '）';
@@ -2965,24 +2985,43 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     box.innerHTML = html;
     box.dataset.key = p.lat.toFixed(4) + ',' + p.lon.toFixed(4) + ',' + W + 'x' + H;
   }
-  // 実況・モデル計算値がどこの値かを示す地図（現在地・アメダスの観測点・モデルの格子点が収まる縮尺）
-  function renderWindLoc() {
-    var box = $('wloc'), map = $('wlocMap'), p = here(), w = S.wind;
-    $('wlocHere').textContent = p ? p.lbl : '現在地';
-    Array.prototype.slice.call(box.querySelectorAll('.wloc-mk, .wloc-lb')).forEach(function (e) { e.remove(); });
-    if (!p) { map.innerHTML = ''; return; }
-    var pts = [{ k: 'here', lat: p.lat, lon: p.lon, t: p.lbl }];
-    if (w && w.station && w.station.lat != null) pts.push({ k: 'obs', lat: w.station.lat, lon: w.station.lon, t: 'アメダス「' + w.station.name + '」 ' + fmtKm(w.station.dist) });
-    if (w && w.grid) pts.push({ k: 'grid', lat: w.grid.lat, lon: w.grid.lon, t: 'モデル格子点 ' + fmtKm(w.grid.dist) });
+  // 各観測点の位置：各カードの値がどこの地点のものか（基準の位置、潮位観測所、潮位表の地点、アメダス、気圧の観測点、
+  // 気象庁モデルの格子点、海面水温の格子点、河川・水質の観測所）。同じ場所の点は1つにまとめ、全部が収まる縮尺にする
+  var omapTimer = 0;
+  function obsMapSoon() { if (!omapTimer) omapTimer = setTimeout(function () { omapTimer = 0; renderObsMap(); }, 60); }
+  function renderObsMap() {
+    var box = $('omap'), map = $('omapMap'), list = $('omapList'), p = here();
+    Array.prototype.slice.call(box.querySelectorAll('.wloc-mk, .wloc-no')).forEach(function (e) { e.remove(); });
+    if (!p) { map.innerHTML = ''; list.innerHTML = ''; return; }
+    var pts = [], add = function (k, lat, lon, name, use) {
+      if (lat == null || lon == null) return;
+      var same = pts.filter(function (o) { return o.k === k && distKm(o.lat, o.lon, lat, lon) < 0.05; })[0];
+      if (same) { if (same.use.indexOf(use) < 0) same.use.push(use); return; }
+      pts.push({ k: k, lat: lat, lon: lon, name: name, use: [use] });
+    };
+    // 位置情報がないときは潮位観測所が基準の位置なので、印を重ねずに潮位観測所の用途に書き添える
+    if (p.lbl !== '潮位観測所') add('here', p.lat, p.lon, p.lbl, '天気・風・河川などの基準の位置');
+    if (S.st) { add('tide', S.st.lat, S.st.lon, '潮位観測所「' + S.st.n + '」', '潮位の実測'); if (p.lbl === '潮位観測所') pts.at(-1).use.push('天気・風・河川などの基準の位置'); }
+    var pp = predPoint();
+    if (pp) add('pred', pp.lat, pp.lon, '潮位表の地点「' + pp.n + '」', '推算・満潮・干潮');
+    var am = S.wx && S.wx.amedas;
+    if (am) add('obs', am.lat, am.lon, 'アメダス「' + am.name + '」', '気温・風の実況');
+    if (S.wind && S.wind.station) add('obs', S.wind.station.lat, S.wind.station.lon, 'アメダス「' + S.wind.station.name + '」', '風の推移の実況');
+    if (S.presSt) add('obs', S.presSt.lat, S.presSt.lon, 'アメダス「' + S.presSt.name + '」', '気圧の実測');
+    if (S.wind && S.wind.grid) add('grid', S.wind.grid.lat, S.wind.grid.lon, '気象庁モデルの格子点', '風のモデル計算値');
+    if (S.presGrid) add('grid', S.presGrid.lat, S.presGrid.lon, '気象庁モデルの格子点', '気圧のモデル計算値');
+    if (S.sst) add('sst', S.sst.lat, S.sst.lon, '海面水温の格子点', '海面水温（推定）');
+    if (S.showRiver && S.river) add('river', S.river.lat, S.river.lon, '河川の水位観測所「' + S.river.name + '」', '河川水位');
+    if (S.showRiver && S.wq) add('wq', S.wq.lat, S.wq.lon, '水質観測所「' + S.wq.name + '」', '水温・塩分');
     var W = box.clientWidth, H = box.clientHeight;
     if (!W) return;
     var xy = function (la, lo, z) { var n = Math.pow(2, z) * 256, s = Math.sin(la * Math.PI / 180); return [(lo + 180) / 360 * n, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n]; };
-    // 3点が余白つきで収まる一番大きい縮尺（13〜7）
+    // 全部の点が余白つきで収まる一番大きい縮尺（13〜7）
     var z = 13;
     for (; z > 7; z--) {
       var q = pts.map(function (o) { return xy(o.lat, o.lon, z); });
       var xs = q.map(function (a) { return a[0]; }), ys = q.map(function (a) { return a[1]; });
-      if (Math.max.apply(null, xs) - Math.min.apply(null, xs) < W - 170 && Math.max.apply(null, ys) - Math.min.apply(null, ys) < H - 44) break;
+      if (Math.max.apply(null, xs) - Math.min.apply(null, xs) < W - 70 && Math.max.apply(null, ys) - Math.min.apply(null, ys) < H - 60) break;
     }
     var qq = pts.map(function (o) { return xy(o.lat, o.lon, z); });
     var cx = (Math.max.apply(null, qq.map(function (a) { return a[0]; })) + Math.min.apply(null, qq.map(function (a) { return a[0]; }))) / 2;
@@ -2996,24 +3035,30 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       }
     }
     map.innerHTML = html;
-    // 印と名前。名前は印の右（右端に近いときは左）に置き、重なるときは上下にずらす
-    var used = [];
-    pts.forEach(function (o, i) {
-      var x = qq[i][0] - left, y = qq[i][1] - top;
-      box.insertAdjacentHTML('beforeend', '<span class="wloc-mk ' + o.k + '" style="left:' + x.toFixed(0) + 'px;top:' + y.toFixed(0) + 'px"></span>');
-      var right = x < W - 150, ly = y - 9;
-      used.forEach(function (u) { if (Math.abs(u - ly) < 18) ly = u + 18; });
-      ly = Math.min(Math.max(ly, 2), H - 20);
-      used.push(ly);
-      box.insertAdjacentHTML('beforeend', '<span class="wloc-lb" style="' + (right ? 'left:' + (x + 10).toFixed(0) : 'right:' + (W - x + 10).toFixed(0)) + 'px;top:' + ly.toFixed(0) + 'px">' + esc(o.t) + '</span>');
+    // 印と番号（番号は下の一覧と対応）。番号は印のすぐ横に置き、ほかの番号・印と重ならない向きを選ぶ
+    var spots = pts.map(function (o, i) { return [qq[i][0] - left, qq[i][1] - top]; });
+    spots.forEach(function (s, i) { box.insertAdjacentHTML('beforeend', '<span class="wloc-mk ' + pts[i].k + '" style="left:' + s[0].toFixed(0) + 'px;top:' + s[1].toFixed(0) + 'px"></span>'); });
+    var boxes = spots.map(function (s) { return [s[0] - 7, s[1] - 7, 14, 14]; });   // 印の範囲
+    var hit = function (b) { return b[0] < 0 || b[1] < 0 || b[0] + b[2] > W || b[1] + b[3] > H || boxes.some(function (o) { return b[0] < o[0] + o[2] && o[0] < b[0] + b[2] && b[1] < o[1] + o[3] && o[1] < b[1] + b[3]; }); };
+    spots.forEach(function (s, i) {
+      var w = String(i + 1).length > 1 ? 20 : 15, c = [[9, -7], [-9 - w, -7], [6, -20], [6, 6], [-6 - w, -20], [-6 - w, 6], [-w / 2, -24], [-w / 2, 10]]
+        .map(function (d) { return [s[0] + d[0], s[1] + d[1], w, 14]; });
+      var b = c.filter(function (x) { return !hit(x); })[0] || c[0];
+      boxes.push(b);
+      box.insertAdjacentHTML('beforeend', '<span class="wloc-no" style="left:' + b[0].toFixed(0) + 'px;top:' + b[1].toFixed(0) + 'px">' + (i + 1) + '</span>');
     });
+    list.innerHTML = pts.map(function (o, i) {
+      var d = o.k === 'here' ? '' : fmtKm(distKm(p.lat, p.lon, o.lat, o.lon));
+      return '<li><span class="no">' + (i + 1) + '</span><span class="sym"><span class="wloc-mk ' + o.k + '"></span></span>' +
+        '<span class="nm">' + esc(o.name) + '<br><span class="use">' + esc(o.use.join('・')) + '</span></span><span class="d">' + d + '</span></li>';
+    }).join('');
   }
   function renderWind() {
     var w = S.wind, cols = $('wtlCols'), p = here();
     var mk = p ? p.lat.toFixed(4) + ',' + p.lon.toFixed(4) + ',' + $('wtlMap').clientWidth + 'x' + $('wtlMap').clientHeight : '';
     if ($('wtlMap').dataset.key !== mk) renderWindMap();
     $('wtlLbl').textContent = '風の推移（アメダスの実況・気象庁モデルの計算値）';
-    renderWindLoc();
+    obsMapSoon();
     if (!w) { cols.innerHTML = ''; $('wtlNote').textContent = ''; $('wtlNow').hidden = true; return; }
     var now = Date.now(), base = w.base, html = '';
     var lastObs = w.obs.length ? w.obs[w.obs.length - 1][0] : -Infinity;
