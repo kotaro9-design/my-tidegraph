@@ -521,7 +521,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <canvas id="pres"></canvas>
       <div class="legend">
         <span id="presObsLeg" hidden><i style="border-color:var(--pres)"></i><span id="presObsTxt">実測</span></span>
-        <span id="presFcLeg" hidden><i class="dash" style="border-color:var(--pres)"></i><span id="presFcTxt">推移・予報</span></span>
+        <span id="presFcLeg" hidden><i class="dash" style="border-color:var(--pres)"></i><span id="presFcTxt">モデル計算値</span></span>
       </div>
       <div class="river-note" id="presNote"></div>
     </div>
@@ -548,7 +548,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div class="wtl-note" id="wqNote"></div>
     </div>
     <div class="card wtl-card">
-      <div class="lbl" id="wtlLbl">風の推移・予報</div>
+      <div class="lbl" id="wtlLbl">風の推移（実況・モデル計算値）</div>
       <div class="wtl">
         <div class="wtl-map" id="wtlMap" aria-hidden="true"></div>
         <div class="wtl-cols" id="wtlCols"></div>
@@ -611,7 +611,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     気象庁「<a href="https://www.data.jma.go.jp/kaiyou/db/tide/suisan/" target="_blank" rel="noopener">潮位表</a>」。
     天気・風：気象庁「<a href="https://www.jma.go.jp/bosai/forecast/" target="_blank" rel="noopener">天気予報</a>」「<a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" rel="noopener">アメダス</a>」（気象の観測所）、地域の判定に国土地理院「逆ジオコーダ」を利用。
     河川水位・水質：出典：国土交通省 <a href="https://www.river.go.jp/" target="_blank" rel="noopener">川の防災情報ホームページ</a>（https://www.river.go.jp/）を加工して作成（観測値をグラフ化し、潮位と重ねて表示）。河川水位は現在地から一番近い河川の水位観測所（位置が取れない場合は表示中の潮位観測所の位置から。T.P.基準）、水質（水温・塩分濃度）は水質観測所（水位観測所とは別の観測所。10km以内にある場合のみ表示）。観測直後の値のため、機器の故障などによる異常値が含まれることがあります。
-    風の予報：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁 MSM/GSM モデル、CC BY 4.0）。海面水温：Open-Meteo Marine（解析・予報モデルによる推定値、CC BY 4.0）。気圧：気象庁「アメダス」（気象台などの海面気圧）、Open-Meteo（気象庁モデル）。地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>。
+    風・気圧のモデル計算値：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁の数値予報モデル MSM/GSM の計算結果、CC BY 4.0）。海面水温：Open-Meteo Marine（解析・予報モデルによる推定値、CC BY 4.0）。気圧の実測：気象庁「アメダス」（気象台などの海面気圧）。数値予報モデルの計算値は予報ではなく、大きな誤差を含むことがあります。地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>。
     日の出・日の入り・薄明（常用薄明＝太陽高度−6°、天文薄明＝−18°）は計算値（誤差1〜2分程度）。「薄明」の2つの時刻は、朝は天文薄明・常用薄明、夕は常用薄明・天文薄明の順です。
     実測値は速報値です。気象庁の公開は15〜20分程度遅れるため、直近分は海上保安庁の速報（5分毎・暫定値）で補っています（同じ潮位観測所が無い場合は近くの潮位観測所の偏差を利用）。出典：「リアルタイム験潮データ」（海上保安庁）（<a href="https://www1.kaiho.mlit.go.jp/KAN2/tide/realtime/realtime.html" target="_blank" rel="noopener">https://www1.kaiho.mlit.go.jp/KAN2/tide/realtime/realtime.html</a>）を加工して作成（潮位の基準面の換算、気象庁の観測値とのつなぎ合わせ）。
     「上げ◯分／下げ◯分」は直前の干潮（満潮）から次の満潮（干潮）までを10等分した経過の目安です。月齢・月輝面（正午）、月の出・南中・月の入り、旧暦は天文計算による値で、潮名は旧暦の日付から求めています。
@@ -757,13 +757,13 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <dt>点線の縦線と「上1・上3…／下1・下3…」</dt><dd>上げ・下げの1・3・5・7・9分の時刻です。</dd>
       <dt>月の出・南中・月の入り（紫の●）</dt><dd>グラフの下側に時刻と一緒に表示します。</dd>
     </dl>
-    <p>グラフを指でなぞると、その時刻の推算・実測・偏差が表示されます。下の「潮位偏差」グラフは実測と推算の差の推移、「変化量」グラフは実測潮位（オレンジ）と河川水位（緑）が1時間あたり何cm上がって（＋）／下がって（−）いるかです。「気圧」グラフは海面気圧の推移で、実線が近くの気象台などの実測、点線が現在地の推移・予報です。気圧が1 hPa 下がると潮位は約1 cm 上がる（吸い上げ効果）ので、潮位偏差の原因を見る手がかりになります。グラフの上の行には、月齢・輝面（月の明るさ）・旧暦と、日の出・日の入り・薄明の時刻を表示します。</p>
+    <p>グラフを指でなぞると、その時刻の推算・実測・偏差が表示されます。下の「潮位偏差」グラフは実測と推算の差の推移、「変化量」グラフは実測潮位（オレンジ）と河川水位（緑）が1時間あたり何cm上がって（＋）／下がって（−）いるかです。「気圧」グラフは海面気圧の推移で、実線が近くの気象台などの実測、点線が現在地の数値予報モデル（気象庁 MSM/GSM）の計算値です（予報ではなく、大きな誤差を含むことがあります）。気圧が1 hPa 下がると潮位は約1 cm 上がる（吸い上げ効果）ので、潮位偏差の原因を見る手がかりになります。グラフの上の行には、月齢・輝面（月の明るさ）・旧暦と、日の出・日の入り・薄明の時刻を表示します。</p>
 
     <h3 id="g-wind">風・水質</h3>
     <dl>
-      <dt>風の推移・予報</dt><dd>現在地の地図の上に、0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（アメダス）、薄い矢印が予報、赤い線が現在時刻です。</dd>
+      <dt>風の推移（実況・モデル計算値）</dt><dd>現在地の地図の上に、0〜24時の風向・風速（m/s）を表示します。<b>矢印は風が吹いていく向き</b>で、濃い矢印が実況（アメダス）、薄い矢印が数値予報モデル（気象庁 MSM/GSM）の計算値、赤い線が現在時刻です。モデルの計算値は予報ではなく、大きな誤差を含むことがあります。</dd>
       <dt>風（地上の観測）</dt><dd>近くのアメダスの最新の風速・風向・最大瞬間風速と、気象庁の予報の風・波です。</dd>
-      <dt>海面水温（推定）</dt><dd>近くの海の海面水温と、24時間前との差、明日の予報範囲です。約8km四方の解析・予報モデルの値なので、湾奥・河口・岸近くの実際の水温とは差があることがあります。どの海域の値かはカードの下に表示します。</dd>
+      <dt>海面水温（推定）</dt><dd>近くの海の海面水温と、24時間前との差、明日のモデル計算値の範囲です。約8km四方の解析・予報モデルの値なので、湾奥・河口・岸近くの実際の水温とは差があることがあります。どの海域の値かはカードの下に表示します。</dd>
       <dt>水質</dt><dd>「表示の設定」の「河川水位・水質の表示」が「表示」で、現在地から10km以内に水質観測所があるときだけ、水温・塩分濃度を表示します（地図で水質観測所を選んだときは、その観測所）。</dd>
     </dl>
 
@@ -919,7 +919,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.3.7', APP_DATE = '2026-10-21';
+  var APP_VERSION = '2.3.8', APP_DATE = '2026-10-21';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -2459,8 +2459,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var hasObs = !!(S.presObs && S.presObs.length), hasFc = !!(S.presFc && S.presFc.length);
     $('presObsLeg').hidden = !hasObs; $('presFcLeg').hidden = !hasFc;
     if (st) $('presObsTxt').textContent = '実測（' + st.name + '・' + fmtKm(st.dist) + '）';
-    $('presFcTxt').textContent = nearLbl(p) + 'の推移・予報';
-    $('presNote').textContent = '実測は気象庁「' + (st ? st.name : '近くの気象台') + '」の海面気圧（10分ごと）、推移・予報は Open-Meteo（気象庁モデル、1時間ごと）。' +
+    $('presFcTxt').textContent = nearLbl(p) + 'のモデル計算値';
+    $('presNote').textContent = '実測は気象庁「' + (st ? st.name : '近くの気象台') + '」の海面気圧（10分ごと）、破線は Open-Meteo による数値予報モデル（気象庁 MSM/GSM）の計算値（1時間ごと。予報ではなく、大きな誤差を含むことがあります）。' +
       '気圧が1 hPa 下がると潮位は約1 cm 上がります（吸い上げ効果、1013 hPa 基準の目安）。';
   }
   function drawPres() {
@@ -2844,7 +2844,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var d = cur != null && ago != null ? Math.round((cur - ago) * 10) / 10 : null;
     $('sstChg').textContent = d == null ? '' : '24時間前より ' + (d > 0 ? '+' : d < 0 ? '−' : '±') + Math.abs(d).toFixed(1) + '℃';
     var t0 = midnight(ymd(now)) + DAY, fc = x.pts.filter(function (q) { return q[0] >= t0 && q[0] < t0 + DAY; }).map(function (q) { return q[1]; });
-    $('sstFc').textContent = fc.length ? '明日の予報 ' + fmt1(Math.min.apply(null, fc)) + '〜' + fmt1(Math.max.apply(null, fc)) + '℃' : '';
+    $('sstFc').textContent = fc.length ? '明日のモデル計算値 ' + fmt1(Math.min.apply(null, fc)) + '〜' + fmt1(Math.max.apply(null, fc)) + '℃' : '';
     var dist = distKm(x.from.lat, x.from.lon, x.lat, x.lon);
     $('sstNote').innerHTML = esc('値の地点：' + x.from.lbl + 'から' + (dist < 1 ? 'すぐ近く' : bearing16(x.from.lat, x.from.lon, x.lat, x.lon) + 'へ約' + fmtKm(dist)) +
       'の海域（約8km四方の推定値のため、湾奥・河口・岸近くの実際の水温とは差があることがあります）。') +
@@ -2926,7 +2926,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     var w = S.wind, cols = $('wtlCols'), p = here();
     var mk = p ? p.lat.toFixed(4) + ',' + p.lon.toFixed(4) + ',' + $('wtlMap').clientWidth + 'x' + $('wtlMap').clientHeight : '';
     if ($('wtlMap').dataset.key !== mk) renderWindMap();
-    $('wtlLbl').textContent = '風の推移・予報' + (p ? '（' + nearLbl(p) + '）' : '');
+    $('wtlLbl').textContent = '風の推移（実況・モデル計算値）' + (p ? '（' + nearLbl(p) + '）' : '');
     if (!w) { cols.innerHTML = ''; $('wtlNote').textContent = ''; $('wtlNow').hidden = true; return; }
     var now = Date.now(), base = w.base, html = '';
     var lastObs = w.obs.length ? w.obs[w.obs.length - 1][0] : -Infinity;
@@ -2942,7 +2942,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       }
       if (!v) { html += '<div class="wtl-col"></div>'; continue; }
       var rot = v.deg == null ? 0 : (v.deg + 180) % 360, strong = windWord(v.sp);
-      html += '<div class="wtl-col ' + kind + '" title="' + hm(t) + ' ' + (kind === 'obs' ? '実況' : '予報') + '">' +
+      html += '<div class="wtl-col ' + kind + '" title="' + hm(t) + ' ' + (kind === 'obs' ? '実況' : 'モデル計算値') + '">' +
         '<b class="num">' + fmt1(v.sp) + '</b>' +
         '<svg viewBox="0 0 24 24" style="transform:' + (v.calm ? 'scale(.5)' : 'rotate(' + rot + 'deg)') + '"><path d="M12 2l6 9h-4v11h-4V11H6z"/></svg>' +
         '<span>' + (v.calm ? '静穏' : dirName(v.deg)) + '</span>' + (strong ? '<i>' + strong.replace('な風', '').replace('風', '') + '</i>' : '') + '</div>';
@@ -2954,9 +2954,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     else nowEl.hidden = true;
     var notes = [];
     if (w.station) notes.push('実況：アメダス「' + w.station.name + '」（' + fmtKm(w.station.dist) + '）');
-    if (w.fc.length) notes.push('予報：Open-Meteo（気象庁 MSM/GSM モデル）');
+    if (w.fc.length) notes.push('モデル計算値：Open-Meteo（気象庁の数値予報モデル MSM/GSM。予報ではなく、大きな誤差を含むことがあります）');
     notes.push('地図：地理院タイル');
-    $('wtlNote').textContent = notes.join(' / ') + '。濃い矢印が実況、薄い矢印が予報。矢印は風の吹いていく向き。';
+    $('wtlNote').textContent = notes.join(' / ') + '。濃い矢印が実況、薄い矢印がモデル計算値。矢印は風の吹いていく向き。';
   }
 
   /* ---------- 釣果の記録（Google カレンダー・アングラーズ等への投稿） ---------- */
