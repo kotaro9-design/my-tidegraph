@@ -12,3 +12,6 @@ desktop.ini
 *.gslides
 # Google ドライブの同期で壊れた以前の .git（念のため残している）
 .git-broken-drive/
+# 引き継ぎメモ（ID・問い合わせ先・記憶の控え）と研究のデータは公開しない
+handoff/
+research/
