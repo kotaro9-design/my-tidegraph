@@ -967,7 +967,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.4.2', APP_DATE = '2026-10-22';
+  var APP_VERSION = '2.4.3', APP_DATE = '2026-10-25';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -1164,6 +1164,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         if (e && e.fromServer) throw e;
         workerDownUntil = Date.now() + 2 * MIN;
         track('q', 'worker_fallback');
+        // 切り替えたときの端末の状態（端末側の通信切れか、Workers 側の問題かの見分けに使う）
+        track('q', 'worker_fallback:' + (navigator.onLine === false ? 'offline' : document.visibilityState === 'hidden' ? 'hidden' : 'online'));
         return gasRun(name, args);
       });
     }

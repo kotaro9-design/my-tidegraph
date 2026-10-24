@@ -4,6 +4,9 @@
 「monitor v大きな変更.機能追加.修正」でバージョンを付けます。管理画面の見出しに表示しているのは `Monitor.gs` の `MONITOR_VERSION` / `MONITOR_DATE` です。
 GitHub のタグは `monitor-vX.Y.Z` です。本体の更新履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
+## monitor v2.5.3（2026/10/25）— 本体 v2.4.3
+- 「データの異常」に、Apps Script に切り替えたときの端末の状態の内訳（オフライン／画面が裏／オンラインで表示中）
+
 ## monitor v2.5.2（2026/10/21）— 本体 v2.3.6
 - 機能の名前に「新しい版の「更新」を押した」
 

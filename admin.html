@@ -460,6 +460,9 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     if (k === 'river_paused') return '上限の手前で河川・水質を一時停止';
     if (k === 'old_client_blocked') return '古い画面からの河川・海保の取得を止めた';
     if (k === 'worker_fallback') return 'Cloudflare につながらず Apps Script に切り替えた';
+    if (k === 'worker_fallback:offline') return '　うち端末がオフラインだった';
+    if (k === 'worker_fallback:hidden') return '　うち画面が裏に回っていた';
+    if (k === 'worker_fallback:online') return '　うち端末はオンラインで画面も表示中（Workers 側の問題の可能性）';
     m = /^near_outlier:(\d{6})$/.exec(k);
     if (m) return '近くの地点の偏差が異常なので使わなかった：' + (D.stationNames[m[1]] || m[1]);
     m = /^tide_stuck:(\d{6})$/.exec(k);
