@@ -1813,7 +1813,10 @@ async function __runBatch(calls, ev, env, stat) {
       }
     });
     if (!left.length) break;
-    await Promise.all([...need].map(u => __get(u, env, stat).then(t => { pre[u] = t; }, () => { pre[u] = { err: 1 }; })));
+    // 締め切りの残りだけ待つ（取得の時間切れ 10 秒まで待つと全体で 30 秒近くになり、画面が 30 秒で Apps Script に切り替えてしまう）。
+    // 待ちきれなかった取得は裏で続き、KV に入るので次の呼び出しで使える
+    const rest = BATCH_DEADLINE_MS - (Date.now() - t0);
+    await __within(Promise.all([...need].map(u => __get(u, env, stat).then(t => { pre[u] = t; }, () => { pre[u] = { err: 1 }; }))), Math.max(rest, 0)).catch(() => {});
   }
   left.forEach(c => { done[String(c[0]).slice(0, 20)] = { error: 'データの取得に失敗しました（' + c[1] + '）' }; });
   return { done: done, need: null };
