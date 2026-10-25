@@ -978,7 +978,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.4.4', APP_DATE = '2026-10-25';
+  var APP_VERSION = '2.5.0', APP_DATE = '2026-10-25';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -2850,6 +2850,15 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       var t = document.getElementById(b.getAttribute('data-jump'));
       if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
+    // ?guide 付きのアドレス（kotaro9 design のトップページの「利用ガイド」）で開いたときは、利用ガイドを開く。
+    // ホーム画面・ブックマークに残らないよう、アドレスからは外す
+    if (/[?&]guide(=|&|$)/.test(location.search)) {
+      openGuide();
+      if (history.replaceState) {
+        var q = location.search.replace(/([?&])guide(=[^&]*)?&?/, '$1').replace(/[?&]$/, '');
+        history.replaceState(null, '', location.pathname + q + location.hash);
+      }
+    }
   })();
   function renderPicker() {
     var q = $('pkQ').value.trim();
