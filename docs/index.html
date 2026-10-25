@@ -978,7 +978,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.5.1', APP_DATE = '2026-10-25';
+  var APP_VERSION = '2.5.2', APP_DATE = '2026-10-26';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -1101,9 +1101,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     return new Promise(function (res, rej) {
       RUNQ.push({ id: 'c' + (++RUN_ID), name: name, args: args, res: res, rej: rej });
       if (!RUN_TIMER) RUN_TIMER = setTimeout(flushRun, 20);
-    }).then(function (r) { perf(name, Date.now() - t0); return r; },
+    }).then(function (r) { perfVisible(name, t0); return r; },
       function (e) {
-        perf(name, Date.now() - t0);
+        perfVisible(name, t0);
+        // まとめた呼び出し全体の失敗は flushRun で1回だけ数える（1回の通信切れで処理の数だけエラーが増えないように）
+        if (e && e.counted) throw e;
         // 端末側の通信切れ（オフライン、または呼び出し中に画面が裏に回った）はエラーと分けて数える
         var why = callFailCause(t0);
         if (why) track('q', 'call_fail:' + why);
@@ -1111,9 +1113,11 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         throw e;
       });
   }
-  // 画面が最後に裏に回った時刻（呼び出しの途中で裏に回ると、スマホは通信を止めることがある）
+  // 途中で画面が裏に回った呼び出しは、戻るまでの時間が入るので処理時間に数えない
+  function perfVisible(name, t0) { if (!document.hidden && HIDDEN_AT < t0) perf(name, Date.now() - t0); }
+  // 画面が最後に裏にあった時刻（裏に回ったとき・表に戻ったときに更新。呼び出しの途中で裏に回ると、スマホは通信を止めることがある）
   var HIDDEN_AT = document.hidden ? Date.now() : 0;
-  document.addEventListener('visibilitychange', function () { if (document.hidden) HIDDEN_AT = Date.now(); });
+  document.addEventListener('visibilitychange', function () { HIDDEN_AT = Date.now(); });
   function callFailCause(t0) {
     if (navigator.onLine === false) return 'offline';
     if (document.hidden || HIDDEN_AT >= t0) return 'hidden';
@@ -1123,7 +1127,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     RUN_TIMER = null;
     var left = RUNQ.splice(0, 12);
     if (RUNQ.length) RUN_TIMER = setTimeout(flushRun, 0);
-    var pre = {}, rounds = 0, ev = takeEvents();
+    var pre = {}, rounds = 0, ev = takeEvents(), t0 = Date.now();
     if (viaProxy('https://www.river.go.jp/')) pre.__proxy = 1;   // 中継に対応していることをサーバーに伝える
     var step = function () {
       var e1 = ev; ev = null;
@@ -1146,7 +1150,17 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         return fetchNeed(r.need, pre).then(step);
       });
     };
-    step().catch(function (e) { left.forEach(function (it) { it.rej(e); }); });
+    step().catch(function (e) {
+      // 通信そのものの失敗は、まとめた呼び出し1回につき1件として数える。
+      // Workers も Apps Script も通信で失敗したときは、端末側の通信切れ（電波が弱いなど）として分ける
+      if (left.length && e && typeof e === 'object') {
+        var why = callFailCause(t0) || (e.net ? 'net' : '');
+        if (why) track('q', 'call_fail:' + why);
+        else if (!/一時的に止めて/.test(String(e.message))) track('e', 'callBatch');
+        e.counted = true;
+      }
+      left.forEach(function (it) { it.rej(e); });
+    });
   }
   // サーバーが「取ってきてほしい」と言った URL を取る（中継の対象は署名つきで受け取る）
   function fetchNeed(urls, pre) {
@@ -1207,7 +1221,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       countHost(api.content);
       return fetch(api.content, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: name, args: args }) })
         .then(function (r) { if (!r.ok) { failHost(api.content, r.status); throw new Error('通信エラー ' + r.status); } return r.json(); },
-          function (e) { failHost(api.content, 'net'); throw e; })
+          function (e) { failHost(api.content, 'net'); if (e && typeof e === 'object') e.net = true; throw e; })
         .then(function (j) { if (j.error) throw new Error(j.error); return j.result; });
     }
     // ローカル開発用
@@ -2593,7 +2607,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (!S.data) return;
     $('predLegTxt').textContent = S.data.pred ? '推算潮位（' + S.data.pred.n + '）' : '推算潮位（天文潮）';
     renderPredSel();
-    if (!S.loadMeasured) { S.loadMeasured = true; perf('load', Date.now() - LOAD_T0); }
+    if (!S.loadMeasured) { S.loadMeasured = true; perfVisible('load', LOAD_T0); }
     renderHeader(); renderControls(); renderHero(); renderTable(); renderRiver(); drawCharts();
     var lo = S.date ? (S.today && S.today.code === S.st.c ? (function () { var k = S.data; S.data = S.today.data; try { return latestObs(); } finally { S.data = k; } })() : null) : latestObs();
     $('updLbl').textContent = '最終取得 ' + hm(S.lastFetch) + (lo ? ' · 最新の潮位観測 ' + mdw(lo.t) + ' ' + hm(lo.t) : '');

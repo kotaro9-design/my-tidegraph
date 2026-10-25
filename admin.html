@@ -189,8 +189,8 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     「外部サイトからの取得」は Cloudflare Workers が気象庁・海上保安庁などから取得した回数です（Google の URL Fetch のような1日の上限はありません。全国共有のキャッシュや Cloudflare の配信網に一時保存されていた分から返したものは、相手サイトに届いていないので数えません。2026/10/20 午前までの記録は配信網から返した分も含みます）。
     記録は v2.1.0（2026/10/20 朝）からです。それより前の Apps Script での記録は引き継いでいないため、以前からの利用者も最初の日は「新規」として数えます。
     利用者数は端末ごとの匿名IDの数です（ブラウザのデータを消すと別の人として数えます）。地域は約10km単位に丸めた位置で、名前は国土地理院の逆ジオコーダで求めた目安です。
-    エラーの「画面」は利用者の端末でデータを受け取れなかった回数（通信の切れ目なども含む）、「サーバー」は Workers での処理の失敗です。データ元の異常の「net」はブラウザの通信の失敗です（利用者側の電波の弱さでも起きます）。
-    表示の速さの「起動〜表示」は、ページを開いてから潮位のグラフが出るまでの時間です。
+    エラーの「画面」は利用者の端末でデータを受け取れなかった回数、「サーバー」は Workers での処理の失敗です。本体 v2.5.2 からは、まとめた呼び出しの通信そのものの失敗は1回につき1件（callBatch）と数え、Workers も Apps Script もつながらなかったときは端末側の通信切れとしてデータの異常（call_fail:net）に分けます。データ元の異常の「net」はブラウザの通信の失敗です（利用者側の電波の弱さでも起きます）。
+    表示の速さの「起動〜表示」は、ページを開いてから潮位のグラフが出るまでの時間です（位置情報を 1.5〜3 秒待つ作りなので、色は10秒以上の割合で付けます。ほかの処理は3秒以上の割合で、10%以上で注意・25%以上で赤）。本体 v2.5.2 からは、途中で画面が裏に回った呼び出しは数えません。サーバーの時間は monitor v2.6.0 から、まとめた呼び出しの開始からその処理が終わるまで（外部サイトの取得を待った時間を含む）です。
     流入元はページを開いたときの直前のページのサイト名です。X や LINE のアプリ内から開いた場合は「直接」になることがあります。リンクに ?from=名前 を付けると、その名前で数えます。
   </p>
   <p class="note" id="gasNote">
@@ -449,8 +449,10 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
       rows.map(function (h) {
         var x = by[h], acc = si[h] ? si[h].sv + si[h].cl : 0, rate = acc ? x.real / acc : 0;
         var cls = x.real === 0 ? ' class="muted"' : '';
+        // 数件だけの失敗は割合が高く見えても色を付けない（3件以上から）
+        var lv = x.real < 3 ? 'ok' : rate >= .05 ? 'crit' : rate >= .01 ? 'warn' : 'ok';
         return '<tr' + cls + '><td>' + esc(SITES[h] || h) + '<small>' + esc(h) + '</small></td><td>' + esc(fmt(x.server)) + '</td><td>' + esc(fmt(x.client)) + '</td><td>' +
-          (acc ? '<span class="' + (rate >= .05 ? 'crit' : rate >= .01 ? 'warn' : 'ok') + '">' + (rate * 100).toFixed(1) + '%</span>' : '—') + '</td></tr>';
+          (acc ? '<span class="' + lv + '">' + (rate * 100).toFixed(1) + '%</span>' : '—') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
   function qualityName(k) {
@@ -463,6 +465,10 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     if (k === 'worker_fallback:offline') return '　うち端末がオフラインだった';
     if (k === 'worker_fallback:hidden') return '　うち画面が裏に回っていた';
     if (k === 'worker_fallback:online') return '　うち端末はオンラインで画面も表示中（Workers 側の問題の可能性）';
+    if (k === 'call_fail:net') return '呼び出しの失敗：Workers も Apps Script もつながらなかった（端末側の通信切れ）';
+    if (k === 'call_fail:offline') return '呼び出しの失敗：端末がオフライン';
+    if (k === 'call_fail:hidden') return '呼び出しの失敗：途中で画面が裏に回った';
+    if (k === 'tide_retry') return '潮位の取得に失敗したので自動でやり直した';
     m = /^near_outlier:(\d{6})$/.exec(k);
     if (m) return '近くの地点の偏差が異常なので使わなかった：' + (D.stationNames[m[1]] || m[1]);
     m = /^tide_stuck:(\d{6})$/.exec(k);
@@ -480,11 +486,15 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
       return (an === 'load' ? -1 : bn === 'load' ? 1 : 0) || an.localeCompare(bn) || a.localeCompare(b);
     });
     if (!keys.length) { el.innerHTML = '<div class="empty">まだデータがありません</div>'; return; }
-    el.innerHTML = '<div class="sites-wrap"><table class="sites"><thead><tr><th>処理</th><th>場所</th><th>回数</th><th>平均</th><th>最大</th><th>3秒以上</th></tr></thead><tbody>' +
+    // 色は平均でなく「遅かった回の割合」で付ける（まれな極端な値で平均が跳ね上がるため）。
+    // 起動〜表示は位置情報を 1.5〜3 秒待つ作りなので、10秒以上の割合で判断する
+    el.innerHTML = '<div class="sites-wrap"><table class="sites"><thead><tr><th>処理</th><th>場所</th><th>回数</th><th>平均</th><th>最大</th><th>3秒以上</th><th>10秒以上</th></tr></thead><tbody>' +
       keys.map(function (k) {
-        var p = pf[k], name = k.slice(2), slow = p[0] ? (p[5] + p[6]) / p[0] : 0, avg = p[0] ? p[1] / p[0] / 1000 : 0;
-        return '<tr><td>' + esc(PERFS[name] || name) + '<small>' + esc(name) + '</small></td><td>' + (k[0] === 's' ? 'サーバー' : '画面') + '</td><td>' + n(p[0]) + '</td><td><span class="' +
-          (avg >= 5 ? 'crit' : avg >= 2 ? 'warn' : 'ok') + '">' + avg.toFixed(1) + '秒</span></td><td>' + (p[2] / 1000).toFixed(1) + '秒</td><td>' + (slow * 100).toFixed(0) + '%</td></tr>';
+        var p = pf[k], name = k.slice(2), slow = p[0] ? (p[5] + p[6]) / p[0] : 0, vslow = p[0] ? p[6] / p[0] : 0, avg = p[0] ? p[1] / p[0] / 1000 : 0;
+        var lv = name === 'load' ? (vslow >= .15 ? 'crit' : vslow >= .05 ? 'warn' : 'ok') : (slow >= .25 ? 'crit' : slow >= .1 ? 'warn' : 'ok');
+        var mark = function (on, t) { return on ? '<span class="' + lv + '">' + t + '</span>' : t; };
+        return '<tr><td>' + esc(PERFS[name] || name) + '<small>' + esc(name) + '</small></td><td>' + (k[0] === 's' ? 'サーバー' : '画面') + '</td><td>' + n(p[0]) + '</td><td>' +
+          avg.toFixed(1) + '秒</td><td>' + (p[2] / 1000).toFixed(1) + '秒</td><td>' + mark(name !== 'load', (slow * 100).toFixed(0) + '%') + '</td><td>' + mark(name === 'load', (vslow * 100).toFixed(0) + '%') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
   // 位置情報：新旧の画面ごとに成功率

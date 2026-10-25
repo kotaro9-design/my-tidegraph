@@ -128,18 +128,20 @@ async function __runBatch(calls, ev, env, stat) {
       if (!Object.prototype.hasOwnProperty.call(api, name) || (args != null && !Array.isArray(args))) { done[id] = { error: '不正な呼び出しです' }; return false; }
       // ここで取ったデータは信頼できるので共有キャッシュに入れてよい
       PRE = pre; PRE_TRUST = {}; Object.keys(pre).forEach(u => { PRE_TRUST[u] = true; }); FROM_PRE = false; PROXY_ON = false;
-      const t0 = Date.now();
+      // 処理時間は、まとめた呼び出しの開始からこの処理が終わるまで（外部サイトの取得を待った時間を含む）。
+      // Workers では取得などを待っていない間は時計が進まないので、1回分の計算だけを測ると 0 になる
       try {
         done[id] = { result: api[name].apply(null, args || []) };
+        monServerPerf_(name, Date.now() - t0);
         return false;
       } catch (e) {
         if (e && e.needUrls) { e.needUrls.forEach(u => need.add(u)); return true; }
         done[id] = { error: String((e && e.message) || e) };
         if (!(e && e.paused)) monServer_('err', name);
+        monServerPerf_(name, Date.now() - t0);
         return false;
       } finally {
         PRE = null; FROM_PRE = false;
-        monServerPerf_(name, Date.now() - t0);
       }
     });
     if (!left.length) break;
@@ -148,7 +150,7 @@ async function __runBatch(calls, ev, env, stat) {
     const rest = BATCH_DEADLINE_MS - (Date.now() - t0);
     await __within(Promise.all([...need].map(u => __get(u, env, stat).then(t => { pre[u] = t; }, () => { pre[u] = { err: 1 }; }))), Math.max(rest, 0)).catch(() => {});
   }
-  left.forEach(c => { done[String(c[0]).slice(0, 20)] = { error: 'データの取得に失敗しました（' + c[1] + '）' }; });
+  left.forEach(c => { done[String(c[0]).slice(0, 20)] = { error: 'データの取得に失敗しました（' + c[1] + '）' }; monServerPerf_(c[1], Date.now() - t0); });
   return { done: done, need: null };
 }
 

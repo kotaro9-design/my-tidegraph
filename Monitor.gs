@@ -10,7 +10,7 @@
  */
 
 // 利用状況アプリ（Monitor.gs と admin.html）のバージョン。更新したら CHANGELOG-monitor.md にも書き、monitor-vX.Y.Z のタグを付ける
-var MONITOR_VERSION = '2.5.3', MONITOR_DATE = '2026-10-25';
+var MONITOR_VERSION = '2.6.0', MONITOR_DATE = '2026-10-26';
 
 var MON_HOST_RE = /^[a-z0-9.\-]{3,80}$/;
 // 機能名・エラー名などに使える文字（送られてきた値はこれで絞る）
@@ -205,7 +205,7 @@ function monSummaryFrom_(d) {
     perf: Object.keys(pf).map(function (k) {
       var p = pf[k];
       return { name: k.slice(2), place: k[0] === 's' ? 'server' : 'client', n: p[0], avgSec: p[0] ? Math.round(p[1] / p[0] / 100) / 10 : null,
-        maxSec: Math.round(p[2] / 100) / 10, over3sPct: p[0] ? Math.round((p[5] + p[6]) / p[0] * 100) : null };
+        maxSec: Math.round(p[2] / 100) / 10, over3sPct: p[0] ? Math.round((p[5] + p[6]) / p[0] * 100) : null, over10sPct: p[0] ? Math.round(p[6] / p[0] * 100) : null };
     }).sort(function (a, b) { return a.name.localeCompare(b.name) || a.place.localeCompare(b.place); }),
     sites: Object.keys(si).map(function (k) { return { host: k, server: si[k].sv, browser: si[k].cl }; }).sort(function (a, b) { return (b.server + b.browser) - (a.server + a.browser); }),
     referrers: top(rf, 10),
@@ -241,8 +241,8 @@ function monSummaryText_(s) {
   s.dataQuality.forEach(function (q) { L.push(q.key + ' ' + q.n); });
   L.push('■ エラー');
   s.errors.forEach(function (e) { L.push(e.key + ' ' + e.n); });
-  L.push('■ 表示の速さ（処理 場所 回数 平均秒 最大秒 3秒以上%）');
-  s.perf.forEach(function (p) { L.push(p.name + ' ' + p.place + ' ' + p.n + ' ' + p.avgSec + ' ' + p.maxSec + ' ' + p.over3sPct + '%'); });
+  L.push('■ 表示の速さ（処理 場所 回数 平均秒 最大秒 3秒以上% 10秒以上%）');
+  s.perf.forEach(function (p) { L.push(p.name + ' ' + p.place + ' ' + p.n + ' ' + p.avgSec + ' ' + p.maxSec + ' ' + p.over3sPct + '% ' + p.over10sPct + '%'); });
   L.push('■ 外部サイト（サイト サーバーから ブラウザから）');
   s.sites.forEach(function (x) { L.push(x.host + ' ' + x.server + ' ' + x.browser); });
   L.push('■ 流入元'); s.referrers.forEach(function (x) { L.push(x.key + ' ' + x.n); });
