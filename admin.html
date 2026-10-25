@@ -57,8 +57,12 @@ h1 .ver { font-size: 12px; font-weight: 400; color: var(--text-3); margin-left: 
 .card h2 span { font-size: 11px; font-weight: 400; color: var(--text-3); }
 svg.chart { width: 100%; height: 180px; display: block; }
 svg.chart text { font-size: 10px; fill: var(--text-3); font-family: var(--font); }
-.hbar { display: grid; grid-template-columns: minmax(0, 1fr) 2fr auto; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; }
+/* 横棒：名前を広く（名前2：棒1）。スマホでは名前を3行まで折り返して読めるように */
+.hbar { display: grid; grid-template-columns: minmax(0, 2fr) minmax(40px, 1fr) auto; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; }
 .hbar .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 600px) {
+  .hbar .n { white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; line-height: 1.35; overflow-wrap: anywhere; }
+}
 .hbar .t { height: 10px; background: var(--surface-2); border-radius: 0 4px 4px 0; }
 .hbar .t i { display: block; height: 100%; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
 .hbar .c { font-variant-numeric: tabular-nums; color: var(--text-2); min-width: 3em; text-align: right; }
