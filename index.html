@@ -967,7 +967,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.5.2', APP_DATE = '2026-10-26';
+  var APP_VERSION = '2.5.3', APP_DATE = '2026-10-26';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -1020,7 +1020,14 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   function countHost(u) { var m = /^https?:\/\/([^\/?#]+)/.exec(String(u)); if (m) HOSTCNT[m[1]] = (HOSTCNT[m[1]] || 0) + 1; }
   // ① 外部サイトの取得失敗（サイト|状態：404・500・net など）
   var HOSTFAIL = {};
-  function failHost(u, st) { var m = /^https?:\/\/([^\/?#]+)/.exec(String(u)); if (m) { var k = m[1] + '|' + st; HOSTFAIL[k] = (HOSTFAIL[k] || 0) + 1; } }
+  function failHost(u, st) {
+    if (LEAVING) return;   // 開き直し・ページを閉じる途中で打ち切られた通信は失敗に数えない
+    var m = /^https?:\/\/([^\/?#]+)/.exec(String(u)); if (m) { var k = m[1] + '|' + st; HOSTFAIL[k] = (HOSTFAIL[k] || 0) + 1; }
+  }
+  // ページを離れる途中か（新しい版への開き直し・閉じる）。このあいだの通信の失敗は記録も Apps Script への切り替えもしない
+  var LEAVING = false;
+  // 新しい版の確認が済むまでサーバーの呼び出しを待たせる（最大1秒。古い版のまま読み込みを始めて、開き直しで打ち切らないため）
+  var VER_WAIT = null;
   function xfetch(u, o) {
     countHost(u);
     return fetch(u, o).then(function (r) { if (!r.ok) failHost(u, r.status); return r; }, function (e) { failHost(u, 'net'); throw e; });
@@ -1076,7 +1083,10 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     return EVQ.length ? { aid: anonId(), list: EVQ.splice(0, EVQ.length) } : null;
   }
   // 閉じるときに残っている分（GitHub Pages 版のみ。Apps Script の画面では次回の通信で送る）
+  // 戻る・進むでページがそのまま戻ってきたときは、離れる途中の扱いをやめる
+  window.addEventListener('pageshow', function (e) { if (e.persisted) LEAVING = false; });
   window.addEventListener('pagehide', function () {
+    LEAVING = true;
     if (navigator.sendBeacon) EVQ.push(['bye', 1]);   // いま使っている人の数から外す（管理画面）
     if ((!EVQ.length && !Object.keys(HOSTCNT).length && !Object.keys(HOSTFAIL).length && !Object.keys(PERF).length) || !navigator.sendBeacon) return;
     try { navigator.sendBeacon(API_WORKER, new Blob([JSON.stringify({ fn: 'track', args: [takeEvents()] })], { type: 'text/plain;charset=utf-8' })); } catch (e) { /* 無視 */ }
@@ -1093,8 +1103,9 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     }).then(function (r) { perfVisible(name, t0); return r; },
       function (e) {
         perfVisible(name, t0);
-        // まとめた呼び出し全体の失敗は flushRun で1回だけ数える（1回の通信切れで処理の数だけエラーが増えないように）
-        if (e && e.counted) throw e;
+        // まとめた呼び出し全体の失敗は flushRun で1回だけ数える（1回の通信切れで処理の数だけエラーが増えないように）。
+        // ページを離れる途中の失敗は数えない
+        if (LEAVING || (e && e.counted)) throw e;
         // 端末側の通信切れ（オフライン、または呼び出し中に画面が裏に回った）はエラーと分けて数える
         var why = callFailCause(t0);
         if (why) track('q', 'call_fail:' + why);
@@ -1103,7 +1114,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       });
   }
   // 途中で画面が裏に回った呼び出しは、戻るまでの時間が入るので処理時間に数えない
-  function perfVisible(name, t0) { if (!document.hidden && HIDDEN_AT < t0) perf(name, Date.now() - t0); }
+  function perfVisible(name, t0) { if (!LEAVING && !document.hidden && HIDDEN_AT < t0) perf(name, Date.now() - t0); }
   // 画面が最後に裏にあった時刻（裏に回ったとき・表に戻ったときに更新。呼び出しの途中で裏に回ると、スマホは通信を止めることがある）
   var HIDDEN_AT = document.hidden ? Date.now() : 0;
   document.addEventListener('visibilitychange', function () { HIDDEN_AT = Date.now(); });
@@ -1116,11 +1127,12 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     RUN_TIMER = null;
     var left = RUNQ.splice(0, 12);
     if (RUNQ.length) RUN_TIMER = setTimeout(flushRun, 0);
-    var pre = {}, rounds = 0, ev = takeEvents(), t0 = Date.now();
+    var pre = {}, rounds = 0, ev = null, sent = null, t0 = Date.now();
     if (viaProxy('https://www.river.go.jp/')) pre.__proxy = 1;   // 中継に対応していることをサーバーに伝える
     var step = function () {
-      var e1 = ev; ev = null;
+      var e1 = ev; ev = null; sent = e1;
       return rawRun('callBatch', left.map(function (it) { return [it.id, it.name, it.args]; }), pre, e1).then(function (r) {
+        sent = null;   // 届いた（記録はサーバーで済んだ）
         var done = (r && r.done) || {};
         // 終わったものは先に返す
         left = left.filter(function (it) {
@@ -1139,10 +1151,16 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         return fetchNeed(r.need, pre).then(step);
       });
     };
-    step().catch(function (e) {
+    // 新しい版の確認が済んでから送る（開き直すことになったら送らない。ページはすぐに切り替わる）
+    (VER_WAIT || Promise.resolve()).then(function () {
+      if (!LEAVING) { ev = takeEvents(); return step(); }   // 記録は送る直前に相乗りさせる
+      var er = new Error('ページを離れる途中のため取得しませんでした'); er.counted = true; throw er;
+    }).catch(function (e) {
       // 通信そのものの失敗は、まとめた呼び出し1回につき1件として数える。
       // Workers も Apps Script も通信で失敗したときは、端末側の通信切れ（電波が弱いなど）として分ける
-      if (left.length && e && typeof e === 'object') {
+      // 届かなかった記録は送り待ちに戻す（次の通信か、閉じるときに送る）
+      if (sent && !(e && e.fromServer)) EVQ = sent.list.concat(EVQ).slice(0, 50);
+      if (left.length && !LEAVING && e && typeof e === 'object') {
         var why = callFailCause(t0) || (e.net ? 'net' : '');
         if (why) track('q', 'call_fail:' + why);
         else if (!/一時的に止めて/.test(String(e.message))) track('e', 'callBatch');
@@ -1187,6 +1205,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (name === 'callBatch' && Date.now() > workerDownUntil) {
       return workerRun(name, args).catch(function (e) {
         if (e && e.fromServer) throw e;
+        if (LEAVING) throw e;   // 開き直し・閉じる途中で打ち切られただけ（Apps Script に切り替えない）
         workerDownUntil = Date.now() + 2 * MIN;
         track('q', 'worker_fallback');
         // 切り替えたときの端末の状態（端末側の通信切れか、Workers 側の問題かの見分けに使う）
@@ -2649,7 +2668,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       renderAll();
     }).catch(function (e) {
       // 通信が一瞬切れただけのことが多いので、表示中でオンラインなら 5 秒後に 1 回だけやり直す（処理のエラーはやり直さない）
-      var again = !retried && !(e && e.fromServer) && navigator.onLine !== false && !document.hidden;
+      var again = !retried && !LEAVING && !(e && e.fromServer) && navigator.onLine !== false && !document.hidden;
       notice('データを取得できませんでした：' + (e && e.message || e) + (again ? '（もう一度試しています…）' : ''));
       if (again) {
         track('q', 'tide_retry');
@@ -3721,6 +3740,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     try { if (sessionStorage.getItem('tide_upd_try') === v) return false; sessionStorage.setItem('tide_upd_try', v); } catch (e) { /* 使えない環境 */ }
     // キャッシュを避けるため、版番号つきのアドレスで開き直す（開いたあとで元のアドレスに戻す）
     var q = location.search.replace(/([?&])v=[^&]*&?/, '$1').replace(/[?&]$/, '');
+    LEAVING = true;
     location.replace(location.pathname + (q ? q + '&' : '?') + 'v=' + encodeURIComponent(v) + location.hash);
     return true;
   }
@@ -3728,18 +3748,19 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     if (!/github\.io$|^localhost$/.test(location.hostname) || !window.fetch) return;   // Apps Script の画面では使わない
     if (why !== 'start' && Date.now() - verChecked < (why === 'resume' ? 5 * MIN : VER_CHECK_MS)) return;
     verChecked = Date.now();
-    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+    var p = fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
       if (!j || !j.version || !verNewer(j.version, APP_VERSION)) return;
       verLatest = j.version;
       if (verSafeToReload() && verReload(j.version)) return;
       $('updTxt').textContent = '新しい版（v' + j.version + '）があります';
       $('updBar').hidden = false;
     }).catch(function () { /* 次の確認で */ });
+    VER_WAIT = Promise.race([p, new Promise(function (r) { setTimeout(r, 1000); })]);
   }
   $('updGo').onclick = function () {
     track('f', 'update_btn');
     try { sessionStorage.removeItem('tide_upd_try'); } catch (e) { /* 使えない環境 */ }
-    if (verLatest) verReload(verLatest); else location.reload();
+    if (verLatest) verReload(verLatest); else { LEAVING = true; location.reload(); }
   };
   $('updX').onclick = function () { $('updBar').hidden = true; };
   // 版番号つきのアドレスで開き直したときは、元のアドレスに戻す（ホーム画面・ブックマークのアドレスを変えない）
