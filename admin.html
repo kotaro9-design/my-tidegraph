@@ -72,6 +72,9 @@ table.sites .bar { width: 30%; }
 table.sites .bar i { display: block; height: 8px; background: var(--bar); border-radius: 0 3px 3px 0; min-width: 2px; }
 .sites-wrap { overflow-x: auto; }
 table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
+/* データ元の異常：状態は1行に1つ。サイトの列が押しつぶされないよう幅を確保（見出しは決めた位置で改行） */
+table.fails td:first-child { min-width: 8.5em; }
+table.fails td i { display: block; font-style: normal; }
 #tip { position: fixed; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.15); display: none; z-index: 9; white-space: nowrap; }
 .msg { color: var(--crit); font-size: 13px; margin: 8px 0; }
 .tiles.mini { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); margin: 0; }
@@ -444,14 +447,14 @@ table.errs td:first-child { overflow-wrap: anywhere; word-break: break-word; }
     });
     var rows = Object.keys(by).sort(function (a, b) { return by[b].real - by[a].real || by[b].total - by[a].total; });
     if (!rows.length) { el.innerHTML = '<div class="empty">取得の失敗はありません</div>'; return; }
-    var fmt = function (o) { return Object.keys(o).sort().map(function (k) { return k + '×' + n(o[k]); }).join('、') || '—'; };
-    el.innerHTML = '<div class="sites-wrap"><table class="sites errs"><thead><tr><th>サイト</th><th>サーバーから</th><th>ブラウザから</th><th>失敗の割合</th></tr></thead><tbody>' +
+    var fmt = function (o) { return Object.keys(o).sort(function (a, b) { return o[b] - o[a] || (a < b ? -1 : 1); }).map(function (k) { return '<i>' + esc(k) + '×' + n(o[k]) + '</i>'; }).join('') || '—'; };
+    el.innerHTML = '<div class="sites-wrap"><table class="sites errs fails"><thead><tr><th>サイト</th><th>サーバー<br>から</th><th>ブラウザ<br>から</th><th>失敗の<br>割合</th></tr></thead><tbody>' +
       rows.map(function (h) {
         var x = by[h], acc = si[h] ? si[h].sv + si[h].cl : 0, rate = acc ? x.real / acc : 0;
         var cls = x.real === 0 ? ' class="muted"' : '';
         // 数件だけの失敗は割合が高く見えても色を付けない（3件以上から）
         var lv = x.real < 3 ? 'ok' : rate >= .05 ? 'crit' : rate >= .01 ? 'warn' : 'ok';
-        return '<tr' + cls + '><td>' + esc(SITES[h] || h) + '<small>' + esc(h) + '</small></td><td>' + esc(fmt(x.server)) + '</td><td>' + esc(fmt(x.client)) + '</td><td>' +
+        return '<tr' + cls + '><td>' + esc(SITES[h] || h) + '<small>' + esc(h) + '</small></td><td>' + fmt(x.server) + '</td><td>' + fmt(x.client) + '</td><td>' +
           (acc ? '<span class="' + lv + '">' + (rate * 100).toFixed(1) + '%</span>' : '—') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
