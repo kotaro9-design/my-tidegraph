@@ -967,7 +967,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.5.0', APP_DATE = '2026-10-25';
+  var APP_VERSION = '2.5.1', APP_DATE = '2026-10-25';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -1093,9 +1093,20 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     }).then(function (r) { perf(name, Date.now() - t0); return r; },
       function (e) {
         perf(name, Date.now() - t0);
-        if (!/一時的に止めて/.test(String(e && e.message))) track('e', String(name).replace(/[^a-zA-Z]/g, '').slice(0, 30));
+        // 端末側の通信切れ（オフライン、または呼び出し中に画面が裏に回った）はエラーと分けて数える
+        var why = callFailCause(t0);
+        if (why) track('q', 'call_fail:' + why);
+        else if (!/一時的に止めて/.test(String(e && e.message))) track('e', String(name).replace(/[^a-zA-Z]/g, '').slice(0, 30));
         throw e;
       });
+  }
+  // 画面が最後に裏に回った時刻（呼び出しの途中で裏に回ると、スマホは通信を止めることがある）
+  var HIDDEN_AT = document.hidden ? Date.now() : 0;
+  document.addEventListener('visibilitychange', function () { if (document.hidden) HIDDEN_AT = Date.now(); });
+  function callFailCause(t0) {
+    if (navigator.onLine === false) return 'offline';
+    if (document.hidden || HIDDEN_AT >= t0) return 'hidden';
+    return '';
   }
   function flushRun() {
     RUN_TIMER = null;
@@ -2595,7 +2606,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     renderPredSel();
     return Promise.resolve();
   }
-  function refresh(silent) {
+  function refresh(silent, retried) {
     if (!S.st) return Promise.resolve();
     S.loading = true;
     $('refBtn').classList.add('spin');
@@ -2623,13 +2634,23 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       notice(S.st.miss ? 'この潮位観測所は現在欠測中の可能性があります。' : '');
       renderAll();
     }).catch(function (e) {
-      notice('データを取得できませんでした：' + (e && e.message || e));
+      // 通信が一瞬切れただけのことが多いので、表示中でオンラインなら 5 秒後に 1 回だけやり直す（処理のエラーはやり直さない）
+      var again = !retried && !(e && e.fromServer) && navigator.onLine !== false && !document.hidden;
+      notice('データを取得できませんでした：' + (e && e.message || e) + (again ? '（もう一度試しています…）' : ''));
+      if (again) {
+        track('q', 'tide_retry');
+        setTimeout(function () { if (S.st && S.st.c === code && !S.loading) refresh(true, true); }, 5000);
+      }
     }).then(function () {
       S.loading = false;
       $('refBtn').classList.remove('spin');
       $('app').classList.remove('loading');
     });
   }
+  // 電波が戻ったら、古くなっていれば読み直す
+  window.addEventListener('online', function () {
+    if (!document.hidden && !S.date && !S.loading && Date.now() - S.lastFetch > 2 * MIN) refresh(true);
+  });
 
   function useLocation(explicit) {
     var had = explicit && !!S.place;   // 指定地点をやめて GPS に戻る
