@@ -233,6 +233,12 @@ footer a { color: var(--text-2); }
 .wq td b { font-size: 18px; margin-right: 2px; }
 .wq td:last-child { color: var(--text-3); font-size: 11px; }
 
+/* 東京湾の実測水温・塩分 */
+.bay-chart { display: block; width: 100%; height: auto; margin-top: 8px; }
+.bay-chart text { font-size: 9px; fill: var(--text-3); }
+.bay-leg { display: flex; gap: 12px; font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.bay-leg i { display: inline-block; width: 14px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 4px; }
+
 /* 風の推移・予報 */
 .wtl-card { padding-bottom: 10px; }
 .wtl { position: relative; height: 150px; margin-top: 6px; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
@@ -574,6 +580,13 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <div id="wqBody"></div>
       <div class="wtl-note" id="wqNote"></div>
     </div>
+    <div class="card" id="bayCard" hidden>
+      <div class="lbl" id="bayLbl">東京湾の実測水温・塩分</div>
+      <div id="bayBody"></div>
+      <div class="bay-leg" id="bayLeg"></div>
+      <svg class="bay-chart" id="bayChart" viewBox="0 0 320 96" role="img" aria-label="直近3日間の水温の推移"></svg>
+      <div class="wtl-note" id="bayNote"></div>
+    </div>
     <div class="card wtl-card">
       <div class="lbl" id="wtlLbl">風の推移（アメダスの実況・気象庁モデルの計算値）</div>
       <div class="wtl">
@@ -644,6 +657,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
     気象庁「<a href="https://www.data.jma.go.jp/kaiyou/db/tide/suisan/" target="_blank" rel="noopener">潮位表</a>」。
     天気・風：気象庁「<a href="https://www.jma.go.jp/bosai/forecast/" target="_blank" rel="noopener">天気予報</a>」「<a href="https://www.jma.go.jp/bosai/amedas/" target="_blank" rel="noopener">アメダス</a>」（気象の観測所）、地域の判定に国土地理院「逆ジオコーダ」を利用。
     気象庁のデータは、出典：気象庁ホームページ（潮位観測情報・潮位表・天気予報・アメダス）を加工して作成（潮位偏差・推算潮位の曲線・満潮干潮・潮の動きの計算、グラフ化。天気予報の文章は加工せずに表示）。
+    東京湾の実測水温・塩分：出典：<a href="https://www.tbeic.go.jp/MonitoringPost/" target="_blank" rel="noopener">東京湾環境情報センター「東京湾水質連続観測」</a>（毎時の観測値をグラフ化して表示）。観測値は速報値で、目安としてご利用ください（利用は自己責任で、観測情報は予告なく停止・中断されることがあります）。
     河川水位・水質：出典：国土交通省 <a href="https://www.river.go.jp/" target="_blank" rel="noopener">川の防災情報ホームページ</a>（https://www.river.go.jp/）を加工して作成（観測値をグラフ化し、潮位と重ねて表示）。河川水位は現在地から一番近い河川の水位観測所（位置が取れない場合は表示中の潮位観測所の位置から。T.P.基準）、水質（水温・塩分濃度）は水質観測所（水位観測所とは別の観測所。10km以内にある場合のみ表示）。観測直後の値のため、機器の故障などによる異常値が含まれることがあります。
     風・気圧のモデル計算値：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>（気象庁の数値予報モデル MSM/GSM の計算結果、CC BY 4.0）。海面水温：Open-Meteo Marine（解析・予報モデルによる推定値、CC BY 4.0）。気圧の実測：気象庁「アメダス」（気象台などの海面気圧）。数値予報モデルの計算値は予報ではなく、大きな誤差を含むことがあります。地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>。
     日の出・日の入り・薄明（常用薄明＝太陽高度−6°、天文薄明＝−18°）は計算値（誤差1〜2分程度）。「薄明」の2つの時刻は、朝は天文薄明・常用薄明、夕は常用薄明・天文薄明の順です。
@@ -800,6 +814,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <dt>風（地上の観測）</dt><dd>近くのアメダスの最新の風速・風向・最大瞬間風速と、気象庁の予報の風・波です。</dd>
       <dt>各観測点の位置</dt><dd>各カードの値が、どこの観測点・計算地点のものかを地図と一覧で示します。基準の位置（赤い丸：現在地、地図で指定した地点、または潮位観測所）、潮位観測所（オレンジ）、潮位表の地点（青い小さな丸）、アメダスの観測点（水色の四角）、気象庁モデルの格子点（灰色のひし形）、海面水温の格子点（白抜きのひし形）、河川の水位観測所（緑）、水質観測所（赤紫）です。同じ場所の点は1つにまとめ、何の値に使っているかを一覧に書きます。</dd>
       <dt>海面水温（推定）</dt><dd>近くの海の海面水温と、24時間前との差、明日のモデル計算値の範囲です。約8km四方の解析・予報モデルの値なので、湾奥・河口・岸近くの実際の水温とは差があることがあります。どの海域の値かはカードの下に表示します。</dd>
+      <dt>東京湾の実測水温・塩分</dt><dd>東京湾の観測地点（浦安沖・検見川沖・川崎人工島・千葉港口第一号灯標・中ノ瀬航路・金田湾・富浦湾）のうち、基準の位置から50km以内の一番近い地点の、上層・中層・下層の水温（塩分を測っている地点は塩分も）と、直近3日間の水温の推移を表示します。毎時の速報値で、水質計の値は載るまで2時間ほどかかることがあります。ブイの位置と実際に釣る場所では水温が違うことがあるので、目安としてご覧ください。出典は東京湾環境情報センター「東京湾水質連続観測」です。観測情報は予告なく停止・中断されることがあり、値の利用は自己責任でお願いします。</dd>
       <dt>水質</dt><dd>「表示の設定」の「河川水位・水質の表示」が「表示」で、現在地から10km以内に水質観測所があるときだけ、水温・塩分濃度を表示します（地図で水質観測所を選んだときは、その観測所）。</dd>
     </dl>
 
@@ -951,6 +966,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       <tr><th>Open-Meteo</th><td>風・気圧のモデル計算値（サーバー経由）、海面水温（スマホから直接）</td></tr>
       <tr><th>国土地理院</th><td>天気の地域の判定（逆ジオコーダ、約1km単位に丸めた位置。サーバー経由）、地図の画像（地理院タイル。表示している範囲の地図をスマホから直接）</td></tr>
       <tr><th>気象庁</th><td>天気予報・アメダス・潮位など（位置ではなく、地域や観測所を指定して取得）</td></tr>
+      <tr><th>東京湾環境情報センター</th><td>東京湾の水温・塩分（サーバーが毎時に取得して最長1か月保存し、直近3日分を表示します。スマホからは直接取りません。センターには位置を送りません）</td></tr>
       <tr><th>川の防災情報（国土交通省）</th><td>河川水位・水質（サーバー経由。表示がオンのときだけ）</td></tr>
       <tr><th>cdnjs（Cloudflare）</th><td>地図の表示に使うプログラム（Leaflet）の読み込み。位置は送りません</td></tr>
     </table>
@@ -967,7 +983,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   'use strict';
   var HOUR = 3600e3, MIN = 60e3, DAY = 24 * HOUR, JST = 9 * HOUR;
   // バージョン（更新したら CHANGELOG.md にも書く）
-  var APP_VERSION = '2.5.3', APP_DATE = '2026-10-26';
+  var APP_VERSION = '2.6.0', APP_DATE = '2026-10-28';
   var DEFAULT_ST = '124431'; // 東京
   var REFRESH_MS = 5 * MIN;
   var RIVER_REFRESH_MS = 10 * MIN;
@@ -2635,7 +2651,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   // 位置（GPS）で変わるものだけ読み直す（天気・風・河川・水質・海面水温・気圧）。まとめて1回の呼び出しになる
   function refreshPlace() {
     if (S.st && predArg() !== S.predUsed) return refresh();   // 自動の推算の地点が変わった
-    loadWeather(); loadRiver(); loadWind(); loadWQ(); loadSST(); loadPressure();
+    loadWeather(); loadRiver(); loadWind(); loadWQ(); loadBay(); loadSST(); loadPressure();
     renderPredSel();
     return Promise.resolve();
   }
@@ -2650,6 +2666,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
       loadRiver();
       loadWind(!silent && !S.date);
       loadWQ();
+      loadBay();
       loadSST();
       loadPressure();
     }
@@ -3004,6 +3021,76 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
         }).join('') + '</tbody></table>';
     }
     $('wqNote').innerHTML = esc(q.place ? q.place + '。' : '') + '1時間ごとの観測値（欠測の項目は「—」）。 <a href="' + esc(q.url) + '" target="_blank" rel="noopener">川の防災情報</a>';
+  }
+
+  /* ---------- 東京湾の実測水温・塩分（東京湾環境情報センター。サーバーが毎時に貯めた値。近くに観測地点があるときだけ） ---------- */
+  function loadBay(force) {
+    var p = here();
+    if (!p) return Promise.resolve();
+    // サーバーへ送る位置は約1km単位に丸める（観測地点は数kmより離れているので結果は変わらない）
+    var la = Math.round(p.lat * 100) / 100, lo = Math.round(p.lon * 100) / 100, key = la + ',' + lo;
+    if (!force && S.bayKey === key && Date.now() - S.bayFetch < 10 * MIN) { renderBay(); return Promise.resolve(); }
+    return run('getBay', la, lo).then(function (b) {
+      var h2 = here();
+      if (h2 && key !== (Math.round(h2.lat * 100) / 100) + ',' + (Math.round(h2.lon * 100) / 100)) return;   // 問い合わせ中に地点が変わった
+      S.bay = b; S.bayKey = key; S.bayFetch = Date.now(); S.bayWhere = p.lbl; S.bayFrom = p;
+      renderBay();
+    }).catch(function () { S.bay = null; renderBay(); });
+  }
+  function renderBay() {
+    var b = S.bay, card = $('bayCard');
+    card.hidden = !b;
+    if (!b) return;
+    var names = ['上層', '中層', '下層'], rows = '', i;
+    for (i = 0; i < 3; i++) {
+      if (b.temp[i] == null && b.sal[i] == null) continue;
+      rows += '<tr><th>' + names[i] + (b.depth[i] != null ? '<small>（' + fmt1(b.depth[i]) + 'm）</small>' : '') + '</th><td><b>' + (b.temp[i] != null ? fmt1(b.temp[i]) + '</b>℃' : '—</b>') + '</td>' +
+        (b.salt ? '<td><b>' + (b.sal[i] != null ? fmt1(b.sal[i]) + '</b>' : '—</b>') + '</td>' : '') + '</tr>';
+    }
+    var cur = b.temp[0], ago = null, bd = 90 * MIN;
+    b.pts.forEach(function (q) { var d = Math.abs(q[0] - (b.t - DAY)); if (d < bd && q[1] != null) { bd = d; ago = q[1]; } });
+    var chg = cur != null && ago != null ? Math.round((cur - ago) * 10) / 10 : null;
+    var tt = jd(b.t);
+    $('bayLbl').textContent = '東京湾の実測水温・塩分（' + b.name + '・' + (S.bayWhere || '') + 'から' + fmtKm(b.dist) + '）';
+    $('bayBody').innerHTML = '<table class="wq num"><thead><tr><th></th><th>水温</th>' + (b.salt ? '<th>塩分</th>' : '') + '</tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div class="sub num">' + (tt.getUTCMonth() + 1) + '/' + tt.getUTCDate() + ' ' + hm(b.t) + ' の観測' +
+      (chg == null ? '' : '・24時間前より上層 ' + (chg > 0 ? '+' : chg < 0 ? '−' : '±') + Math.abs(chg).toFixed(1) + '℃') + '</div>';
+    drawBay(b);
+    var from = S.bayFrom;
+    $('bayNote').innerHTML = esc((from ? bearing16(from.lat, from.lon, b.lat, b.lon) + 'へ約' + fmtKm(b.dist) + 'にあるブイ（観測地点）の値で、実際に釣る場所とは水温が違うことがあります。' : '') +
+      '毎時の速報値で、水質計の値は載るまで2時間ほどかかることがあります。観測は予告なく停止・中断されることがあります。出典：') +
+      '<a href="' + esc(b.url) + '" target="_blank" rel="noopener">東京湾環境情報センター「東京湾水質連続観測」</a>';
+  }
+  // 直近3日間の水温（上層・下層）の折れ線。欠けた時間はつながない
+  function drawBay(b) {
+    var svg = $('bayChart'), W = 320, H = 96, L = 24, R = 4, T = 6, B = 16, t1 = b.t, t0 = t1 - 3 * DAY;
+    var pts = b.pts.filter(function (q) { return q[0] >= t0; }), vals = [];
+    pts.forEach(function (q) { if (q[1] != null) vals.push(q[1]); if (q[3] != null) vals.push(q[3]); });
+    if (pts.length < 2 || !vals.length) { svg.innerHTML = ''; svg.style.display = 'none'; $('bayLeg').innerHTML = ''; return; }
+    svg.style.display = '';
+    var lo = Math.floor(Math.min.apply(null, vals) - 0.3), hi = Math.ceil(Math.max.apply(null, vals) + 0.3);
+    var X = function (t) { return L + (t - t0) / (t1 - t0) * (W - L - R); }, Y = function (v) { return T + (hi - v) / (hi - lo) * (H - T - B); };
+    var out = '', k;
+    // 横の目盛り（水温）
+    var step = hi - lo > 6 ? 2 : 1;
+    for (k = Math.ceil(lo / step) * step; k <= hi; k += step) out += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + Y(k).toFixed(1) + '" y2="' + Y(k).toFixed(1) + '" stroke="var(--border)" stroke-width="1"/><text x="' + (L - 3) + '" y="' + (Y(k) + 3).toFixed(1) + '" text-anchor="end">' + k + '</text>';
+    // 縦の目盛り（0時）
+    for (var d = midnight(ymd(t0)) + DAY; d < t1; d += DAY) {
+      var jj = jd(d);
+      out += '<line x1="' + X(d).toFixed(1) + '" x2="' + X(d).toFixed(1) + '" y1="' + T + '" y2="' + (H - B) + '" stroke="var(--grid-strong)" stroke-width="1" stroke-dasharray="2 3"/><text x="' + (X(d) + 2).toFixed(1) + '" y="' + (H - 4) + '">' + (jj.getUTCMonth() + 1) + '/' + jj.getUTCDate() + '</text>';
+    }
+    var line = function (idx, col, w) {
+      var path = '', prev = null;
+      pts.forEach(function (q) {
+        if (q[idx] == null) { prev = null; return; }
+        path += (prev == null || q[0] - prev > 2.5 * 3600000 ? 'M' : 'L') + X(q[0]).toFixed(1) + ' ' + Y(q[idx]).toFixed(1);
+        prev = q[0];
+      });
+      return path ? '<path d="' + path + '" fill="none" stroke="' + col + '" stroke-width="' + w + '" stroke-linejoin="round" stroke-linecap="round"/>' : '';
+    };
+    out += line(3, 'var(--text-3)', 1.2) + line(1, 'var(--accent)', 1.8);
+    svg.innerHTML = out;
+    $('bayLeg').innerHTML = '<span><i style="border-color:var(--accent)"></i>上層</span>' + (pts.some(function (q) { return q[3] != null; }) ? '<span><i style="border-color:var(--text-3)"></i>下層</span>' : '') + '<span>水温（℃）・直近3日間</span>';
   }
 
   /* ---------- 風の推移・予報（地図の上に3時間ごとの風向・風速） ---------- */

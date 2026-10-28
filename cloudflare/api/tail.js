@@ -120,6 +120,10 @@ async function __runBatch(calls, ev, env, stat) {
   if (!Array.isArray(calls) || !calls.length || calls.length > 12) throw new Error('不正な呼び出しです');
   const api = api_(), done = {}, pre = {}, t0 = Date.now();
   let left = calls.filter(c => Array.isArray(c));
+  // 東京湾の水温・塩分は D1 に貯めた値を使う（非同期なので、処理の前に読んでおく）
+  if (left.some(c => c[1] === 'getBay') && env.DB) {
+    try { BAY_DATA = await __within(__bayLoad(env), KV_TIMEOUT_MS * 2); } catch (e) { BAY_DATA = null; }
+  }
   // 全体でも時間を区切る（間に合わなかった処理はエラーで返し、画面はほかの結果を表示できる）
   for (let round = 0; round < 15 && left.length && Date.now() - t0 < BATCH_DEADLINE_MS; round++) {
     const need = new Set();
@@ -166,6 +170,7 @@ function __json(obj, status, cors) {
  *   mon_lock … まとめ処理が同時に2つ動かないようにする
  *   live     … 匿名IDごとの最後の通信時刻（いま使っている人の数）
  *   live_hist … いま使っている人の数の1分ごとの記録（Cron で記録、2日分。管理画面の折れ線グラフ）
+ *   bay      … 東京湾環境情報センターの毎時の水温・塩分（Cron で毎時1回取得、最長30日で自動削除）
  */
 // 画面を表示している間は5分ごとに自動更新の通信がある。それより少し長い時間で数える
 const LIVE_MS = 7 * 60000;
@@ -184,7 +189,8 @@ async function __schema(env) {
     'CREATE TABLE IF NOT EXISTS mon_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)',
     'CREATE TABLE IF NOT EXISTS live (id TEXT PRIMARY KEY, t INTEGER NOT NULL)',
     'CREATE INDEX IF NOT EXISTS live_t ON live(t)',
-    'CREATE TABLE IF NOT EXISTS live_hist (t INTEGER PRIMARY KEY, n INTEGER NOT NULL)'
+    'CREATE TABLE IF NOT EXISTS live_hist (t INTEGER PRIMARY KEY, n INTEGER NOT NULL)',
+    'CREATE TABLE IF NOT EXISTS bay (buoy TEXT NOT NULL, t INTEGER NOT NULL, d1 REAL, d2 REAL, d3 REAL, w1 REAL, w2 REAL, w3 REAL, s1 REAL, s2 REAL, s3 REAL, PRIMARY KEY (buoy, t))'
   ].map(s => env.DB.prepare(s)));
   __schemaOk = true;
 }
@@ -249,6 +255,56 @@ async function __compact(env, maxHours) {
     await env.DB.prepare('UPDATE mon_lock SET until = 0 WHERE name = \'compact\'').run();
   }
   return done;
+}
+
+/*
+ * 東京湾環境情報センター「東京湾水質連続観測」（利用の了承：2026-10-27、条件：出典の明示・規約の遵守）
+ * 取得は Cron から毎時1回、各観測地点につき1回（7地点×24回＝1日最大168回）。保存は毎時の水温・塩分だけで、最長30日で自動削除。
+ * 画面には直近3日分の推移と最新値だけを出し、ダウンロードや第三者への提供はしない
+ */
+const BAY_KEEP_DAYS = 30, BAY_SHOW_DAYS = 3, BAY_MIN = 10;   // BAY_MIN：毎時の取得を始める分（値が載るまでの時間をみて10分過ぎ）
+const jstStamp = ms => { const p = jstParts_(ms); return '' + p.y + pad2_(p.m) + pad2_(p.d) + pad2_(p.h) + pad2_(new Date(ms + JST).getUTCMinutes()); };
+async function __bayFetch(env, at) {
+  await __schema(env);
+  const now = at || Date.now(), res = { at: now, ok: 0, fail: 0, rows: 0 };
+  for (const b of BAY_BUOYS) {
+    try {
+      const last = await env.DB.prepare('SELECT max(t) AS t FROM bay WHERE buoy = ?').bind(b.id).first();
+      // 通常は直近12時間（値が遅れて載る分を拾う）。最初や止まっていたあとは、最大3日ぶんをさかのぼる
+      const back = Math.min(Math.max(12 * HOUR, last && last.t ? now - last.t + 2 * HOUR : BAY_SHOW_DAYS * DAY), BAY_SHOW_DAYS * DAY);
+      const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS * 2);
+      const r = await fetch(BAY_LIST, {
+        method: 'POST', signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0 (compatible; my-tide-graph; +https://kotaro9-design.github.io/my-tidegraph/)' },
+        body: 'buoyId=' + b.id + '&sDateTimeId=' + jstStamp(now - back) + '&eDateTimeId=' + jstStamp(now)
+      });
+      if (!r.ok) throw new Error('status ' + r.status);
+      const rows = bayParse_(await r.text());
+      if (rows.length) {
+        await env.DB.batch(rows.map(x => env.DB.prepare('INSERT INTO bay (buoy, t, d1, d2, d3, w1, w2, w3, s1, s2, s3) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(buoy, t) DO UPDATE SET d1=excluded.d1, d2=excluded.d2, d3=excluded.d3, w1=excluded.w1, w2=excluded.w2, w3=excluded.w3, s1=excluded.s1, s2=excluded.s2, s3=excluded.s3')
+          .bind(b.id, x.t, x.d[0], x.d[1], x.d[2], x.w[0], x.w[1], x.w[2], x.s[0], x.s[1], x.s[2])));
+      }
+      res.ok++; res.rows += rows.length;
+    } catch (e) { res.fail++; console.log('bay fetch failed ' + b.id + ': ' + e); }
+  }
+  // 古い値（30日より前）は消す。取得の結果は管理用に1行だけ残す
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM bay WHERE t < ?').bind(now - BAY_KEEP_DAYS * DAY),
+    env.DB.prepare('INSERT INTO mon_meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').bind('bay_last', JSON.stringify(res))
+  ]);
+  __BAY_MEM = null;
+  return res;
+}
+// 画面向けの読み出し（直近3日分）。5分は同じ拠点のメモリに置く
+let __BAY_MEM = null;
+async function __bayLoad(env) {
+  if (__BAY_MEM && __BAY_MEM.exp > Date.now()) return __BAY_MEM.v;
+  await __schema(env);
+  const r = await env.DB.prepare('SELECT buoy, t, d1, d2, d3, w1, w2, w3, s1, s2, s3 FROM bay WHERE t >= ? ORDER BY t DESC').bind(Date.now() - BAY_SHOW_DAYS * DAY).all();
+  const v = {};
+  (r.results || []).forEach(x => { (v[x.buoy] = v[x.buoy] || []).push([x.t, [x.d1, x.d2, x.d3], [x.w1, x.w2, x.w3], [x.s1, x.s2, x.s3]]); });
+  __BAY_MEM = { v, exp: Date.now() + 5 * 60000 };
+  return v;
 }
 
 /** 潮位観測所の名前（共有キャッシュ経由。取れなければ空） */
@@ -419,6 +475,7 @@ export default {
     if (!env.DB) return;
     const at = event.scheduledTime || Date.now();
     ctx.waitUntil(__liveSample(env, at).catch(e => console.log('live sample failed: ' + e)));
+    if (new Date(at).getUTCMinutes() === BAY_MIN) ctx.waitUntil(__bayFetch(env, at).catch(e => console.log('bay failed: ' + e)));
     if (Math.floor(at / 60000) % 5 === 0) ctx.waitUntil(__compact(env, 48).catch(e => console.log('compact failed: ' + e)));
   }
 };

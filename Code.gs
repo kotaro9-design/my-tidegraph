@@ -519,6 +519,74 @@ function wqSite_(site, siteName, group) {
   };
 }
 
+/* ------------------------------------------------------------------ */
+/* 東京湾の実測水温・塩分（東京湾環境情報センター「東京湾水質連続観測」）   */
+/* ------------------------------------------------------------------ */
+
+var BAY_PAGE = 'https://www.tbeic.go.jp/MonitoringPost/';
+var BAY_LIST = 'https://www.tbeic.go.jp/MonitoringPost/ViewGraph/DataList';
+var BAY_NEAR_KM = 50;   // これより遠いときは表示しない
+// 観測地点（各地点の「観測地点・機器概要」の設置座標 WGS84 を度に直したもの）。salt：塩分を測っているか
+var BAY_BUOYS = [
+  { id: '01', n: '検見川沖', lat: 35.6108, lon: 140.0233, salt: true },
+  { id: '02', n: '川崎人工島', lat: 35.4903, lon: 139.8339, salt: true },
+  { id: '03', n: '浦安沖', lat: 35.6400, lon: 139.9417, salt: true },
+  { id: '04', n: '千葉港口第一号灯標', lat: 35.5369, lon: 139.9542, salt: true },
+  { id: '05', n: '中ノ瀬航路', lat: 35.3694, lon: 139.7667, salt: false },
+  { id: '06', n: '金田湾', lat: 35.1586, lon: 139.6953, salt: false },
+  { id: '07', n: '富浦湾', lat: 35.0794, lon: 139.8097, salt: false }
+];
+// Workers が呼び出しの前に入れる（毎時に貯めた値）：{ '01': [[時刻, [水深×3], [水温×3], [塩分×3]], …新しい順…], … }。Apps Script では入らない
+var BAY_DATA = null;
+
+/**
+ * 「データ一覧」の表（HTML）を毎時の値にする。水温・塩分は毎正時だけ値がある（ほかの時刻の行は捨てる）。
+ * 水質計の地点（01〜04）は39列、水温計の地点（05〜07）は19列。値のない「---」は null。
+ * 返す形：[{ t: 時刻(ms), d: [上層・中層・下層の水深m], w: [水温℃], s: [塩分] }]（古い順）
+ */
+function bayParse_(html) {
+  var i = String(html || '').indexOf('id="tblDataTable"');
+  if (i < 0) return [];
+  var rows = [], re = /<tr>([\s\S]*?)<\/tr>/g, m;
+  var body = html.slice(i);
+  while ((m = re.exec(body))) {
+    var c = [], cre = /<td[^>]*>([^<]*)<\/td>/g, x;
+    while ((x = cre.exec(m[1]))) c.push(x[1].replace(/\s+/g, ''));
+    var tm = /^(\d{4})\/(\d{2})\/(\d{2})$/.exec(c[0] || ''), hm = /^(\d{2}):(\d{2})$/.exec(c[1] || '');
+    if (!tm || !hm || hm[2] !== '00') continue;
+    var full = c.length >= 39;
+    var num = function (k) { var v = c[k]; return v != null && /^-?\d+(\.\d+)?$/.test(v) ? +v : null; };
+    var p = full ? { d: [6, 14, 22], w: [7, 15, 23], s: [8, 16, 24] } : { d: [2, 4, 6], w: [3, 5, 7], s: null };
+    var r = {
+      t: Date.UTC(+tm[1], +tm[2] - 1, +tm[3], +hm[1], 0) - JST,
+      d: p.d.map(num), w: p.w.map(num), s: p.s ? p.s.map(num) : [null, null, null]
+    };
+    if (r.w.concat(r.s).every(function (v) { return v == null; })) continue;   // まだ値がない時刻
+    rows.push(r);
+  }
+  return rows.sort(function (a, b) { return a.t - b.t; });
+}
+
+/** 近い観測地点（BAY_NEAR_KM 以内）の最新値と直近3日の推移。近くになければ null */
+function getBay(lat, lon) {
+  checkPos_(lat, lon);
+  if (!BAY_DATA) throw new Error('この環境では使えません');
+  var best = null;
+  BAY_BUOYS.forEach(function (b) {
+    if (!BAY_DATA[b.id] || !BAY_DATA[b.id].length) return;
+    var d = distKm_(lat, lon, b.lat, b.lon);
+    if (d <= BAY_NEAR_KM && (!best || d < best.d)) best = { b: b, d: d };
+  });
+  if (!best) return null;
+  var rows = BAY_DATA[best.b.id], last = rows[0];   // 新しい順
+  return {
+    id: best.b.id, name: best.b.n, lat: best.b.lat, lon: best.b.lon, dist: Math.round(best.d * 10) / 10, salt: best.b.salt,
+    url: BAY_PAGE + 'ViewGraph/ViewGraph?buoyId=' + best.b.id,
+    t: last[0], depth: last[1], temp: last[2], sal: last[3],
+    pts: rows.map(function (r) { return [r[0], r[2][0], r[2][1], r[2][2], r[3][0]]; }).reverse()   // 古い順：[時刻, 上層水温, 中層水温, 下層水温, 上層塩分]
+  };
+}
+
 /** 住所 → [緯度, 経度]（国土地理院 住所検索） */
 function geocode_(adr) {
   var txt = cachedText_('geo_' + Utilities.base64EncodeWebSafe(adr).substr(0, 200), 6 * 3600,
@@ -1074,7 +1142,7 @@ var FETCH_LIMIT = { hour: 2500, day: 18000, fallbackHour: 300, lowShare: 0.7 }; 
 // 画面から呼べる処理
 function api_() {
   return { getStations: getStations, getTideData: getTideData, getWeather: getWeather, getRiver: getRiver,
-    getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality, getWQStations: getWQStations, getPredPoints: getPredPoints, getPressure: getPressure };
+    getRiverStations: getRiverStations, getWind: getWind, getWaterQuality: getWaterQuality, getWQStations: getWQStations, getPredPoints: getPredPoints, getPressure: getPressure, getBay: getBay };
 }
 function callWithPre(name, args, pre, ev) {
   if (ev) monRecord_(ev);   // 利用状況（Monitor.gs。書き込みは最後にまとめて）
